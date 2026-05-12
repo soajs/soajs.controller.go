@@ -1,0 +1,7 @@
+# Single MongoDB server profile
+mongo:
+  uri: mongodb://localhost:27017
+  database: core_provision
+  max_pool_size: 50
+  min_pool_size: 5
+  connect_timeout: 5

@@ -1,0 +1,41 @@
+version: '3.8'
+
+services:
+  controller:
+    build:
+      context: ..
+      dockerfile: deployments/Dockerfile
+    ports:
+      - "4000:4000"
+      - "5000:5000"
+    environment:
+      - SOAJS_ENV=dev
+      - SOAJS_MONGO_URI=mongodb://mongo:27017
+      - SOAJS_MONGO_DATABASE=core_provision
+      - SOAJS_LOG_LEVEL=debug
+    depends_on:
+      mongo:
+        condition: service_healthy
+    networks:
+      - soajs
+
+  mongo:
+    image: mongo:7
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+    healthcheck:
+      test: echo 'db.runCommand("ping").ok' | mongosh localhost:27017/test --quiet
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - soajs
+
+networks:
+  soajs:
+    driver: bridge
+
+volumes:
+  mongo_data:

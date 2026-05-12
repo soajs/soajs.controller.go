@@ -1,0 +1,59 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: soajs-controller
+  labels:
+    app: soajs-controller
+    soajs.service: "true"
+    soajs.service.name: controller
+    soajs.service.version: "1"
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: soajs-controller
+  template:
+    metadata:
+      labels:
+        app: soajs-controller
+    spec:
+      containers:
+        - name: controller
+          image: soajs/controller:latest
+          ports:
+            - name: http
+              containerPort: 4000
+            - name: maintenance
+              containerPort: 5000
+          env:
+            - name: SOAJS_ENV
+              valueFrom:
+                configMapKeyRef:
+                  name: soajs-config
+                  key: environment
+            - name: SOAJS_MONGO_URI
+              valueFrom:
+                secretKeyRef:
+                  name: soajs-secrets
+                  key: mongo-uri
+            - name: SOAJS_DEPLOY_HA
+              value: "true"
+          resources:
+            requests:
+              memory: "64Mi"
+              cpu: "100m"
+            limits:
+              memory: "256Mi"
+              cpu: "500m"
+          livenessProbe:
+            httpGet:
+              path: /heartbeat
+              port: maintenance
+            initialDelaySeconds: 10
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /heartbeat
+              port: maintenance
+            initialDelaySeconds: 5
+            periodSeconds: 10

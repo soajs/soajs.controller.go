@@ -1,0 +1,38 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: soajs-controller
+  labels:
+    app: soajs-controller
+    soajs.service: "true"
+    soajs.service.name: controller
+    soajs.service.version: "1"
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 4000
+      targetPort: 4000
+    - name: maintenance
+      port: 5000
+      targetPort: 5000
+  selector:
+    app: soajs-controller
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: soajs-gateway
+  labels:
+    app: soajs-controller
+spec:
+  type: LoadBalancer
+  ports:
+    - name: http
+      port: 80
+      targetPort: 4000
+    - name: https
+      port: 443
+      targetPort: 4000
+  selector:
+    app: soajs-controller

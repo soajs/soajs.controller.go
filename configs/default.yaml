@@ -1,0 +1,41 @@
+# SOAJS Controller Configuration
+
+# Service settings
+service_name: controller
+service_version: "1"
+service_group: Gateway
+service_port: 4000
+
+# Environment
+environment: dev
+log_level: info
+
+# MongoDB configuration
+mongo:
+  uri: mongodb://localhost:27017
+  database: core_provision
+  max_pool_size: 100
+  min_pool_size: 10
+  connect_timeout: 5
+
+# Server configuration
+server:
+  read_timeout: 30
+  write_timeout: 30
+  idle_timeout: 60
+  shutdown_timeout: 10
+
+# Maintenance configuration
+maintenance:
+  port_increment: 1000
+  readiness: /heartbeat
+  commands:
+    - /loadProvision
+    - /reloadRegistry
+    - /awarenessStat
+
+# Awareness configuration
+awareness:
+  health_check_interval: 5000
+  auto_register_host: true
+  mode: custom  # "custom" or "ha"

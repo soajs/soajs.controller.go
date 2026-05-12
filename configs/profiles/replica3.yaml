@@ -1,0 +1,7 @@
+# MongoDB replica set profile (3 nodes)
+mongo:
+  uri: mongodb://mongo1:27017,mongo2:27017,mongo3:27017/?replicaSet=rs0
+  database: core_provision
+  max_pool_size: 100
+  min_pool_size: 10
+  connect_timeout: 10
