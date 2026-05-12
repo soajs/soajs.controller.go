@@ -105,6 +105,7 @@ oauth → userACL → traffic → lastSeen
 | [Go Project Structure](./go-project-structure.md) | Proposed Go directory layout |
 | [Go Dependencies](./go-dependencies.md) | Library choices and rationale |
 | [Implementation Phases](./implementation-phases.md) | Phased rollout plan |
+| [Node.js vs Go Comparison](./comparison.md) | Detailed comparison with metrics |
 
 ## Quick Summary
 
