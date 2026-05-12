@@ -119,12 +119,13 @@ Build the foundation: HTTP server, configuration, MongoDB integration, and basic
 
 ### Phase 1 Exit Criteria
 
-- [ ] Server starts and responds to /heartbeat
-- [ ] MongoDB connection established
-- [ ] Registry loads from database
-- [ ] Basic middleware chain executes
-- [ ] All unit tests pass
+- [x] Server starts and responds to /heartbeat
+- [x] MongoDB connection established (with retry logic)
+- [x] Registry loads from database (environment, resources, custom, marketplace, hosts)
+- [x] Basic middleware chain executes (CORS, Favicon, Response)
+- [x] All unit tests pass (config: 94.6%, logger: 100%, lib: 41.8%, middleware: 14%)
 - [ ] CI pipeline green
+- [ ] Integration tests with testcontainers
 
 ---
 

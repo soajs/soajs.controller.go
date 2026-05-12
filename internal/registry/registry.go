@@ -16,6 +16,12 @@ type Registry interface {
 	// GetService returns service configuration
 	GetService(name string) (*types.ServiceConfig, error)
 
+	// GetCustomRegistry returns a custom registry entry
+	GetCustomRegistry(name string) (*types.CustomEntry, error)
+
+	// GetResource returns a resource by type and name
+	GetResource(resourceType, name string) (*types.Resource, error)
+
 	// RegisterHost registers a service host
 	RegisterHost(info types.HostInfo) error
 
@@ -24,4 +30,10 @@ type Registry interface {
 
 	// AddUpdateEnvControllers updates environment controller info
 	AddUpdateEnvControllers(data types.ControllerUpdate) error
+
+	// IsMaintenanceMode checks if the system is in maintenance mode
+	IsMaintenanceMode() bool
+
+	// GetEnvironment returns the current environment code
+	GetEnvironment() string
 }

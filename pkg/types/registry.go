@@ -1,12 +1,110 @@
 package types
 
+import "time"
+
 // RegistryData holds the complete registry state
 type RegistryData struct {
+	TimeLoaded     int64                      `json:"timeLoaded"`
+	Name           string                     `json:"name"`
+	Environment    string                     `json:"environment"`
+	ProfileOnly    bool                       `json:"profileOnly"`
 	Services       map[string]*ServiceConfig  `json:"services"`
 	Daemons        map[string]*DaemonConfig   `json:"daemons"`
 	CoreDB         *CoreDBConfig              `json:"coreDB"`
 	ServiceConfig  *GlobalServiceConfig       `json:"serviceConfig"`
-	CustomRegistry map[string]interface{}     `json:"customRegistry"`
+	CustomRegistry map[string]*CustomEntry    `json:"customRegistry"`
+	Resources      map[string]map[string]*Resource `json:"resources"`
+	Hosts          map[string][]*HostRecord   `json:"hosts"`
+	Deployer       *DeployerConfig            `json:"deployer"`
+}
+
+// NewRegistryData creates a new registry data instance
+func NewRegistryData(env string) *RegistryData {
+	return &RegistryData{
+		TimeLoaded:     time.Now().UnixMilli(),
+		Name:           env,
+		Environment:    env,
+		Services:       make(map[string]*ServiceConfig),
+		Daemons:        make(map[string]*DaemonConfig),
+		CustomRegistry: make(map[string]*CustomEntry),
+		Resources:      make(map[string]map[string]*Resource),
+		Hosts:          make(map[string][]*HostRecord),
+	}
+}
+
+// Resource represents a resource configuration
+type Resource struct {
+	ID         string                 `json:"_id" bson:"_id"`
+	Name       string                 `json:"name" bson:"name"`
+	Type       string                 `json:"type" bson:"type"`
+	Created    string                 `json:"created" bson:"created"`
+	Plugged    bool                   `json:"plugged" bson:"plugged"`
+	Shared     bool                   `json:"shared" bson:"shared"`
+	SharedEnvs map[string]bool        `json:"sharedEnvs" bson:"sharedEnvs"`
+	Config     map[string]interface{} `json:"config" bson:"config"`
+}
+
+// CustomEntry represents a custom registry entry
+type CustomEntry struct {
+	ID         string                 `json:"_id" bson:"_id"`
+	Name       string                 `json:"name" bson:"name"`
+	Created    string                 `json:"created" bson:"created"`
+	Plugged    bool                   `json:"plugged" bson:"plugged"`
+	Shared     bool                   `json:"shared" bson:"shared"`
+	SharedEnvs map[string]bool        `json:"sharedEnvs" bson:"sharedEnvs"`
+	Value      interface{}            `json:"value" bson:"value"`
+}
+
+// HostRecord represents a host record in the database
+type HostRecord struct {
+	ID            string    `json:"_id" bson:"_id"`
+	Env           string    `json:"env" bson:"env"`
+	Name          string    `json:"name" bson:"name"`
+	Version       string    `json:"version" bson:"version"`
+	IP            string    `json:"ip" bson:"ip"`
+	Hostname      string    `json:"hostname" bson:"hostname"`
+	Port          int       `json:"port" bson:"port"`
+	ServiceHATask string    `json:"serviceHATask,omitempty" bson:"serviceHATask,omitempty"`
+	LastCheck     time.Time `json:"lastCheck" bson:"lastCheck"`
+	Healthy       bool      `json:"healthy" bson:"healthy"`
+}
+
+// DeployerConfig holds deployer configuration
+type DeployerConfig struct {
+	Type      string                 `json:"type" bson:"type"`
+	Selected  string                 `json:"selected" bson:"selected"`
+	Container map[string]interface{} `json:"container" bson:"container"`
+}
+
+// MarketplaceItem represents a marketplace service/daemon
+type MarketplaceItem struct {
+	ID            string                  `json:"_id" bson:"_id"`
+	Type          string                  `json:"type" bson:"type"`
+	Name          string                  `json:"name" bson:"name"`
+	Description   string                  `json:"description" bson:"description"`
+	Configuration *ItemConfiguration      `json:"configuration" bson:"configuration"`
+	Versions      []*ItemVersion          `json:"versions" bson:"versions"`
+}
+
+// ItemConfiguration holds marketplace item configuration
+type ItemConfiguration struct {
+	Port              int    `json:"port" bson:"port"`
+	RequestTimeout    int    `json:"requestTimeout" bson:"requestTimeout"`
+	RequestTimeoutRenewal int `json:"requestTimeoutRenewal" bson:"requestTimeoutRenewal"`
+	Group             string `json:"group" bson:"group"`
+	Subtype           string `json:"subtype" bson:"subtype"`
+}
+
+// ItemVersion holds version info for marketplace items
+type ItemVersion struct {
+	Version        string    `json:"version" bson:"version"`
+	ExtKeyRequired bool      `json:"extKeyRequired" bson:"extKeyRequired"`
+	OAuth          bool      `json:"oauth" bson:"oauth"`
+	Urac           bool      `json:"urac" bson:"urac"`
+	UracProfile    bool      `json:"urac_Profile" bson:"urac_Profile"`
+	UracACL        bool      `json:"urac_ACL" bson:"urac_ACL"`
+	ProvisionACL   bool      `json:"provision_ACL" bson:"provision_ACL"`
+	APIs           []APIInfo `json:"apis" bson:"apis"`
 }
 
 // CoreDBConfig holds core database configuration
