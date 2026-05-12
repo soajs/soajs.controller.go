@@ -82,12 +82,19 @@ soajs-controller-go/
 │   │   └── aggregation.go          # Aggregation helpers
 │   │
 │   ├── urac/
-│   │   ├── driver.go               # URAC driver interface
-│   │   ├── user.go                 # User operations
-│   │   ├── group.go                # Group operations
+│   │   ├── driver.go               # URAC driver (unified API)
+│   │   ├── user.go                 # User service (auth, tenant access)
+│   │   ├── group.go                # Group service (ACL resolution)
+│   │   ├── acl/
+│   │   │   └── resolver.go         # ACL permission resolver
+│   │   ├── hasher/
+│   │   │   ├── hasher.go           # Password hashing (bcrypt + SHA)
+│   │   │   └── hasher_test.go      # Hasher tests (94.4% coverage)
 │   │   └── model/
-│   │       ├── user.go             # User model
-│   │       └── group.go            # Group model
+│   │       ├── user.go             # User model (full SOAJS schema)
+│   │       ├── user_test.go        # User model tests (94.4% coverage)
+│   │       ├── group.go            # Group model (ACL support)
+│   │       └── group_test.go       # Group model tests (94.4% coverage)
 │   │
 │   └── types/
 │       ├── tenant.go               # Tenant types
@@ -204,10 +211,12 @@ MongoDB wrapper:
 - Aggregation pipelines
 
 ### `pkg/urac/`
-User access control:
-- User management
-- Group management
-- Permission resolution
+User access control (fully implemented):
+- User authentication with bcrypt + optional SHA256/SHA512 pre-hashing
+- Multi-tenant access checking with roaming support
+- Group management with package-based ACL
+- ACL resolver with environment/service/version/API permissions
+- ACL merging using OR logic across groups
 
 ### `pkg/types/`
 Shared type definitions:

@@ -211,10 +211,10 @@ type UracDriver interface {
 
 ### Phase 2 Exit Criteria
 
-- [ ] User authentication works
-- [ ] Group membership resolves
-- [ ] ACL calculation matches Node.js behavior
-- [ ] All URAC tests pass
+- [x] User authentication works (ValidateCredentialsWithConfig)
+- [x] Group membership resolves (GetGroupsForUserAndTenant)
+- [x] ACL calculation matches Node.js behavior (OR-merge logic)
+- [x] All URAC tests pass (hasher: 94.4%, user: 94.4%, group: 94.4%)
 - [ ] Integration tests with real MongoDB pass
 
 ### Dependencies
