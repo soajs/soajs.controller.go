@@ -58,6 +58,7 @@ type MaintenanceConfig struct {
 // AwarenessConfig holds service discovery settings
 type AwarenessConfig struct {
 	HealthCheckInterval int    `mapstructure:"health_check_interval"`
+	HealthCheckTimeout  int    `mapstructure:"health_check_timeout"`
 	AutoRegisterHost    bool   `mapstructure:"auto_register_host"`
 	Mode                string `mapstructure:"mode"` // "custom" or "ha"
 }
@@ -126,6 +127,7 @@ func setDefaults(v *viper.Viper) {
 
 	// Awareness defaults
 	v.SetDefault("awareness.health_check_interval", 5000)
+	v.SetDefault("awareness.health_check_timeout", 3000)
 	v.SetDefault("awareness.auto_register_host", true)
 	v.SetDefault("awareness.mode", "custom")
 }

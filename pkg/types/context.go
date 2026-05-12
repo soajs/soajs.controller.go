@@ -2,13 +2,20 @@ package types
 
 // ServiceParams holds service-related request parameters
 type ServiceParams struct {
-	URLInfo       *URLInfo
-	KeyACL        *ServiceACL
-	FinalACL      *ServiceACL
-	Product       *Product
-	Package       *Package
-	UserInfo      map[string]interface{}
-	RequiresOAuth bool
+	URLInfo        *URLInfo
+	KeyACL         *ServiceACL
+	FinalACL       *ServiceACL
+	Product        *Product
+	Package        *Package
+	UserInfo       map[string]interface{}
+	RequiresOAuth  bool
+	OAuthToken     *AccessToken
+	UracDriver     interface{}    // URAC driver for user ACL lookup
+	Environment    string         // Current environment
+	ServiceName    string         // Target service name
+	ServiceVersion string         // Target service version
+	User           interface{}    // URAC user (set after OAuth)
+	TenantAccess   interface{}    // Tenant access info (set after OAuth)
 }
 
 // URLInfo holds parsed URL information

@@ -1,16 +1,18 @@
 package middleware
 
 import (
+	"context"
 	"net/http"
 
 	"github.com/soajs/soajs.controller.go/internal/config"
 	"github.com/soajs/soajs.controller.go/internal/provision"
 	"github.com/soajs/soajs.controller.go/internal/registry"
 	"github.com/soajs/soajs.controller.go/pkg/types"
+	"github.com/soajs/soajs.controller.go/pkg/urac"
 )
 
 // MT (Multi-Tenant) middleware handles tenant resolution and ACL enforcement
-func MT(prov provision.Provision, reg registry.Registry) Middleware {
+func MT(prov provision.Provision, reg registry.Registry, uracDriver *urac.Driver, env string) Middleware {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			ctx := r.Context()
@@ -61,11 +63,13 @@ func MT(prov provision.Provision, reg registry.Registry) Middleware {
 			serviceParams := soajsCtx.Controller.ServiceParams
 			if serviceParams != nil && serviceParams.URLInfo != nil {
 				serviceName := serviceParams.URLInfo.ServiceName
+				serviceVersion := serviceParams.URLInfo.ServiceVersion
+				servicePath := serviceParams.URLInfo.ServicePath
 
 				// Merge ACLs: package ACL + key ACL
 				finalACL := mergeACL(pkg.ACL, soajsCtx.Key.ACL, serviceName)
 
-				if !checkServiceAccess(finalACL, serviceName, r.Method, serviceParams.URLInfo.ServicePath) {
+				if !checkServiceAccess(finalACL, serviceName, r.Method, servicePath) {
 					WriteError(w, http.StatusForbidden,
 						config.ErrCodeForbidden,
 						config.DefaultErrors[config.ErrCodeForbidden])
@@ -74,18 +78,98 @@ func MT(prov provision.Provision, reg registry.Registry) Middleware {
 
 				// Store resolved ACL
 				serviceParams.FinalACL = finalACL
-			}
 
-			// Check OAuth requirement
-			if requiresOAuth(pkg, soajsCtx.Controller.ServiceParams) {
-				// OAuth validation is handled by oauth middleware
-				// Just mark that it's required
-				soajsCtx.Controller.ServiceParams.RequiresOAuth = true
+				// Check if OAuth is required - this will trigger user ACL lookup after OAuth middleware
+				if requiresOAuth(pkg, serviceParams) {
+					serviceParams.RequiresOAuth = true
+					// Store URAC info for post-OAuth ACL lookup
+					serviceParams.UracDriver = uracDriver
+					serviceParams.Environment = env
+					serviceParams.ServiceName = serviceName
+					serviceParams.ServiceVersion = serviceVersion
+				}
 			}
 
 			// Store product info
 			soajsCtx.Controller.ServiceParams.Product = product
 			soajsCtx.Controller.ServiceParams.Package = pkg
+
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
+// UserACL middleware checks user-level ACL after OAuth authentication
+// This should be called after OAuth middleware when user info is available
+func UserACL() Middleware {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			ctx := r.Context()
+			soajsCtx := GetSOAJSContext(ctx)
+
+			// Skip if no user info or no URAC driver
+			if soajsCtx == nil || soajsCtx.Controller == nil ||
+				soajsCtx.Controller.ServiceParams == nil ||
+				soajsCtx.Controller.ServiceParams.UserInfo == nil ||
+				soajsCtx.Controller.ServiceParams.UracDriver == nil {
+				next.ServeHTTP(w, r)
+				return
+			}
+
+			params := soajsCtx.Controller.ServiceParams
+
+			// Get user ID from OAuth token
+			userID, ok := params.UserInfo["_id"].(string)
+			if !ok || userID == "" {
+				next.ServeHTTP(w, r)
+				return
+			}
+
+			// Get user from URAC
+			uracDriver := params.UracDriver.(*urac.Driver)
+			user, err := uracDriver.GetUser(ctx, userID)
+			if err != nil {
+				soajsCtx.Log.Debug("Failed to get user from URAC")
+				next.ServeHTTP(w, r)
+				return
+			}
+
+			// Check tenant access
+			tenantID := soajsCtx.Tenant.ID
+			tenantCode := soajsCtx.Tenant.Code
+			access := uracDriver.CheckTenantAccess(user, tenantID, tenantCode, "", nil)
+			if access == nil {
+				WriteError(w, http.StatusForbidden,
+					config.ErrCodeForbidden,
+					"User does not have access to this tenant")
+				return
+			}
+
+			// Get user's ACL
+			userACL, err := uracDriver.GetACLForUser(ctx, user, tenantID)
+			if err != nil {
+				soajsCtx.Log.Debug("Failed to get user ACL")
+				next.ServeHTTP(w, r)
+				return
+			}
+
+			// Check user ACL for service access
+			if userACL != nil {
+				serviceName := params.ServiceName
+				serviceVersion := params.ServiceVersion
+				servicePath := params.URLInfo.ServicePath
+
+				if !userACL.HasAccess(params.Environment, serviceName, serviceVersion, servicePath) {
+					WriteError(w, http.StatusForbidden,
+						config.ErrCodeForbidden,
+						"User does not have access to this service")
+					return
+				}
+			}
+
+			// Store user and access info
+			params.User = user
+			params.TenantAccess = access
 
 			next.ServeHTTP(w, r)
 		})
@@ -177,3 +261,6 @@ func requiresOAuth(pkg *types.Package, params *types.ServiceParams) bool {
 
 	return false
 }
+
+// Ensure context is imported for UserACL
+var _ context.Context

@@ -3,8 +3,10 @@ package middleware
 import (
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/soajs/soajs.controller.go/internal/config"
+	"github.com/soajs/soajs.controller.go/internal/provision"
 )
 
 // OAuthConfig holds OAuth middleware configuration
@@ -14,7 +16,7 @@ type OAuthConfig struct {
 }
 
 // OAuth middleware validates OAuth tokens
-func OAuth() Middleware {
+func OAuth(prov provision.Provision) Middleware {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			ctx := r.Context()
@@ -37,20 +39,37 @@ func OAuth() Middleware {
 				return
 			}
 
-			// Validate token
-			// TODO: Implement actual token validation against OAuth server
-			valid, userInfo := validateToken(token)
-			if !valid {
+			// Validate token using provision's OAuth model
+			oauthModel := prov.OAuthModel()
+			accessToken, err := oauthModel.GetAccessToken(token)
+			if err != nil {
+				soajsCtx.Log.Debug("OAuth token lookup failed")
 				WriteError(w, http.StatusUnauthorized,
 					config.ErrCodeUnauthorized,
 					"Invalid or expired token")
 				return
 			}
 
-			// Store user info in context
-			if userInfo != nil {
-				soajsCtx.Controller.ServiceParams.UserInfo = userInfo
+			// Check if token is expired
+			if accessToken.Expires > 0 && accessToken.Expires < time.Now().Unix() {
+				soajsCtx.Log.Debug("OAuth token expired")
+				WriteError(w, http.StatusUnauthorized,
+					config.ErrCodeUnauthorized,
+					"Token has expired")
+				return
 			}
+
+			// Store user info in context
+			userInfo := make(map[string]interface{})
+			if accessToken.User != nil {
+				userInfo = accessToken.User
+			}
+			userInfo["_id"] = accessToken.UserID
+			userInfo["clientId"] = accessToken.ClientID
+			userInfo["scope"] = accessToken.Scope
+
+			soajsCtx.Controller.ServiceParams.UserInfo = userInfo
+			soajsCtx.Controller.ServiceParams.OAuthToken = accessToken
 
 			next.ServeHTTP(w, r)
 		})
@@ -79,25 +98,4 @@ func extractToken(r *http.Request) string {
 	}
 
 	return ""
-}
-
-// validateToken validates the OAuth token
-// TODO: Implement actual validation against OAuth server
-func validateToken(token string) (bool, map[string]interface{}) {
-	// Placeholder implementation
-	// In real implementation, this would:
-	// 1. Check token in local cache
-	// 2. If not cached, validate against OAuth server
-	// 3. Cache the result with TTL
-	// 4. Return user info from token
-
-	if token == "" {
-		return false, nil
-	}
-
-	// For now, just return true for non-empty tokens
-	// Real implementation would validate against OAuth service
-	return true, map[string]interface{}{
-		"token": token,
-	}
 }

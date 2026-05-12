@@ -11,6 +11,7 @@ import (
 	"github.com/soajs/soajs.controller.go/internal/provision"
 	"github.com/soajs/soajs.controller.go/internal/registry"
 	"github.com/soajs/soajs.controller.go/pkg/mongo"
+	"github.com/soajs/soajs.controller.go/pkg/urac"
 	"go.uber.org/zap"
 )
 
@@ -21,6 +22,7 @@ type Controller struct {
 	registry  registry.Registry
 	provision provision.Provision
 	awareness awareness.Awareness
+	urac      *urac.Driver
 	mongo     *mongo.Client
 }
 
@@ -46,6 +48,12 @@ func NewController(cfg *config.Config, logger *zap.Logger) (*Controller, error) 
 
 	// Initialize awareness
 	ctrl.awareness = awareness.NewAwareness(cfg.Awareness, ctrl.registry, logger)
+
+	// Initialize URAC driver
+	ctrl.urac = urac.NewDriverWithConfig(mongoClient, logger, urac.Config{
+		HashIterations: 12,
+		Environment:    cfg.Environment,
+	})
 
 	return ctrl, nil
 }
@@ -83,7 +91,9 @@ func (c *Controller) Setup(r *chi.Mux) error {
 	r.Use(middleware.Key(c.provision))
 	r.Use(middleware.KeyACL())
 	r.Use(middleware.GotoService(c.provision, c.registry, c.awareness))
-	r.Use(middleware.MT(c.provision, c.registry))
+	r.Use(middleware.MT(c.provision, c.registry, c.urac, c.cfg.Environment))
+	r.Use(middleware.OAuth(c.provision))
+	r.Use(middleware.UserACL())
 	r.Use(middleware.Traffic(c.registry))
 	r.Use(middleware.LastSeen())
 

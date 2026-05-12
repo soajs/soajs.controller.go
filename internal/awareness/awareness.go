@@ -2,6 +2,7 @@ package awareness
 
 import (
 	"fmt"
+	"net/http"
 	"sync"
 	"time"
 
@@ -120,11 +121,40 @@ func (a *DefaultAwareness) GetHost(serviceName, version string) (*types.HostInfo
 
 // HealthCheck performs a health check on a service host
 func (a *DefaultAwareness) HealthCheck(serviceName, host string) (*HealthStatus, error) {
-	// TODO: Implement actual HTTP health check
-	return &HealthStatus{
-		Healthy:   true,
-		LastCheck: time.Now(),
-	}, nil
+	start := time.Now()
+	status := &HealthStatus{
+		LastCheck: start,
+	}
+
+	// Create HTTP client with timeout
+	client := &http.Client{
+		Timeout: time.Duration(a.cfg.HealthCheckTimeout) * time.Millisecond,
+	}
+
+	// Build health check URL
+	healthURL := fmt.Sprintf("http://%s/heartbeat", host)
+
+	// Perform health check
+	resp, err := client.Get(healthURL)
+	if err != nil {
+		status.Healthy = false
+		status.Error = err.Error()
+		status.Latency = time.Since(start)
+		return status, nil
+	}
+	defer resp.Body.Close()
+
+	status.Latency = time.Since(start)
+
+	// Check response status code
+	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+		status.Healthy = true
+	} else {
+		status.Healthy = false
+		status.Error = fmt.Sprintf("unhealthy status code: %d", resp.StatusCode)
+	}
+
+	return status, nil
 }
 
 // RegisterService registers a service host
