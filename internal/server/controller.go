@@ -93,7 +93,7 @@ func (c *Controller) Setup(r *chi.Mux) error {
 	r.Use(middleware.Favicon())
 	r.Use(middleware.Response())
 	r.Use(middleware.Enhancer())
-	r.Use(middleware.IP2Ban())
+	r.Use(middleware.IP2BanWithRegistry(c.registry))
 	r.Use(middleware.MaintenanceMode(c.registry))
 	r.Use(middleware.URL())
 	r.Use(middleware.Awareness(c.awareness))

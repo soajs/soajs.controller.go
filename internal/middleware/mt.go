@@ -25,6 +25,17 @@ func MT(prov provision.Provision, reg registry.Registry, uracDriver *urac.Driver
 				return
 			}
 
+			// Check MT whitelist for IP-based ACL/OAuth bypass
+			var skipACL, skipOAuth bool
+			if reg != nil {
+				regData := reg.Get()
+				clientIP := getClientIP(r)
+				skipACL, skipOAuth = CheckMTWhitelist(regData, clientIP)
+				if skipACL || skipOAuth {
+					soajsCtx.Log.Debug("MT whitelist matched for IP, skipACL=" + boolToStr(skipACL) + " skipOAuth=" + boolToStr(skipOAuth))
+				}
+			}
+
 			// Resolve tenant from key
 			tenant, err := prov.GetTenant(soajsCtx.Key.TenantCode)
 			if err != nil {
@@ -70,18 +81,24 @@ func MT(prov provision.Provision, reg registry.Registry, uracDriver *urac.Driver
 				// Merge ACLs: package ACL + key ACL (env-aware)
 				finalACL := mergeACL(pkg.ACL, soajsCtx.Key.ACL, serviceName, env)
 
-				if !checkServiceAccess(finalACL, serviceName, serviceVersion, r.Method, servicePath) {
-					WriteError(w, http.StatusForbidden,
-						config.ErrCodeForbidden,
-						config.DefaultErrors[config.ErrCodeForbidden])
-					return
+				// Check ACL unless whitelisted
+				if !skipACL {
+					if !checkServiceAccess(finalACL, serviceName, serviceVersion, r.Method, servicePath) {
+						WriteError(w, http.StatusForbidden,
+							config.ErrCodeForbidden,
+							config.DefaultErrors[config.ErrCodeForbidden])
+						return
+					}
 				}
 
 				// Store resolved ACL
 				serviceParams.FinalACL = finalACL
+				serviceParams.SkipACL = skipACL
+				serviceParams.SkipOAuth = skipOAuth
 
 				// Check if OAuth is required - this will trigger user ACL lookup after OAuth middleware
-				if requiresOAuth(pkg, serviceParams, env) {
+				// Skip OAuth check if whitelisted
+				if !skipOAuth && requiresOAuth(pkg, serviceParams, env) {
 					serviceParams.RequiresOAuth = true
 					// Store URAC info for post-OAuth ACL lookup
 					serviceParams.UracDriver = uracDriver
@@ -400,3 +417,11 @@ func isAccessTruthy(access interface{}) bool {
 
 // Ensure context is imported for UserACL
 var _ context.Context
+
+// boolToStr converts bool to string for logging
+func boolToStr(b bool) string {
+	if b {
+		return "true"
+	}
+	return "false"
+}

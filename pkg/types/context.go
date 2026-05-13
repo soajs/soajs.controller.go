@@ -18,6 +18,8 @@ type ServiceParams struct {
 	ServiceVersion string         // Target service version
 	User           interface{}    // URAC user (set after OAuth)
 	TenantAccess   interface{}    // Tenant access info (set after OAuth)
+	SkipACL        bool           // Skip ACL checks (MT whitelist)
+	SkipOAuth      bool           // Skip OAuth checks (MT whitelist)
 }
 
 // URLInfo holds parsed URL information

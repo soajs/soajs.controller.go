@@ -399,6 +399,55 @@ func getMonitorConfig(regData *types.RegistryData) *MonitorConfig {
 	return config
 }
 
+// GotoServiceConfig holds gotoService configuration from custom registry
+type GotoServiceConfig struct {
+	RenewReqMonitorOff bool           `json:"renewReqMonitorOff"`
+	Monitor            *MonitorConfig `json:"monitor"`
+}
+
+// GetGotoServiceConfig extracts gotoService config from custom registry
+// Path: registry.custom.gateway.value.gotoService
+func GetGotoServiceConfig(regData *types.RegistryData) *GotoServiceConfig {
+	if regData == nil || regData.CustomRegistry == nil {
+		return nil
+	}
+
+	gateway, ok := regData.CustomRegistry["gateway"]
+	if !ok {
+		return nil
+	}
+
+	var gatewayValue interface{}
+	switch v := gateway.(type) {
+	case map[string]interface{}:
+		if val, exists := v["value"]; exists {
+			gatewayValue = val
+		} else {
+			gatewayValue = v
+		}
+	default:
+		return nil
+	}
+
+	gatewayMap, ok := gatewayValue.(map[string]interface{})
+	if !ok {
+		return nil
+	}
+
+	gotoService, ok := gatewayMap["gotoService"].(map[string]interface{})
+	if !ok {
+		return nil
+	}
+
+	config := &GotoServiceConfig{}
+
+	if off, ok := gotoService["renewReqMonitorOff"].(bool); ok {
+		config.RenewReqMonitorOff = off
+	}
+
+	return config
+}
+
 // isServiceBlacklisted checks if service should be excluded from monitoring
 func isServiceBlacklisted(serviceName string, config *MonitorConfig) bool {
 	// Check whitelist first
