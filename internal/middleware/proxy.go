@@ -61,8 +61,53 @@ func GotoService(prov provision.Provision, reg registry.Registry, aw awareness.A
 
 			serviceName := serviceParams.URLInfo.ServiceName
 			serviceVersion := serviceParams.URLInfo.ServiceVersion
+			servicePath := serviceParams.URLInfo.ServicePath
 
-			// Skip proxying for /soajs/* routes - they're handled by SoajsRoutes middleware
+			// Handle /soajs/proxy - extract proxyRoute query param and route to that service
+			if serviceName == "soajs" && serviceParams.URLInfo.ServiceVersion == "proxy" {
+				proxyRoute := r.URL.Query().Get("proxyRoute")
+				if proxyRoute == "" {
+					WriteError(w, http.StatusBadRequest,
+						config.ErrCodeInvalidRoute,
+						"proxyRoute query parameter is required")
+					return
+				}
+
+				// Decode the proxyRoute
+				decodedRoute, err := url.QueryUnescape(proxyRoute)
+				if err != nil {
+					decodedRoute = proxyRoute
+				}
+
+				// Parse the proxyRoute to extract service name
+				// Format: /serviceName/path or /serviceName/version/path
+				parts := strings.Split(strings.TrimPrefix(decodedRoute, "/"), "/")
+				if len(parts) < 1 || parts[0] == "" {
+					WriteError(w, http.StatusBadRequest,
+						config.ErrCodeInvalidRoute,
+						"Invalid proxyRoute format")
+					return
+				}
+
+				serviceName = parts[0]
+				serviceVersion = "1" // default version
+				servicePath = "/" + strings.Join(parts[1:], "/")
+
+				// Check if second part is a version number
+				if len(parts) > 1 {
+					if _, err := fmt.Sscanf(parts[1], "%d", new(int)); err == nil {
+						serviceVersion = parts[1]
+						servicePath = "/" + strings.Join(parts[2:], "/")
+					}
+				}
+
+				// Update serviceParams for downstream middleware
+				serviceParams.URLInfo.ServiceName = serviceName
+				serviceParams.URLInfo.ServiceVersion = serviceVersion
+				serviceParams.URLInfo.ServicePath = servicePath
+			}
+
+			// Skip other /soajs/* routes - they're handled by SoajsRoutes middleware
 			if serviceName == "soajs" {
 				next.ServeHTTP(w, r)
 				return

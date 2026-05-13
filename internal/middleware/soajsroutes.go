@@ -38,6 +38,12 @@ func SoajsRoutes() Middleware {
 			case "/soajs/env":
 				handleSoajsEnv(w, r, soajsCtx)
 				return
+			case "/soajs/proxy":
+				// /soajs/proxy is handled by gotoService middleware
+				// It extracts proxyRoute query param and routes to that service
+				// Continue to next handler (gotoService will handle it)
+				next.ServeHTTP(w, r)
+				return
 			default:
 				WriteError(w, http.StatusNotFound,
 					config.ErrCodeServiceNotFound,

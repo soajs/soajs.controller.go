@@ -2,20 +2,22 @@ package config
 
 // Default error codes
 const (
-	ErrCodeInvalidKey       = 150
-	ErrCodeInvalidTenant    = 151
-	ErrCodeInvalidProduct   = 152
-	ErrCodeInvalidPackage   = 153
-	ErrCodeUnauthorized     = 154
-	ErrCodeForbidden        = 155
-	ErrCodeServiceNotFound  = 156
-	ErrCodeMaintenanceMode  = 157
+	ErrCodeInvalidRoute      = 130
+	ErrCodeInvalidKey        = 150
+	ErrCodeInvalidTenant     = 151
+	ErrCodeInvalidProduct    = 152
+	ErrCodeInvalidPackage    = 153
+	ErrCodeUnauthorized      = 154
+	ErrCodeForbidden         = 155
+	ErrCodeServiceNotFound   = 156
+	ErrCodeMaintenanceMode   = 157
 	ErrCodeRateLimitExceeded = 158
-	ErrCodeIPBanned         = 159
+	ErrCodeIPBanned          = 159
 )
 
 // Default error messages
 var DefaultErrors = map[int]string{
+	ErrCodeInvalidRoute:      "Invalid route",
 	ErrCodeInvalidKey:        "Invalid API key",
 	ErrCodeInvalidTenant:     "Invalid tenant",
 	ErrCodeInvalidProduct:    "Invalid product",
