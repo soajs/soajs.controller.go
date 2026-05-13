@@ -20,7 +20,8 @@ type mockProvision struct {
 	packages map[string]*types.Package
 }
 
-func (m *mockProvision) LoadProvision() error { return nil }
+func (m *mockProvision) LoadProvision() error                     { return nil }
+func (m *mockProvision) SetKeyConfig(algorithm, password string)  {}
 func (m *mockProvision) GetTenant(code string) (*types.Tenant, error) {
 	if t, ok := m.tenants[code]; ok {
 		return t, nil

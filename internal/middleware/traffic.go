@@ -56,6 +56,10 @@ func Traffic(reg registry.Registry) Middleware {
 			soajsCtx := GetSOAJSContext(ctx)
 
 			// Get throttling configuration
+			if reg == nil {
+				next.ServeHTTP(w, r)
+				return
+			}
 			regData := reg.Get()
 			if regData == nil || regData.ServiceConfig == nil || regData.ServiceConfig.Throttling == nil {
 				next.ServeHTTP(w, r)

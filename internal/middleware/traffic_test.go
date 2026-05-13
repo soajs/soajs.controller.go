@@ -28,75 +28,74 @@ func TestTrafficMiddleware_AllowsNormalRequests(t *testing.T) {
 	}
 }
 
-func TestTrafficMiddleware_RateLimiting(t *testing.T) {
+func TestTrafficMiddleware_ThrottlingStore(t *testing.T) {
 	// Reset the store for clean test
-	trafficStore.mu.Lock()
-	trafficStore.limiters = make(map[string]*rateLimiterEntry)
-	trafficStore.config = TrafficConfig{
-		Enabled:      true,
-		DefaultLimit: 1, // Very low for testing
-		DefaultBurst: 1,
-	}
-	trafficStore.mu.Unlock()
+	throttlingStore.mu.Lock()
+	throttlingStore.entries = make(map[string]*ThrottlingEntry)
+	throttlingStore.mu.Unlock()
 
-	logger, _ := zap.NewDevelopment()
-
-	contextMW := Context(logger)
-	trafficMW := Traffic(nil)
-
-	handler := contextMW(trafficMW(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-	})))
-
-	// First request should succeed
-	req1 := httptest.NewRequest("GET", "/test", nil)
-	req1.RemoteAddr = "192.168.1.100:12345"
-	rec1 := httptest.NewRecorder()
-	handler.ServeHTTP(rec1, req1)
-
-	if rec1.Code != http.StatusOK {
-		t.Errorf("First request: Status = %d, want %d", rec1.Code, http.StatusOK)
+	// Test throttling check
+	strategy := &ThrottlingStrategy{
+		Status:  1,
+		Type:    1,
+		Window:  60000,
+		Limit:   2,
+		Retries: 0,
+		Delay:   0,
 	}
 
-	// Second request from same IP should be rate limited
-	req2 := httptest.NewRequest("GET", "/test", nil)
-	req2.RemoteAddr = "192.168.1.100:12345"
-	rec2 := httptest.NewRecorder()
-	handler.ServeHTTP(rec2, req2)
-
-	if rec2.Code != http.StatusTooManyRequests {
-		t.Errorf("Second request: Status = %d, want %d", rec2.Code, http.StatusTooManyRequests)
+	// First request should pass
+	allowed1, headers1 := checkThrottling("test-key-1", strategy, 0)
+	if !allowed1 {
+		t.Error("First request should be allowed")
+	}
+	if headers1["X-RateLimit-Remaining"] != "1" {
+		t.Errorf("Remaining = %s, want 1", headers1["X-RateLimit-Remaining"])
 	}
 
-	// Request from different IP should succeed
-	req3 := httptest.NewRequest("GET", "/test", nil)
-	req3.RemoteAddr = "192.168.1.200:12345"
-	rec3 := httptest.NewRecorder()
-	handler.ServeHTTP(rec3, req3)
-
-	if rec3.Code != http.StatusOK {
-		t.Errorf("Different IP request: Status = %d, want %d", rec3.Code, http.StatusOK)
+	// Second request should pass
+	allowed2, headers2 := checkThrottling("test-key-1", strategy, 0)
+	if !allowed2 {
+		t.Error("Second request should be allowed")
+	}
+	if headers2["X-RateLimit-Remaining"] != "0" {
+		t.Errorf("Remaining = %s, want 0", headers2["X-RateLimit-Remaining"])
 	}
 
-	// Reset config to defaults
-	trafficStore.mu.Lock()
-	trafficStore.config = DefaultTrafficConfig()
-	trafficStore.limiters = make(map[string]*rateLimiterEntry)
-	trafficStore.mu.Unlock()
+	// Third request should be rate limited (no retries)
+	allowed3, _ := checkThrottling("test-key-1", strategy, 0)
+	if allowed3 {
+		t.Error("Third request should be rate limited")
+	}
+
+	// Different key should be allowed
+	allowed4, _ := checkThrottling("test-key-2", strategy, 0)
+	if !allowed4 {
+		t.Error("Different key should be allowed")
+	}
+
+	// Cleanup
+	throttlingStore.mu.Lock()
+	throttlingStore.entries = make(map[string]*ThrottlingEntry)
+	throttlingStore.mu.Unlock()
+}
+
+func TestBuildTrafficKey(t *testing.T) {
+	// Type 0 = tenant only
+	key0 := buildTrafficKey("tenant123", "192.168.1.1", 0)
+	if key0 != "tenant:tenant123" {
+		t.Errorf("Key type 0 = %s, want tenant:tenant123", key0)
+	}
+
+	// Type 1 = tenant + IP
+	key1 := buildTrafficKey("tenant123", "192.168.1.1", 1)
+	if key1 != "tenant:tenant123:ip:192.168.1.1" {
+		t.Errorf("Key type 1 = %s, want tenant:tenant123:ip:192.168.1.1", key1)
+	}
 }
 
 func TestSetRateLimit(t *testing.T) {
+	// SetRateLimit is kept for compatibility but does nothing in new implementation
 	SetRateLimit("custom-key", 50, 100)
-
-	trafficStore.mu.RLock()
-	entry, exists := trafficStore.limiters["custom-key"]
-	trafficStore.mu.RUnlock()
-
-	if !exists {
-		t.Error("Custom rate limit not set")
-	}
-
-	if entry == nil {
-		t.Error("Rate limiter entry is nil")
-	}
+	// No error = success
 }

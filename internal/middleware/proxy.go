@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"bytes"
 	"context"
 	"crypto/hmac"
 	"crypto/sha256"
@@ -139,7 +140,7 @@ func GotoService(prov provision.Provision, reg registry.Registry, aw awareness.A
 
 			// Set the gotoservice function
 			soajsCtx.Controller.Gotoservice = func(w http.ResponseWriter, r *http.Request) {
-				proxyRequest(w, r, targetURL, soajsCtx)
+				proxyRequest(w, r, targetURL, soajsCtx, reg, aw)
 			}
 
 			next.ServeHTTP(w, r)
@@ -157,12 +158,54 @@ func buildTargetURL(host string, port int, path string, query string) string {
 	return u.String()
 }
 
-func proxyRequest(w http.ResponseWriter, r *http.Request, targetURL string, soajsCtx *SOAJSContext) {
+func proxyRequest(w http.ResponseWriter, r *http.Request, targetURL string, soajsCtx *SOAJSContext, reg registry.Registry, aw awareness.Awareness) {
 	// Get request timeout from service params (with default fallback)
 	requestTimeout := 30 * time.Second
 	if soajsCtx.Controller != nil && soajsCtx.Controller.ServiceParams != nil {
 		// Check if service has custom timeout
 		// TODO: Read from registry.services[name].requestTimeout
+	}
+
+	// Initialize monitoring
+	var monitorDoc *MonitorDocument
+	var monitorConfig *MonitorConfig
+	var monitorBlacklisted bool
+	reqStart := time.Now()
+
+	if reg != nil {
+		regData := reg.Get()
+		monitorConfig = getMonitorConfig(regData)
+		if monitorConfig != nil && soajsCtx.Controller != nil && soajsCtx.Controller.ServiceParams != nil {
+			serviceName := soajsCtx.Controller.ServiceParams.ServiceName
+			if serviceName == "" && soajsCtx.Controller.ServiceParams.URLInfo != nil {
+				serviceName = soajsCtx.Controller.ServiceParams.URLInfo.ServiceName
+			}
+			monitorBlacklisted = isServiceBlacklisted(serviceName, monitorConfig)
+
+			if !monitorBlacklisted {
+				monitorDoc = &MonitorDocument{
+					Name:   serviceName,
+					Method: r.Method,
+					Time: MonitorTime{
+						ReqStart: reqStart.UnixMilli(),
+					},
+				}
+				if soajsCtx.Controller.ServiceParams.URLInfo != nil {
+					monitorDoc.API = soajsCtx.Controller.ServiceParams.URLInfo.ServicePath
+					monitorDoc.Version = soajsCtx.Controller.ServiceParams.URLInfo.ServiceVersion
+				}
+				if monitorConfig.ReqInfo {
+					monitorDoc.Host = r.Host
+					monitorDoc.URL = r.URL.String()
+				}
+				if monitorConfig.ReqHeader {
+					monitorDoc.Headers = r.Header
+				}
+				if monitorConfig.ReqQuery {
+					monitorDoc.Query = r.URL.Query()
+				}
+			}
+		}
 	}
 
 	// Create context with timeout for the request
@@ -193,7 +236,17 @@ func proxyRequest(w http.ResponseWriter, r *http.Request, targetURL string, soaj
 		injectSOAJSHeaders(proxyReq, soajsCtx)
 	}
 
+	// Record request body timing for monitoring
+	if monitorDoc != nil {
+		monitorDoc.Time.ReqBodyStart = time.Now().UnixMilli()
+		monitorDoc.Time.ReqBodyEnd = time.Now().UnixMilli()
+	}
+
 	// Execute proxy request
+	if monitorDoc != nil {
+		monitorDoc.Time.ResStart = time.Now().UnixMilli()
+	}
+
 	resp, err := proxyClient.Do(proxyReq)
 	if err != nil {
 		soajsCtx.Log.Error("proxy request failed")
@@ -208,8 +261,32 @@ func proxyRequest(w http.ResponseWriter, r *http.Request, targetURL string, soaj
 	// Write status code
 	w.WriteHeader(resp.StatusCode)
 
-	// Copy response body
-	io.Copy(w, resp.Body)
+	// Copy response body (and capture for monitoring if needed)
+	if monitorDoc != nil && monitorConfig != nil && monitorConfig.ReqResponse {
+		// Capture response body for monitoring
+		var respBody bytes.Buffer
+		io.Copy(&respBody, resp.Body)
+
+		// Write to client
+		w.Write(respBody.Bytes())
+
+		// Limit captured response size to 10KB for monitoring
+		respBytes := respBody.Bytes()
+		if len(respBytes) > 10240 {
+			respBytes = respBytes[:10240]
+		}
+		monitorDoc.Response = string(respBytes)
+	} else {
+		io.Copy(w, resp.Body)
+	}
+
+	// Record response end time and send to monitor
+	if monitorDoc != nil && aw != nil {
+		monitorDoc.Time.ResEnd = time.Now().UnixMilli()
+		buffer := GetMonitorBuffer(reg, aw, soajsCtx.Log)
+		buffer.SetConfig(monitorConfig.Buffer)
+		buffer.Add(*monitorDoc)
+	}
 }
 
 func copyHeaders(dst, src http.Header) {
