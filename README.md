@@ -28,19 +28,25 @@ High-performance API Gateway for SOAJS microservices platform, rewritten in Go.
 ### Build
 
 ```bash
-make build
+go build -o controller ./cmd/controller
 ```
 
-### Run locally
+### Run locally (SOAJS development environment)
 
 ```bash
-# Set environment variables
-export SOAJS_ENV=dev
-export SOAJS_MONGO_URI=mongodb://localhost:27017
+# Option 1: Use the start script
+./start_local.sh
 
-# Run
-./bin/controller
+# Option 2: Run manually with environment variables
+SOAJS_ENV=dashboard SOAJS_MONGO_URI="mongodb://127.0.0.1:32017" ./controller
+
+# Option 3: Run in background with logs
+SOAJS_ENV=dashboard SOAJS_MONGO_URI="mongodb://127.0.0.1:32017" ./controller > /tmp/go-ctrl.log 2>&1 &
 ```
+
+The controller will start on:
+- **Port 4000**: Main gateway (proxies requests to backend services)
+- **Port 5001**: Maintenance endpoints (heartbeat, reload, awareness)
 
 ### Run with Docker
 
@@ -78,14 +84,16 @@ Configuration can be provided via:
 All requests are proxied to backend services based on the URL path:
 - `/{service}/{version}/{path}` - Route to service
 
-### Maintenance (Port 5000)
+### Maintenance (Port 5001)
 
 | Endpoint | Description |
 |----------|-------------|
 | `GET /heartbeat` | Health check |
 | `GET /loadProvision` | Reload provision data |
 | `GET /reloadRegistry` | Reload registry |
+| `GET /getRegistry` | Get registry data for a service |
 | `GET /awarenessStat` | Get service awareness stats |
+| `GET,POST /register` | Register a service host |
 
 ## Project Structure
 
