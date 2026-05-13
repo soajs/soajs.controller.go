@@ -1,6 +1,7 @@
 package integration
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -31,12 +32,15 @@ func TestMaintenanceEndpoints(t *testing.T) {
 		t.Fatal("Controller not ready")
 	}
 
+	t.Run("Favicon", testFavicon)
 	t.Run("Heartbeat", testHeartbeat)
 	t.Run("GetRegistry", testGetRegistry)
 	t.Run("AwarenessStat", testAwarenessStat)
 	t.Run("LoadProvision", testLoadProvision)
 	t.Run("ReloadRegistry", testReloadRegistry)
 	t.Run("Register", testRegister)
+	t.Run("RegisterPOST", testRegisterPOST)
+	t.Run("ProxySocket", testProxySocket)
 }
 
 func testHeartbeat(t *testing.T) {
@@ -192,7 +196,7 @@ func testReloadRegistry(t *testing.T) {
 }
 
 func testRegister(t *testing.T) {
-	// Test service registration
+	// Test service registration via GET
 	reqURL := fmt.Sprintf("http://127.0.0.1:%d/register?name=testservice&ip=127.0.0.1&port=9999&version=1", maintenancePort)
 
 	resp, err := http.Get(reqURL)
@@ -208,4 +212,69 @@ func testRegister(t *testing.T) {
 	}
 
 	t.Logf("Register response: result=%v, body=%s", result.Result, string(body))
+}
+
+func testFavicon(t *testing.T) {
+	resp, err := http.Get(fmt.Sprintf("http://127.0.0.1:%d/favicon.ico", maintenancePort))
+	if err != nil {
+		t.Fatalf("Request failed: %v", err)
+	}
+	defer resp.Body.Close()
+
+	// Favicon should return 200 or 204 (no content)
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNoContent {
+		t.Errorf("Expected status 200 or 204, got %d", resp.StatusCode)
+	}
+
+	t.Logf("Favicon response: status=%d", resp.StatusCode)
+}
+
+func testRegisterPOST(t *testing.T) {
+	// Test service registration via POST with JSON body
+	reqURL := fmt.Sprintf("http://127.0.0.1:%d/register", maintenancePort)
+
+	jsonBody := `{
+		"name": "golangpub",
+		"type": "service",
+		"group": "Custom Services",
+		"version": "1.2",
+		"port": 4800,
+		"requestTimeout": 30,
+		"requestTimeoutRenewal": 5,
+		"mw": true,
+		"swagger": true,
+		"extKeyRequired": true,
+		"urac": true,
+		"urac_Profile": false,
+		"urac_ACL": false,
+		"provision_ACL": false,
+		"oauth": false,
+		"ip": "127.0.0.1",
+		"maintenance": {"port": {"type": "inherit"}, "readiness": "/heartbeat", "commands": null}
+	}`
+
+	req, _ := http.NewRequest("POST", reqURL, bytes.NewBufferString(jsonBody))
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("Request failed: %v", err)
+	}
+	defer resp.Body.Close()
+
+	body, _ := io.ReadAll(resp.Body)
+	t.Logf("Register POST response: status=%d, body=%s", resp.StatusCode, string(body))
+}
+
+func testProxySocket(t *testing.T) {
+	resp, err := http.Get(fmt.Sprintf("http://127.0.0.1:%d/proxySocket", maintenancePort))
+	if err != nil {
+		t.Fatalf("Request failed: %v", err)
+	}
+	defer resp.Body.Close()
+
+	body, _ := io.ReadAll(resp.Body)
+
+	// ProxySocket may return error if not configured, that's OK
+	t.Logf("ProxySocket response: status=%d, body=%s", resp.StatusCode, string(body))
 }

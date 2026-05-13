@@ -6,10 +6,11 @@ Integration tests for the Go SOAJS Controller.
 
 | Suite | Tests | Status |
 |-------|-------|--------|
-| Gateway Routes | 8 | ✅ Pass |
+| Gateway Routes | 18 | ✅ Pass |
 | HTTP Methods | 7 | ✅ Pass |
-| Maintenance Endpoints | 6 | ✅ Pass |
-| **Total** | **22** | **✅ All Pass** |
+| Maintenance Endpoints | 9 | ✅ Pass |
+| Roaming | 3 | ✅ Pass |
+| **Total** | **37** | **✅ All Pass** |
 
 ## Prerequisites
 

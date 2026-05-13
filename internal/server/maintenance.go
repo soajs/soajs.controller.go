@@ -38,6 +38,7 @@ func NewMaintenanceServer(port int, ctrl *Controller, logger *zap.Logger) *http.
 	}
 
 	// Maintenance routes
+	r.Get("/favicon.ico", handler.favicon)
 	r.Get("/heartbeat", handler.heartbeat)
 	r.Get("/loadProvision", handler.loadProvision)
 	r.Get("/reloadRegistry", handler.reloadRegistry)
@@ -45,6 +46,7 @@ func NewMaintenanceServer(port int, ctrl *Controller, logger *zap.Logger) *http.
 	r.Get("/awarenessStat", handler.awarenessStat)
 	r.Get("/register", handler.register)
 	r.Post("/register", handler.register)
+	r.Get("/proxySocket", handler.proxySocket)
 
 	return &http.Server{
 		Addr:         fmt.Sprintf(":%d", port),
@@ -57,6 +59,11 @@ func NewMaintenanceServer(port int, ctrl *Controller, logger *zap.Logger) *http.
 type maintenanceHandler struct {
 	ctrl   *Controller
 	logger *zap.Logger
+}
+
+func (h *maintenanceHandler) favicon(w http.ResponseWriter, r *http.Request) {
+	// Return empty response for favicon
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func (h *maintenanceHandler) heartbeat(w http.ResponseWriter, r *http.Request) {
@@ -382,4 +389,21 @@ func (h *maintenanceHandler) respondError(w http.ResponseWriter, route string, e
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusInternalServerError)
 	json.NewEncoder(w).Encode(resp)
+}
+
+func (h *maintenanceHandler) proxySocket(w http.ResponseWriter, r *http.Request) {
+	// ProxySocket returns information about socket proxy configuration
+	// This is used for WebSocket routing
+	regData := h.ctrl.Registry().Get()
+
+	var socketInfo interface{}
+	if regData != nil && regData.ServiceConfig != nil {
+		// Return socket configuration if available
+		socketInfo = map[string]interface{}{
+			"host": "127.0.0.1",
+			"port": regData.ServiceConfig.Ports.Controller,
+		}
+	}
+
+	h.respondWithRoute(w, true, socketInfo, "/proxySocket")
 }
