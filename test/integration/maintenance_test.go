@@ -5,20 +5,19 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"os"
 	"testing"
 	"time"
 )
 
 // MaintenanceResponse represents a maintenance endpoint response
 type MaintenanceResponse struct {
-	Result  bool        `json:"result"`
-	TS      int64       `json:"ts"`
-	Service ServiceInfo `json:"service"`
-	Data    interface{} `json:"data,omitempty"`
+	Result  bool            `json:"result"`
+	TS      int64           `json:"ts"`
+	Service MaintServiceInfo `json:"service"`
+	Data    interface{}     `json:"data,omitempty"`
 }
 
-type ServiceInfo struct {
+type MaintServiceInfo struct {
 	Service string `json:"service"`
 	Version string `json:"version"`
 	Type    string `json:"type"`
@@ -27,11 +26,6 @@ type ServiceInfo struct {
 
 // TestMaintenanceEndpoints tests the maintenance endpoints
 func TestMaintenanceEndpoints(t *testing.T) {
-	// Skip if not running integration tests
-	if os.Getenv("INTEGRATION_TEST") != "true" {
-		t.Skip("Skipping integration tests. Set INTEGRATION_TEST=true to run.")
-	}
-
 	// Wait for controller to be ready
 	if !waitForController(t, 10*time.Second) {
 		t.Fatal("Controller not ready")
@@ -42,6 +36,7 @@ func TestMaintenanceEndpoints(t *testing.T) {
 	t.Run("AwarenessStat", testAwarenessStat)
 	t.Run("LoadProvision", testLoadProvision)
 	t.Run("ReloadRegistry", testReloadRegistry)
+	t.Run("Register", testRegister)
 }
 
 func testHeartbeat(t *testing.T) {
@@ -194,4 +189,23 @@ func testReloadRegistry(t *testing.T) {
 	}
 
 	t.Logf("ReloadRegistry response: result=%v", result.Result)
+}
+
+func testRegister(t *testing.T) {
+	// Test service registration
+	reqURL := fmt.Sprintf("http://127.0.0.1:%d/register?name=testservice&ip=127.0.0.1&port=9999&version=1", maintenancePort)
+
+	resp, err := http.Get(reqURL)
+	if err != nil {
+		t.Fatalf("Request failed: %v", err)
+	}
+	defer resp.Body.Close()
+
+	body, _ := io.ReadAll(resp.Body)
+	var result MaintenanceResponse
+	if err := json.Unmarshal(body, &result); err != nil {
+		t.Fatalf("Failed to decode response: %v", err)
+	}
+
+	t.Logf("Register response: result=%v, body=%s", result.Result, string(body))
 }

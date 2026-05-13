@@ -9,7 +9,7 @@ PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 # Configuration
 CONTROLLER_PORT=${CONTROLLER_PORT:-4000}
 MAINTENANCE_PORT=${MAINTENANCE_PORT:-5001}
-MONGO_URI=${SOAJS_MONGO_URI:-"mongodb://127.0.0.1:32017"}
+MONGO_URI=${SOAJS_MONGO_URI:-"mongodb://127.0.0.1:27017"}
 
 echo "=== SOAJS Controller Integration Tests ==="
 echo "Project root: $PROJECT_ROOT"
