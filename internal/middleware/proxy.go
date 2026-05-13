@@ -64,7 +64,8 @@ func GotoService(prov provision.Provision, reg registry.Registry, aw awareness.A
 			servicePath := serviceParams.URLInfo.ServicePath
 
 			// Handle /soajs/proxy - extract proxyRoute query param and route to that service
-			if serviceName == "soajs" && serviceParams.URLInfo.ServiceVersion == "proxy" {
+			// Note: URL middleware parses /soajs/proxy as ServiceName="soajs", ServicePath="/proxy"
+			if serviceName == "soajs" && serviceParams.URLInfo.ServicePath == "/proxy" {
 				proxyRoute := r.URL.Query().Get("proxyRoute")
 				if proxyRoute == "" {
 					WriteError(w, http.StatusBadRequest,

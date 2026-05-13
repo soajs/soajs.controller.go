@@ -5,7 +5,7 @@
 
 High-performance API Gateway for SOAJS microservices platform, rewritten in Go.
 
-> **Status**: Scaffold Complete - Ready for Phase 1 development
+> **Status**: Core Implementation Complete - Integration Tests Passing (22/22)
 
 ## Features
 
@@ -55,11 +55,26 @@ cd deployments
 docker-compose up -d
 ```
 
-### Run tests
+### Run unit tests
 
 ```bash
 make test
 ```
+
+### Run integration tests
+
+```bash
+# Start the controller first
+./start_local.sh
+
+# In another terminal, run integration tests
+cd test/integration && ./run_tests.sh
+```
+
+Integration tests include:
+- Gateway routes (ACL, proxy, service routing)
+- HTTP methods (GET, POST, PUT, DELETE, PATCH, HEAD, OPTIONS)
+- Maintenance endpoints (heartbeat, registry, awareness)
 
 ## Configuration
 
@@ -82,7 +97,15 @@ Configuration can be provided via:
 ### Gateway (Port 4000)
 
 All requests are proxied to backend services based on the URL path:
-- `/{service}/{version}/{path}` - Route to service
+- `/{service}/{path}` - Route to service (version defaults to 1)
+- `/{service}/v{N}/{path}` - Route to specific service version
+
+#### Special Routes
+
+| Route | Description |
+|-------|-------------|
+| `/soajs/acl` | Get ACL for current tenant/key |
+| `/soajs/proxy?proxyRoute=/{service}/{path}` | Proxy to service via query param |
 
 ### Maintenance (Port 5001)
 

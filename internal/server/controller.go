@@ -120,7 +120,7 @@ func (c *Controller) handleRequest(w http.ResponseWriter, r *http.Request) {
 	soajsCtx := middleware.GetSOAJSContext(ctx)
 
 	if soajsCtx == nil || soajsCtx.Controller == nil || soajsCtx.Controller.Gotoservice == nil {
-		http.Error(w, "Service not configured", http.StatusBadGateway)
+		middleware.WriteError(w, http.StatusBadGateway, config.ErrCodeServiceNotFound, "Service not configured")
 		return
 	}
 
