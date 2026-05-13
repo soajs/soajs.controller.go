@@ -12,6 +12,8 @@ import (
 	"github.com/soajs/soajs.controller.go/internal/config"
 	"github.com/soajs/soajs.controller.go/internal/provision"
 	"github.com/soajs/soajs.controller.go/internal/registry"
+	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
 // OAuthConfig holds OAuth middleware configuration
@@ -42,22 +44,30 @@ func OAuthWithRegistry(prov provision.Provision, reg registry.Registry) Middlewa
 			ctx := r.Context()
 			soajsCtx := GetSOAJSContext(ctx)
 
-			// Check if OAuth is required
 			if soajsCtx == nil || soajsCtx.Controller == nil ||
-				soajsCtx.Controller.ServiceParams == nil ||
-				!soajsCtx.Controller.ServiceParams.RequiresOAuth {
+				soajsCtx.Controller.ServiceParams == nil {
 				next.ServeHTTP(w, r)
 				return
 			}
 
+			requiresOAuth := soajsCtx.Controller.ServiceParams.RequiresOAuth
+
 			// Extract token
 			token := extractToken(r)
 			if token == "" {
-				WriteError(w, http.StatusUnauthorized,
-					config.ErrCodeUnauthorized,
-					config.DefaultErrors[config.ErrCodeUnauthorized])
+				// No token: if OAuth is required, return 401; otherwise continue
+				if requiresOAuth {
+					WriteError(w, http.StatusUnauthorized,
+						config.ErrCodeUnauthorized,
+						config.DefaultErrors[config.ErrCodeUnauthorized])
+					return
+				}
+				next.ServeHTTP(w, r)
 				return
 			}
+
+			// Token found - always process it (even if OAuth not required)
+			// This allows optional OAuth for endpoints like /soajs/acl
 
 			// Determine OAuth type (0=JWT, 2=OAuth2)
 			oauthType := 2
@@ -137,11 +147,21 @@ func OAuthWithRegistry(prov provision.Provision, reg registry.Registry) Middlewa
 				}
 
 				// Store user info in context
+				// The token's user object contains the full user profile with groupsConfig
+				// Convert from BSON types to native Go types for proper type assertions
 				userInfo := make(map[string]interface{})
 				if accessToken.User != nil {
-					userInfo = accessToken.User
+					userInfo = convertBSONMap(accessToken.User)
 				}
-				userInfo["_id"] = accessToken.UserID
+
+				// Get user ID: prefer top-level userId, fallback to user._id
+				userID := accessToken.UserID
+				if userID == "" {
+					if id, ok := userInfo["_id"].(string); ok {
+						userID = id
+					}
+				}
+				userInfo["_id"] = userID
 				userInfo["clientId"] = accessToken.ClientID
 				userInfo["scope"] = accessToken.Scope
 
@@ -280,4 +300,70 @@ func extractToken(r *http.Request) string {
 	}
 
 	return ""
+}
+
+// convertBSONMap recursively converts BSON types to native Go map[string]interface{}
+// This ensures type assertions like map["key"].(map[string]interface{}) work correctly
+func convertBSONMap(m map[string]interface{}) map[string]interface{} {
+	if m == nil {
+		return nil
+	}
+	result := make(map[string]interface{})
+	for k, v := range m {
+		result[k] = convertBSONValue(v)
+	}
+	return result
+}
+
+// convertBSONValue recursively converts a BSON value to native Go types
+func convertBSONValue(v interface{}) interface{} {
+	if v == nil {
+		return nil
+	}
+	// Convert ObjectID to hex string
+	if oid, ok := v.(primitive.ObjectID); ok {
+		return oid.Hex()
+	}
+	// Convert bson.D (ordered document) to map
+	if d, ok := v.(bson.D); ok {
+		result := make(map[string]interface{})
+		for _, elem := range d {
+			result[elem.Key] = convertBSONValue(elem.Value)
+		}
+		return result
+	}
+	// Convert bson.M to map (recursively convert values)
+	if m, ok := v.(bson.M); ok {
+		result := make(map[string]interface{})
+		for k, val := range m {
+			result[k] = convertBSONValue(val)
+		}
+		return result
+	}
+	// Convert map[string]interface{} (recursively convert values)
+	if m, ok := v.(map[string]interface{}); ok {
+		result := make(map[string]interface{})
+		for k, val := range m {
+			result[k] = convertBSONValue(val)
+		}
+		return result
+	}
+	// Convert bson.A (array) to slice
+	if a, ok := v.(bson.A); ok {
+		result := make([]interface{}, len(a))
+		for i, val := range a {
+			result[i] = convertBSONValue(val)
+		}
+		return result
+	}
+	// Convert []interface{} (recursively convert values)
+	if a, ok := v.([]interface{}); ok {
+		result := make([]interface{}, len(a))
+		for i, val := range a {
+			result[i] = convertBSONValue(val)
+		}
+		return result
+	}
+	// Return primitives as-is
+	return v
 }

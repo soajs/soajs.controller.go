@@ -64,7 +64,7 @@ func TestKeyMiddleware_ValidKey(t *testing.T) {
 		},
 	}
 
-	contextMW := Context(logger)
+	contextMW := Context(logger, "test")
 	keyMW := Key(prov)
 
 	var capturedKey *types.Key
@@ -101,7 +101,7 @@ func TestKeyMiddleware_InvalidKey(t *testing.T) {
 		keys: map[string]*types.Key{},
 	}
 
-	contextMW := Context(logger)
+	contextMW := Context(logger, "test")
 	keyMW := Key(prov)
 
 	handler := contextMW(keyMW(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -124,7 +124,7 @@ func TestKeyMiddleware_NoKey(t *testing.T) {
 
 	prov := &mockProvision{}
 
-	contextMW := Context(logger)
+	contextMW := Context(logger, "test")
 	keyMW := Key(prov)
 
 	handlerCalled := false
@@ -159,7 +159,7 @@ func TestKeyMiddleware_KeyFromQuery(t *testing.T) {
 		},
 	}
 
-	contextMW := Context(logger)
+	contextMW := Context(logger, "test")
 	keyMW := Key(prov)
 
 	var capturedKey *types.Key

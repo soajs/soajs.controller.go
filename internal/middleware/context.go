@@ -23,6 +23,7 @@ type SOAJSContext struct {
 	InputMask      interface{}
 	Device         *types.DeviceInfo
 	Geo            *types.GeoInfo
+	Environment    string // Current environment (e.g., "dashboard")
 }
 
 // ControllerContext holds gateway-specific request data
@@ -43,7 +44,7 @@ type AwarenessEnvClient interface {
 }
 
 // Context middleware initializes the SOAJS context for each request
-func Context(logger *zap.Logger) Middleware {
+func Context(logger *zap.Logger, env string) Middleware {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			// Generate request ID if not present
@@ -66,6 +67,7 @@ func Context(logger *zap.Logger) Middleware {
 					ServiceParams: &types.ServiceParams{},
 				},
 				ServicesConfig: make(map[string]interface{}),
+				Environment:    env,
 			}
 
 			// Add to request context

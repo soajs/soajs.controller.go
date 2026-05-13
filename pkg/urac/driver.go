@@ -126,6 +126,94 @@ func (d *Driver) GetEnvironment() string {
 	return d.env
 }
 
+// GetUserWithGroupsConfig gets a user and populates GroupsConfig from their groups
+func (d *Driver) GetUserWithGroupsConfig(ctx context.Context, id string) (*User, error) {
+	user, err := d.user.GetByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+
+	// If GroupsConfig is already populated, return as-is
+	if user.GroupsConfig != nil && len(user.GroupsConfig.AllowedPackages) > 0 {
+		return user, nil
+	}
+
+	// Build GroupsConfig from user's groups
+	if len(user.Groups) > 0 {
+		groups, err := d.group.GetGroupsByCodes(ctx, user.Groups)
+		if err != nil {
+			return user, nil // Return user without groupsConfig on error
+		}
+
+		groupsConfig := d.buildGroupsConfig(groups)
+		user.GroupsConfig = groupsConfig
+	}
+
+	return user, nil
+}
+
+// buildGroupsConfig builds GroupsConfig from a list of groups
+func (d *Driver) buildGroupsConfig(groups []*Group) *model.GroupsConfig {
+	if len(groups) == 0 {
+		return nil
+	}
+
+	config := &model.GroupsConfig{
+		AllowedPackages: make(map[string][]string),
+	}
+
+	// Merge allowedPackages from all groups
+	for _, group := range groups {
+		if group.Config == nil || len(group.Config.AllowedPackages) == 0 {
+			continue
+		}
+
+		for product, pkgInfo := range group.Config.AllowedPackages {
+			if pkgInfo.Packages == nil {
+				continue
+			}
+
+			// Add packages for this product (avoid duplicates)
+			existing := config.AllowedPackages[product]
+			for _, pkg := range pkgInfo.Packages {
+				found := false
+				for _, e := range existing {
+					if e == pkg {
+						found = true
+						break
+					}
+				}
+				if !found {
+					existing = append(existing, pkg)
+				}
+			}
+			config.AllowedPackages[product] = existing
+		}
+	}
+
+	if len(config.AllowedPackages) == 0 {
+		return nil
+	}
+
+	return config
+}
+
+// GetAllowedPackages returns the allowed packages for a user and product
+func (d *Driver) GetAllowedPackages(ctx context.Context, userID, productCode string) ([]string, error) {
+	user, err := d.GetUserWithGroupsConfig(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+
+	if user.GroupsConfig != nil && user.GroupsConfig.AllowedPackages != nil {
+		if packages, ok := user.GroupsConfig.AllowedPackages[productCode]; ok {
+			return packages, nil
+		}
+	}
+
+	return nil, nil
+}
+
 // AuthenticateAndGetACL authenticates user and returns their ACL for a tenant
 func (d *Driver) AuthenticateAndGetACL(ctx context.Context, username, password, tenantID, tenantCode string) (*User, *TenantAccess, *GroupACL, error) {
 	// Validate credentials

@@ -11,7 +11,7 @@ import (
 func TestTrafficMiddleware_AllowsNormalRequests(t *testing.T) {
 	logger, _ := zap.NewDevelopment()
 
-	contextMW := Context(logger)
+	contextMW := Context(logger, "test")
 	trafficMW := Traffic(nil)
 
 	handler := contextMW(trafficMW(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

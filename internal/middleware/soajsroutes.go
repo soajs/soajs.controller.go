@@ -7,10 +7,71 @@ import (
 	"strings"
 
 	"github.com/soajs/soajs.controller.go/internal/config"
+	"github.com/soajs/soajs.controller.go/internal/provision"
+	"github.com/soajs/soajs.controller.go/pkg/types"
+	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
+// SoajsRoutesSetup middleware runs BEFORE OAuth/UserACL to configure /soajs/* routes
+// This sets up UracDriver for user lookup - OAuth middleware will handle token validation
+func SoajsRoutesSetup(uracDriver interface{}) Middleware {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			path := r.URL.Path
+
+			// Only handle /soajs/acl setup
+			if path == "/soajs/acl" {
+				ctx := r.Context()
+				soajsCtx := GetSOAJSContext(ctx)
+
+				if soajsCtx != nil && soajsCtx.Controller != nil {
+					// Initialize ServiceParams if not set (for special routes like /soajs/acl)
+					if soajsCtx.Controller.ServiceParams == nil {
+						soajsCtx.Controller.ServiceParams = &types.ServiceParams{}
+					}
+
+					// Set UracDriver for UserACL middleware to use
+					soajsCtx.Controller.ServiceParams.UracDriver = uracDriver
+					// Set environment for ACL resolution
+					soajsCtx.Controller.ServiceParams.Environment = soajsCtx.Environment
+					// Note: RequiresOAuth is not set - OAuth middleware will optionally
+					// process tokens if present without requiring them
+				}
+			}
+
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
+// extractTokenFromRequest extracts OAuth token from request (for setup check)
+func extractTokenFromRequest(r *http.Request) string {
+	// Check Authorization header
+	auth := r.Header.Get(config.HeaderAuthorization)
+	if auth != "" {
+		if strings.HasPrefix(auth, "Bearer ") {
+			return strings.TrimPrefix(auth, "Bearer ")
+		}
+		return auth
+	}
+
+	// Check access_token header
+	if token := r.Header.Get(config.HeaderSOAJSAccessToken); token != "" {
+		return token
+	}
+
+	// Check query parameter
+	if token := r.URL.Query().Get("access_token"); token != "" {
+		return token
+	}
+
+	return ""
+}
+
 // SoajsRoutes middleware handles /soajs/* routes that are served by the controller itself
-func SoajsRoutes() Middleware {
+// This runs AFTER OAuth/UserACL so user data is available
+func SoajsRoutes(prov interface{}) Middleware {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			path := r.URL.Path
@@ -34,7 +95,7 @@ func SoajsRoutes() Middleware {
 			// Handle specific soajs routes
 			switch path {
 			case "/soajs/acl":
-				handleSoajsACL(w, r, soajsCtx)
+				handleSoajsACL(w, r, soajsCtx, prov)
 				return
 			case "/soajs/proxy":
 				// /soajs/proxy is handled by gotoService middleware
@@ -54,68 +115,114 @@ func SoajsRoutes() Middleware {
 
 // handleSoajsACL handles the /soajs/acl endpoint
 // Returns the ACL for the current key/user
-func handleSoajsACL(w http.ResponseWriter, r *http.Request, soajsCtx *SOAJSContext) {
+// Priority: user ACL (merged from all packages) > application ACL > single package ACL
+func handleSoajsACL(w http.ResponseWriter, r *http.Request, soajsCtx *SOAJSContext, prov interface{}) {
 	// Check for key in headers
 	if soajsCtx.Key == nil {
 		WriteError(w, http.StatusForbidden, 132, "Please provide a key")
 		return
 	}
 
-	// Get current environment
-	var currentEnv string
-	if soajsCtx.Controller != nil && soajsCtx.Controller.ServiceParams != nil {
-		currentEnv = soajsCtx.Controller.ServiceParams.Environment
-	}
+	// Get current environment from context
+	currentEnv := soajsCtx.Environment
 
-	// Get ACL - priority: user ACL > application ACL > package ACL
+	// Initialize response fields
 	var acl map[string]interface{}
 	var packages []string
-
-	// Check if we have service params with package info
-	if soajsCtx.Controller != nil && soajsCtx.Controller.ServiceParams != nil {
-		params := soajsCtx.Controller.ServiceParams
-
-		// Get package code for packages array
-		if soajsCtx.Key != nil && soajsCtx.Key.PackageCode != "" {
-			packages = []string{soajsCtx.Key.PackageCode}
-		}
-
-		// Try to get ACL from user (via URAC) first - highest priority
-		if params.User != nil {
-			// User ACL would be set here if we have URAC integration
-			// For now, fall through to other sources
-		}
-
-		// Try application ACL (from key) - already environment-specific
-		if acl == nil && soajsCtx.Key.AppACL != nil {
-			acl = soajsCtx.Key.AppACL
-		}
-
-		// Fall back to package ACL - need to extract environment-specific ACL
-		if acl == nil && params.Package != nil && params.Package.ACL != nil {
-			// Package ACL is structured as ACL[env][service][version]
-			// We need to extract ACL[currentEnv]
-			acl = extractEnvACL(params.Package.ACL, currentEnv)
-		}
-	}
-
-	// If still no ACL, try key's ACL directly
-	if acl == nil && soajsCtx.Key.ACL != nil {
-		// Key ACL might also be environment-keyed
-		acl = extractEnvACL(soajsCtx.Key.ACL, currentEnv)
-	}
-
-	// Build urac info
 	var urac map[string]interface{}
+
+	// Check if we have service params
 	if soajsCtx.Controller != nil && soajsCtx.Controller.ServiceParams != nil {
 		params := soajsCtx.Controller.ServiceParams
+
+		// Get product code for package lookup
+		productCode := ""
+		if soajsCtx.Key != nil {
+			productCode = soajsCtx.Key.ProductCode
+		}
+
+		// Priority 1: Try to get packages and user info from OAuth token's embedded user object
+		// The token contains the full user profile with groupsConfig
 		if params.UserInfo != nil {
-			if userID, ok := params.UserInfo["_id"]; ok {
+			// Get user ID for urac response
+			if userID, ok := params.UserInfo["_id"].(string); ok && userID != "" {
 				urac = map[string]interface{}{
 					"_id": userID,
 				}
 			}
+
+			// Get packages from token's embedded groupsConfig
+			packages = getPackagesFromUserInfo(params.UserInfo, productCode)
 		}
+
+		// If we have packages, fetch and merge ACLs from all of them
+		// This matches Node.js behavior: provision.getPackagesData + lib.mergeACLArray
+		if len(packages) > 0 && prov != nil {
+			if provImpl, ok := prov.(provision.Provision); ok {
+				mergedACL := mergePackageACLs(provImpl, productCode, packages, currentEnv)
+				if mergedACL != nil {
+					acl = mergedACL
+				}
+			}
+		}
+
+		// Priority 2: Try to get ACL from URAC (logged-in user) if not already set
+		if acl == nil && params.UracDriver != nil && params.User != nil {
+			// Get user's ACL from URAC driver
+			if uracDriver, ok := params.UracDriver.(interface {
+				GetACLForUser(ctx interface{}, user interface{}, tenantID string) (interface{}, error)
+			}); ok {
+				ctx := r.Context()
+				tenantID := ""
+				if soajsCtx.Tenant != nil {
+					tenantID = soajsCtx.Tenant.ID
+				}
+
+				if userACL, err := uracDriver.GetACLForUser(ctx, params.User, tenantID); err == nil && userACL != nil {
+					// Convert GroupACL to map for response
+					acl = convertGroupACLToMap(userACL, currentEnv)
+				}
+			}
+
+			// Get user's allowed packages from URAC user's groupsConfig (if not already set)
+			if packages == nil {
+				packages = getUserAllowedPackages(params.User, productCode)
+			}
+
+			// Get user profile for urac field (if not already set)
+			if urac == nil {
+				if userID := getUserID(params.User); userID != "" {
+					urac = map[string]interface{}{
+						"_id": userID,
+					}
+				}
+			}
+		}
+
+		// Priority 3: Try application ACL (from key)
+		if acl == nil && soajsCtx.Key.AppACL != nil {
+			acl = extractEnvACL(soajsCtx.Key.AppACL, currentEnv)
+		}
+
+		// Priority 4: Fall back to package ACL
+		if acl == nil && params.Package != nil && params.Package.ACL != nil {
+			acl = extractEnvACL(params.Package.ACL, currentEnv)
+		}
+
+		// Default packages from key if not set from user
+		if packages == nil && soajsCtx.Key != nil && soajsCtx.Key.PackageCode != "" {
+			packages = []string{soajsCtx.Key.PackageCode}
+		}
+	}
+
+	// Last resort: try key's ACL directly
+	if acl == nil && soajsCtx.Key.ACL != nil {
+		acl = extractEnvACL(soajsCtx.Key.ACL, currentEnv)
+	}
+
+	// Default packages from key if still not set
+	if packages == nil && soajsCtx.Key != nil && soajsCtx.Key.PackageCode != "" {
+		packages = []string{soajsCtx.Key.PackageCode}
 	}
 
 	// Build tenant info
@@ -130,9 +237,11 @@ func handleSoajsACL(w http.ResponseWriter, r *http.Request, soajsCtx *SOAJSConte
 	}
 
 	// Build response - NO wrapper, direct response like Node.js controllerResponse
+	finalACL := buildFinalACL(acl)
+
 	response := map[string]interface{}{
 		"acl":      acl,
-		"finalACL": buildFinalACL(acl),
+		"finalACL": finalACL,
 		"packages": packages,
 		"urac":     urac,
 		"tenant":   tenant,
@@ -141,6 +250,148 @@ func handleSoajsACL(w http.ResponseWriter, r *http.Request, soajsCtx *SOAJSConte
 	// Write response directly without any wrapper
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(response)
+}
+
+// convertGroupACLToMap converts a GroupACL struct to a map[string]interface{} for JSON response
+func convertGroupACLToMap(groupACL interface{}, env string) map[string]interface{} {
+	// Use reflection or type assertion to convert
+	data, err := json.Marshal(groupACL)
+	if err != nil {
+		return nil
+	}
+
+	var result map[string]interface{}
+	if err := json.Unmarshal(data, &result); err != nil {
+		return nil
+	}
+
+	// If the ACL has environments structure, extract the current env
+	if envs, ok := result["environments"].(map[string]interface{}); ok {
+		if envACL, ok := envs[env].(map[string]interface{}); ok {
+			if services, ok := envACL["services"].(map[string]interface{}); ok {
+				return services
+			}
+		}
+	}
+
+	return result
+}
+
+// getUserAllowedPackages extracts allowed packages from user's groupsConfig
+// In Node.js, user.groupsConfig.allowedPackages[productCode] contains the packages
+func getUserAllowedPackages(user interface{}, productCode string) []string {
+	if user == nil || productCode == "" {
+		return nil
+	}
+
+	// Try to get packages from user's groupsConfig
+	data, err := json.Marshal(user)
+	if err != nil {
+		return nil
+	}
+
+	var userMap map[string]interface{}
+	if err := json.Unmarshal(data, &userMap); err != nil {
+		return nil
+	}
+
+	// Check groupsConfig.allowedPackages[productCode] (Node.js structure)
+	if groupsConfig, ok := userMap["groupsConfig"].(map[string]interface{}); ok {
+		if allowedPkgs, ok := groupsConfig["allowedPackages"].(map[string]interface{}); ok {
+			if productPkgs, ok := allowedPkgs[productCode].([]interface{}); ok {
+				var packages []string
+				for _, pkg := range productPkgs {
+					if pkgStr, ok := pkg.(string); ok {
+						packages = append(packages, pkgStr)
+					}
+				}
+				if len(packages) > 0 {
+					return packages
+				}
+			}
+		}
+	}
+
+	// Fallback: check config.packages (alternative structure)
+	if config, ok := userMap["config"].(map[string]interface{}); ok {
+		if pkgs, ok := config["packages"].(map[string]interface{}); ok {
+			if productPkgs, ok := pkgs[productCode].([]interface{}); ok {
+				var packages []string
+				for _, pkg := range productPkgs {
+					if pkgStr, ok := pkg.(string); ok {
+						packages = append(packages, pkgStr)
+					}
+				}
+				if len(packages) > 0 {
+					return packages
+				}
+			}
+		}
+	}
+
+	return nil
+}
+
+// getUserID extracts user ID from user object
+func getUserID(user interface{}) string {
+	data, err := json.Marshal(user)
+	if err != nil {
+		return ""
+	}
+
+	var userMap map[string]interface{}
+	if err := json.Unmarshal(data, &userMap); err != nil {
+		return ""
+	}
+
+	if id, ok := userMap["_id"].(string); ok {
+		return id
+	}
+	return ""
+}
+
+// getPackagesFromUserInfo extracts packages from OAuth token's embedded user object
+// The token contains user.groupsConfig.allowedPackages[productCode]
+func getPackagesFromUserInfo(userInfo map[string]interface{}, productCode string) []string {
+	if userInfo == nil || productCode == "" {
+		return nil
+	}
+
+	// Check groupsConfig.allowedPackages[productCode]
+	groupsConfig, ok := userInfo["groupsConfig"].(map[string]interface{})
+	if !ok {
+		return nil
+	}
+
+	allowedPkgs, ok := groupsConfig["allowedPackages"].(map[string]interface{})
+	if !ok {
+		return nil
+	}
+
+	productPkgs, ok := allowedPkgs[productCode]
+	if !ok {
+		return nil
+	}
+
+	// Handle both []interface{} and []string
+	switch pkgs := productPkgs.(type) {
+	case []interface{}:
+		var packages []string
+		for _, pkg := range pkgs {
+			if pkgStr, ok := pkg.(string); ok {
+				packages = append(packages, pkgStr)
+			}
+		}
+		if len(packages) > 0 {
+			return packages
+		}
+	case []string:
+		if len(pkgs) > 0 {
+			return pkgs
+		}
+	}
+
+	return nil
 }
 
 // extractEnvACL extracts environment-specific ACL from a potentially environment-keyed ACL
@@ -222,8 +473,8 @@ func buildFinalACL(acl map[string]interface{}) map[string]interface{} {
 	finalACL := make(map[string]interface{})
 
 	for service, svcACL := range acl {
-		svcMap, ok := svcACL.(map[string]interface{})
-		if !ok {
+		svcMap := toMap(svcACL)
+		if svcMap == nil {
 			continue
 		}
 
@@ -240,7 +491,7 @@ func buildFinalACL(acl map[string]interface{}) map[string]interface{} {
 			// Check if this key is a version number
 			if _, err := strconv.Atoi(key); err == nil {
 				// It's a version number
-				if vACL, ok := value.(map[string]interface{}); ok {
+				if vACL := toMap(value); vACL != nil {
 					if latestVersion == "" || compareVersions(key, latestVersion) > 0 {
 						latestVersion = key
 						latestVersionACL = vACL
@@ -261,24 +512,47 @@ func buildFinalACL(acl map[string]interface{}) map[string]interface{} {
 		// Check if apisPermission is restricted
 		if apisPermission, ok := latestVersionACL["apisPermission"]; ok && apisPermission == "restricted" {
 			// Build list of allowed APIs per method
+			// Only include APIs where access is true (not false)
 			for method, methodACL := range latestVersionACL {
 				if method == "access" || method == "apisPermission" {
 					continue
 				}
 
-				mACL, ok := methodACL.(map[string]interface{})
-				if !ok {
+				mACL := toMap(methodACL)
+				if mACL == nil {
 					continue
 				}
 
-				apis, ok := mACL["apis"].(map[string]interface{})
-				if !ok {
+				apis := toMap(mACL["apis"])
+				if apis == nil {
 					continue
 				}
 
 				apiList := make([]string, 0, len(apis))
-				for api := range apis {
-					apiList = append(apiList, api)
+				for api, apiACL := range apis {
+					// Check if this API has access: true
+					// If access is explicitly false, skip it
+					// If access is true or not specified, include it
+					includeAPI := true
+					if apiMap := toMap(apiACL); apiMap != nil {
+						if access, hasAccess := apiMap["access"]; hasAccess {
+							// access: false means skip, access: true means include
+							switch v := access.(type) {
+							case bool:
+								if !v {
+									includeAPI = false
+								}
+							case string:
+								// Handle string "false"
+								if v == "false" {
+									includeAPI = false
+								}
+							}
+						}
+					}
+					if includeAPI {
+						apiList = append(apiList, api)
+					}
 				}
 
 				if len(apiList) > 0 {
@@ -315,4 +589,218 @@ func compareVersions(v1, v2 string) int {
 		return -1
 	}
 	return 0
+}
+
+// toMap converts various BSON types to map[string]interface{}
+// Handles bson.M, bson.D, primitive.M, primitive.D, and regular maps
+func toMap(v interface{}) map[string]interface{} {
+	if v == nil {
+		return nil
+	}
+	// Already a map
+	if m, ok := v.(map[string]interface{}); ok {
+		return m
+	}
+	// bson.M (which is primitive.M, which is map[string]interface{})
+	if m, ok := v.(bson.M); ok {
+		return map[string]interface{}(m)
+	}
+	// bson.D (ordered document - slice of {Key, Value})
+	if d, ok := v.(bson.D); ok {
+		result := make(map[string]interface{})
+		for _, elem := range d {
+			result[elem.Key] = elem.Value
+		}
+		return result
+	}
+	// primitive.D (same as bson.D)
+	if d, ok := v.(primitive.D); ok {
+		result := make(map[string]interface{})
+		for _, elem := range d {
+			result[elem.Key] = elem.Value
+		}
+		return result
+	}
+	return nil
+}
+
+// mergePackageACLs fetches ACLs from all packages and merges them together
+// This matches the Node.js behavior: provision.getPackagesData + lib.mergeACLArray
+func mergePackageACLs(prov provision.Provision, productCode string, packages []string, currentEnv string) map[string]interface{} {
+	if len(packages) == 0 {
+		return nil
+	}
+
+	// Collect ACLs from all packages
+	var packageACLs []map[string]interface{}
+
+	for _, pkgCode := range packages {
+		pkg, err := prov.GetPackage(productCode, pkgCode)
+		if err != nil {
+			continue
+		}
+
+		if pkg.ACL == nil {
+			continue
+		}
+
+		// Extract environment-specific ACL (package ACL is keyed by env)
+		envACL := extractEnvACL(pkg.ACL, currentEnv)
+		if envACL != nil {
+			packageACLs = append(packageACLs, envACL)
+		}
+	}
+
+	if len(packageACLs) == 0 {
+		return nil
+	}
+
+	// If only one ACL, return it directly
+	if len(packageACLs) == 1 {
+		return packageACLs[0]
+	}
+
+	// Merge all ACLs together (matching Node.js lib.mergeACLArray behavior)
+	return mergeACLArray(packageACLs)
+}
+
+// mergeACLArray merges multiple ACLs into one
+// This matches the Node.js lib.mergeACLArray behavior:
+// - For each service: if doesn't exist, add it
+// - For each version: if doesn't exist, add it
+// - For restricted APIs: merge only if both are restricted
+// - For non-restricted: merge only if both are non-restricted
+func mergeACLArray(aclArray []map[string]interface{}) map[string]interface{} {
+	if len(aclArray) == 0 {
+		return nil
+	}
+	if len(aclArray) == 1 {
+		return cloneACL(aclArray[0])
+	}
+
+	// Start with a deep copy of the first ACL
+	merged := cloneACL(aclArray[0])
+
+	// Merge each subsequent ACL
+	for i := 1; i < len(aclArray); i++ {
+		mergeOneACL(merged, aclArray[i])
+	}
+
+	return merged
+}
+
+// mergeOneACL merges one ACL into the target ACL (modifies target in place)
+func mergeOneACL(target, source map[string]interface{}) {
+	if source == nil {
+		return
+	}
+
+	for serviceName, serviceValue := range source {
+		serviceACL := toMap(serviceValue)
+		if serviceACL == nil {
+			continue
+		}
+
+		// If service doesn't exist in target, add it
+		if target[serviceName] == nil {
+			target[serviceName] = cloneACL(serviceACL)
+			continue
+		}
+
+		targetService := toMap(target[serviceName])
+		if targetService == nil {
+			target[serviceName] = cloneACL(serviceACL)
+			continue
+		}
+
+		// Merge versions within the service
+		for versionKey, versionValue := range serviceACL {
+			versionACL := toMap(versionValue)
+			if versionACL == nil {
+				continue
+			}
+
+			// If version doesn't exist in target, add it
+			if targetService[versionKey] == nil {
+				targetService[versionKey] = cloneACL(versionACL)
+				target[serviceName] = targetService
+				continue
+			}
+
+			targetVersion := toMap(targetService[versionKey])
+			if targetVersion == nil {
+				targetService[versionKey] = cloneACL(versionACL)
+				target[serviceName] = targetService
+				continue
+			}
+
+			// Check apisPermission for merge strategy
+			sourceRestricted := isRestricted(versionACL)
+			targetRestricted := isRestricted(targetVersion)
+
+			if sourceRestricted {
+				if targetRestricted {
+					// Both restricted: merge them
+					mergeVersionACL(targetVersion, versionACL)
+					targetService[versionKey] = targetVersion
+				} else {
+					// Source restricted, target not: overwrite
+					targetService[versionKey] = cloneACL(versionACL)
+				}
+			} else {
+				// Source not restricted
+				if targetRestricted {
+					// Keep the old restricted version
+					// (do nothing)
+				} else {
+					// Both non-restricted: merge them
+					mergeVersionACL(targetVersion, versionACL)
+					targetService[versionKey] = targetVersion
+				}
+			}
+			target[serviceName] = targetService
+		}
+	}
+}
+
+// isRestricted checks if a version ACL has apisPermission === "restricted"
+func isRestricted(versionACL map[string]interface{}) bool {
+	if versionACL == nil {
+		return false
+	}
+	apisPermission, ok := versionACL["apisPermission"].(string)
+	return ok && apisPermission == "restricted"
+}
+
+// mergeVersionACL merges source version ACL into target (modifies target in place)
+// This performs a deep merge of the version-level ACL
+func mergeVersionACL(target, source map[string]interface{}) {
+	for key, value := range source {
+		if target[key] == nil {
+			// Key doesn't exist in target, add it
+			if srcMap := toMap(value); srcMap != nil {
+				target[key] = cloneACL(srcMap)
+			} else {
+				target[key] = value
+			}
+			continue
+		}
+
+		// Key exists in both - try to deep merge if both are maps
+		targetMap := toMap(target[key])
+		sourceMap := toMap(value)
+
+		if targetMap != nil && sourceMap != nil {
+			// Both are maps, recursively merge
+			mergeVersionACL(targetMap, sourceMap)
+			target[key] = targetMap
+		} else {
+			// One or both are not maps, source wins
+			if sourceMap != nil {
+				target[key] = cloneACL(sourceMap)
+			} else {
+				target[key] = value
+			}
+		}
+	}
 }

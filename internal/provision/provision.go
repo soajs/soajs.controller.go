@@ -63,14 +63,20 @@ type MongoProvision struct {
 
 // NewProvision creates a new MongoDB-backed provision
 func NewProvision(client *mongo.Client, logger *zap.Logger, env string) *MongoProvision {
+	return NewProvisionWithOAuthDB(client, logger, env, "")
+}
+
+// NewProvisionWithOAuthDB creates a new MongoDB-backed provision with separate oauth database
+func NewProvisionWithOAuthDB(client *mongo.Client, logger *zap.Logger, env, oauthDatabase string) *MongoProvision {
+	envLower := strings.ToLower(env)
 	return &MongoProvision{
 		client:     client,
 		logger:     logger,
-		env:        strings.ToLower(env),
+		env:        envLower,
 		tenants:    make(map[string]*types.Tenant),
 		products:   make(map[string]*types.Product),
 		keys:       make(map[string]*types.Key),
-		oauthModel: &mongoOAuthModel{client: client},
+		oauthModel: &mongoOAuthModel{client: client, env: envLower, oauthDatabase: oauthDatabase},
 	}
 }
 
@@ -284,18 +290,60 @@ func (p *MongoProvision) OAuthModel() OAuthModel {
 
 // mongoOAuthModel implements OAuthModel using MongoDB
 type mongoOAuthModel struct {
-	client *mongo.Client
+	client        *mongo.Client
+	env           string // environment name for token validation
+	oauthDatabase string // separate oauth database name (empty = use default)
 }
 
 func (m *mongoOAuthModel) GetAccessToken(token string) (*types.AccessToken, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	// OAuth tokens are stored in the "oauth" database, "oauth_token" collection
-	coll := m.client.UseDatabase("oauth").Collection("oauth_token")
+	// OAuth tokens are stored in "oauth_token" collection
+	// Query must include both token AND type (matching Node.js behavior)
+	// Node.js: oauthMongo.findOne(tokenCollectionName, {"token": bearerToken, "type": "accessToken"}, ...)
+	query := bson.M{"token": token, "type": "accessToken"}
+
+	// Try oauth database first if configured, then fall back to provision database
+	// This mirrors Node.js behavior when oauthSeparate is true
 	var t types.AccessToken
-	err := coll.FindOne(ctx, bson.M{"token": token}).Decode(&t)
-	return &t, err
+	var err error
+
+	if m.oauthDatabase != "" {
+		// Try oauth database first
+		coll := m.client.UseDatabase(m.oauthDatabase).Collection("oauth_token")
+		err = coll.FindOne(ctx, query).Decode(&t)
+	}
+
+	// If not found in oauth database (or no oauth database configured), try provision database
+	if err != nil || m.oauthDatabase == "" {
+		coll := m.client.Database().Collection("oauth_token")
+		err = coll.FindOne(ctx, query).Decode(&t)
+	}
+
+	if err != nil {
+		return nil, err
+	}
+
+	// Environment validation (matching Node.js behavior)
+	// Tokens are valid if:
+	// 1. Token env matches current environment, OR
+	// 2. Token env is in sensitiveEnvCodes (e.g., "dashboard")
+	regEnvironment := strings.ToLower(m.env)
+	sensitiveEnvCodes := []string{"dashboard"}
+
+	tokenEnv := strings.ToLower(t.Env)
+	if tokenEnv == regEnvironment {
+		return &t, nil
+	}
+	for _, sensitive := range sensitiveEnvCodes {
+		if tokenEnv == sensitive {
+			return &t, nil
+		}
+	}
+
+	// Token exists but env doesn't match
+	return nil, fmt.Errorf("token environment mismatch")
 }
 
 func (m *mongoOAuthModel) SaveAccessToken(token *types.AccessToken) error {

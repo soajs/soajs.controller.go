@@ -108,7 +108,7 @@ func TestURLMiddleware(t *testing.T) {
 	logger, _ := zap.NewDevelopment()
 
 	// Create context middleware first
-	contextMW := Context(logger)
+	contextMW := Context(logger, "test")
 	urlMW := URL()
 
 	handler := contextMW(urlMW(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

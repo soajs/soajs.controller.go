@@ -6,23 +6,30 @@ import (
 
 // User represents a URAC user with full SOAJS schema
 type User struct {
-	ID          string      `json:"_id" bson:"_id"`
-	Username    string      `json:"username" bson:"username"`
-	FirstName   string      `json:"firstName" bson:"firstName"`
-	LastName    string      `json:"lastName" bson:"lastName"`
-	Email       string      `json:"email" bson:"email"`
-	Phone       string      `json:"phone,omitempty" bson:"phone,omitempty"`
-	Password    string      `json:"-" bson:"password"`
-	Status      string      `json:"status" bson:"status"`
-	Tenant      TenantRef   `json:"tenant" bson:"tenant"`
-	Groups      []string    `json:"groups" bson:"groups"`
-	Profile     interface{} `json:"profile,omitempty" bson:"profile,omitempty"`
-	Config      *UserConfig `json:"config,omitempty" bson:"config,omitempty"`
-	SocialLogin *SocialLogin `json:"socialLogin,omitempty" bson:"socialLogin,omitempty"`
-	CreatedAt   time.Time   `json:"ts" bson:"ts"`
-	LastLogin   time.Time   `json:"lastLogin,omitempty" bson:"lastLogin,omitempty"`
-	Locked      bool        `json:"locked,omitempty" bson:"locked,omitempty"`
-	LoginMode   string      `json:"loginMode,omitempty" bson:"loginMode,omitempty"`
+	ID           string        `json:"_id" bson:"_id"`
+	Username     string        `json:"username" bson:"username"`
+	FirstName    string        `json:"firstName" bson:"firstName"`
+	LastName     string        `json:"lastName" bson:"lastName"`
+	Email        string        `json:"email" bson:"email"`
+	Phone        string        `json:"phone,omitempty" bson:"phone,omitempty"`
+	Password     string        `json:"-" bson:"password"`
+	Status       string        `json:"status" bson:"status"`
+	Tenant       TenantRef     `json:"tenant" bson:"tenant"`
+	Groups       []string      `json:"groups" bson:"groups"`
+	GroupsConfig *GroupsConfig `json:"groupsConfig,omitempty" bson:"groupsConfig,omitempty"`
+	Profile      interface{}   `json:"profile,omitempty" bson:"profile,omitempty"`
+	Config       *UserConfig   `json:"config,omitempty" bson:"config,omitempty"`
+	SocialLogin  *SocialLogin  `json:"socialLogin,omitempty" bson:"socialLogin,omitempty"`
+	CreatedAt    time.Time     `json:"ts" bson:"ts"`
+	LastLogin    time.Time     `json:"lastLogin,omitempty" bson:"lastLogin,omitempty"`
+	Locked       bool          `json:"locked,omitempty" bson:"locked,omitempty"`
+	LoginMode    string        `json:"loginMode,omitempty" bson:"loginMode,omitempty"`
+}
+
+// GroupsConfig holds merged configuration from user's groups
+type GroupsConfig struct {
+	// AllowedPackages maps product code to array of allowed package codes
+	AllowedPackages map[string][]string `json:"allowedPackages,omitempty" bson:"allowedPackages,omitempty"`
 }
 
 // TenantRef holds tenant reference

@@ -43,8 +43,8 @@ func NewController(cfg *config.Config, logger *zap.Logger) (*Controller, error) 
 	// Initialize registry
 	ctrl.registry = registry.NewMongoRegistry(mongoClient, logger)
 
-	// Initialize provision
-	ctrl.provision = provision.NewProvision(mongoClient, logger, cfg.Environment)
+	// Initialize provision (with optional separate oauth database)
+	ctrl.provision = provision.NewProvisionWithOAuthDB(mongoClient, logger, cfg.Environment, cfg.Mongo.OAuthDatabase)
 
 	// Initialize awareness
 	ctrl.awareness = awareness.NewAwareness(cfg.Awareness, ctrl.registry, logger)
@@ -88,7 +88,7 @@ func (c *Controller) Setup(r *chi.Mux) error {
 	r.Use(chimw.Recoverer)
 
 	// Setup SOAJS middleware chain
-	r.Use(middleware.Context(c.logger))
+	r.Use(middleware.Context(c.logger, c.cfg.Environment))
 	r.Use(middleware.CORS())
 	r.Use(middleware.Favicon())
 	r.Use(middleware.Response())
@@ -102,9 +102,10 @@ func (c *Controller) Setup(r *chi.Mux) error {
 	r.Use(middleware.KeyACL())
 	r.Use(middleware.GotoService(c.provision, c.registry, c.awareness))
 	r.Use(middleware.MT(c.provision, c.registry, c.urac, c.cfg.Environment))
+	r.Use(middleware.SoajsRoutesSetup(c.urac)) // Setup /soajs/* routes to require OAuth
 	r.Use(middleware.OAuth(c.provision))
 	r.Use(middleware.UserACL())
-	r.Use(middleware.SoajsRoutes()) // Handle /soajs/* routes after MT populates context
+	r.Use(middleware.SoajsRoutes(c.provision)) // Handle /soajs/* routes after OAuth/UserACL populate context
 	r.Use(middleware.Traffic(c.registry))
 	r.Use(middleware.LastSeen(c.registry, c.awareness))
 

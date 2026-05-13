@@ -35,6 +35,7 @@ type Config struct {
 type MongoConfig struct {
 	URI            string `mapstructure:"uri"`
 	Database       string `mapstructure:"database"`
+	OAuthDatabase  string `mapstructure:"oauth_database"` // Separate oauth database (optional)
 	MaxPoolSize    uint64 `mapstructure:"max_pool_size"`
 	MinPoolSize    uint64 `mapstructure:"min_pool_size"`
 	ConnectTimeout int    `mapstructure:"connect_timeout"`
@@ -115,6 +116,7 @@ func setDefaults(v *viper.Viper) {
 	// MongoDB defaults
 	v.SetDefault("mongo.uri", "mongodb://localhost:27017")
 	v.SetDefault("mongo.database", "core_provision")
+	v.SetDefault("mongo.oauth_database", "oauth") // Default oauth database name
 	v.SetDefault("mongo.max_pool_size", 100)
 	v.SetDefault("mongo.min_pool_size", 10)
 	v.SetDefault("mongo.connect_timeout", 5)

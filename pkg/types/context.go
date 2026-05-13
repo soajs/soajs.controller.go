@@ -54,6 +54,8 @@ type AccessToken struct {
 	Expires   time.Time              `json:"accessTokenExpiresAt" bson:"expires"`
 	Scope     string                 `json:"scope" bson:"scope"`
 	User      map[string]interface{} `json:"user" bson:"user"`
+	Env       string                 `json:"env" bson:"env"`
+	Type      string                 `json:"type" bson:"type"`
 }
 
 // RefreshToken represents an OAuth refresh token

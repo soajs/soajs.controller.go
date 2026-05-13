@@ -17,7 +17,7 @@ func TestIP2Ban_AllowsUnbannedIP(t *testing.T) {
 
 	logger, _ := zap.NewDevelopment()
 
-	contextMW := Context(logger)
+	contextMW := Context(logger, "test")
 	ip2banMW := IP2Ban()
 
 	handler := contextMW(ip2banMW(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -45,7 +45,7 @@ func TestIP2Ban_BlocksBannedIP(t *testing.T) {
 
 	logger, _ := zap.NewDevelopment()
 
-	contextMW := Context(logger)
+	contextMW := Context(logger, "test")
 	ip2banMW := IP2Ban()
 
 	handler := contextMW(ip2banMW(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -74,7 +74,7 @@ func TestIP2Ban_WhitelistOverridesBlacklist(t *testing.T) {
 
 	logger, _ := zap.NewDevelopment()
 
-	contextMW := Context(logger)
+	contextMW := Context(logger, "test")
 	ip2banMW := IP2Ban()
 
 	handler := contextMW(ip2banMW(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

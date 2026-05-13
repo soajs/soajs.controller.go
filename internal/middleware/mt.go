@@ -145,9 +145,9 @@ func UserACL() Middleware {
 				return
 			}
 
-			// Get user from URAC
+			// Get user from URAC (with groupsConfig populated from groups)
 			uracDriver := params.UracDriver.(*urac.Driver)
-			user, err := uracDriver.GetUser(ctx, userID)
+			user, err := uracDriver.GetUserWithGroupsConfig(ctx, userID)
 			if err != nil {
 				soajsCtx.Log.Debug("Failed to get user from URAC")
 				next.ServeHTTP(w, r)
