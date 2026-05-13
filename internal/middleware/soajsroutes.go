@@ -61,6 +61,12 @@ func handleSoajsACL(w http.ResponseWriter, r *http.Request, soajsCtx *SOAJSConte
 		return
 	}
 
+	// Get current environment
+	var currentEnv string
+	if soajsCtx.Controller != nil && soajsCtx.Controller.ServiceParams != nil {
+		currentEnv = soajsCtx.Controller.ServiceParams.Environment
+	}
+
 	// Get ACL - priority: user ACL > application ACL > package ACL
 	var acl map[string]interface{}
 	var packages []string
@@ -80,20 +86,23 @@ func handleSoajsACL(w http.ResponseWriter, r *http.Request, soajsCtx *SOAJSConte
 			// For now, fall through to other sources
 		}
 
-		// Try application ACL (from key)
+		// Try application ACL (from key) - already environment-specific
 		if acl == nil && soajsCtx.Key.AppACL != nil {
 			acl = soajsCtx.Key.AppACL
 		}
 
-		// Fall back to package ACL
+		// Fall back to package ACL - need to extract environment-specific ACL
 		if acl == nil && params.Package != nil && params.Package.ACL != nil {
-			acl = cloneACL(params.Package.ACL)
+			// Package ACL is structured as ACL[env][service][version]
+			// We need to extract ACL[currentEnv]
+			acl = extractEnvACL(params.Package.ACL, currentEnv)
 		}
 	}
 
 	// If still no ACL, try key's ACL directly
 	if acl == nil && soajsCtx.Key.ACL != nil {
-		acl = soajsCtx.Key.ACL
+		// Key ACL might also be environment-keyed
+		acl = extractEnvACL(soajsCtx.Key.ACL, currentEnv)
 	}
 
 	// Build urac info
@@ -120,7 +129,7 @@ func handleSoajsACL(w http.ResponseWriter, r *http.Request, soajsCtx *SOAJSConte
 		}
 	}
 
-	// Build response - NO wrapper, direct response like Node.js
+	// Build response - NO wrapper, direct response like Node.js controllerResponse
 	response := map[string]interface{}{
 		"acl":      acl,
 		"finalACL": buildFinalACL(acl),
@@ -129,9 +138,58 @@ func handleSoajsACL(w http.ResponseWriter, r *http.Request, soajsCtx *SOAJSConte
 		"tenant":   tenant,
 	}
 
-	// Write response
+	// Write response directly without any wrapper
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(response)
+}
+
+// extractEnvACL extracts environment-specific ACL from a potentially environment-keyed ACL
+// If the ACL is keyed by environment (e.g., {"dashboard": {"oauth": ...}}), extract the env's ACL
+// If not environment-keyed (e.g., {"oauth": ...}), return as-is
+func extractEnvACL(acl map[string]interface{}, env string) map[string]interface{} {
+	if acl == nil || env == "" {
+		return acl
+	}
+
+	// Check if this ACL is environment-keyed
+	// Environment-keyed ACL: {"dashboard": {"oauth": {"1": {...}}}}
+	// Non-environment-keyed: {"oauth": {"1": {...}}}
+
+	// If the first level contains the environment key, extract it
+	if envACL, ok := acl[env]; ok {
+		if envMap, ok := envACL.(map[string]interface{}); ok {
+			// Verify it looks like a service ACL (has service names as keys)
+			// Service ACL keys are like "oauth", "urac", etc. with version numbers inside
+			for _, v := range envMap {
+				if serviceMap, ok := v.(map[string]interface{}); ok {
+					// Check if this has version keys (numbers) or method keys
+					for k := range serviceMap {
+						if _, err := strconv.Atoi(k); err == nil {
+							// Found a version number, this is environment-keyed
+							return envMap
+						}
+					}
+				}
+			}
+			// Looks like environment-keyed even if no version found
+			return envMap
+		}
+	}
+
+	// Check if this is already a non-environment-keyed ACL
+	// by checking if top-level keys look like service names with versions
+	for _, v := range acl {
+		if serviceMap, ok := v.(map[string]interface{}); ok {
+			for k := range serviceMap {
+				if _, err := strconv.Atoi(k); err == nil {
+					// Found a version number at second level, not environment-keyed
+					return acl
+				}
+			}
+		}
+	}
+
+	return acl
 }
 
 // cloneACL creates a deep copy of an ACL map
