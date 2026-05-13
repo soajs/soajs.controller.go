@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -12,6 +13,7 @@ import (
 	"github.com/soajs/soajs.controller.go/internal/config"
 	"github.com/soajs/soajs.controller.go/internal/provision"
 	"github.com/soajs/soajs.controller.go/internal/registry"
+	"go.uber.org/zap"
 )
 
 // ProxyConfig holds proxy configuration
@@ -59,6 +61,12 @@ func GotoService(prov provision.Provision, reg registry.Registry, aw awareness.A
 
 			serviceName := serviceParams.URLInfo.ServiceName
 			serviceVersion := serviceParams.URLInfo.ServiceVersion
+
+			// Skip proxying for /soajs/* routes - they're handled by SoajsRoutes middleware
+			if serviceName == "soajs" {
+				next.ServeHTTP(w, r)
+				return
+			}
 
 			// Get service host from awareness
 			hostInfo, err := aw.GetHost(serviceName, serviceVersion)
@@ -152,14 +160,100 @@ func getScheme(r *http.Request) string {
 }
 
 func injectSOAJSHeaders(req *http.Request, soajsCtx *SOAJSContext) {
-	// Inject tenant/key info as header for downstream services
+	// Build the soajsinjectobj - this is the JSON object that SOAJS services expect
+	injectObj := make(map[string]interface{})
+
+	// Tenant info
 	if soajsCtx.Tenant != nil {
-		req.Header.Set("X-SOAJS-Tenant-Code", soajsCtx.Tenant.Code)
-		req.Header.Set("X-SOAJS-Tenant-ID", soajsCtx.Tenant.ID)
+		injectObj["tenant"] = map[string]interface{}{
+			"id":     soajsCtx.Tenant.ID,
+			"code":   soajsCtx.Tenant.Code,
+			"name":   soajsCtx.Tenant.Name,
+			"type":   soajsCtx.Tenant.Type,
+			"locked": false,
+		}
 	}
+
+	// Key info - config must be at least an empty object, never null
 	if soajsCtx.Key != nil {
-		req.Header.Set("X-SOAJS-Key-ExtKey", soajsCtx.Key.ExtKey)
+		keyConfig := soajsCtx.Key.Config
+		if keyConfig == nil {
+			keyConfig = make(map[string]interface{})
+		}
+		injectObj["key"] = map[string]interface{}{
+			"iKey":   soajsCtx.Key.InternalKey, // internal key (32 chars)
+			"eKey":   soajsCtx.Key.ExtKey,
+			"config": keyConfig,
+		}
 	}
+
+	// Application info (from key)
+	if soajsCtx.Key != nil {
+		appObj := map[string]interface{}{
+			"product": soajsCtx.Key.ProductCode,
+			"package": soajsCtx.Key.PackageCode,
+			"appId":   soajsCtx.Key.AppID,
+		}
+		// Include application ACLs (can be null)
+		if soajsCtx.Key.AppACL != nil {
+			appObj["acl"] = soajsCtx.Key.AppACL
+		} else {
+			appObj["acl"] = nil
+		}
+		if soajsCtx.Key.AppACLAllEnv != nil {
+			appObj["acl_all_env"] = soajsCtx.Key.AppACLAllEnv
+		} else {
+			appObj["acl_all_env"] = nil
+		}
+		injectObj["application"] = appObj
+	}
+
+	// Package info
+	if soajsCtx.Controller != nil && soajsCtx.Controller.ServiceParams != nil {
+		pkg := soajsCtx.Controller.ServiceParams.Package
+		if pkg != nil {
+			pkgACL := pkg.ACL
+			if pkgACL == nil {
+				pkgACL = make(map[string]interface{})
+			}
+			injectObj["package"] = map[string]interface{}{
+				"acl":         pkgACL,
+				"acl_all_env": nil,
+			}
+		}
+	}
+
+	// Device and Geo info
+	if soajsCtx.Device != nil {
+		injectObj["device"] = soajsCtx.Device
+	} else {
+		injectObj["device"] = map[string]interface{}{}
+	}
+	if soajsCtx.Geo != nil {
+		injectObj["geo"] = soajsCtx.Geo
+	} else {
+		injectObj["geo"] = map[string]interface{}{}
+	}
+
+	// Awareness info - controller host and port for service callbacks
+	// Default to localhost:4000 (standard controller port)
+	injectObj["awareness"] = map[string]interface{}{
+		"host": "127.0.0.1",
+		"port": 4000,
+	}
+
+	// Serialize to JSON
+	jsonBytes, err := json.Marshal(injectObj)
+	if err != nil {
+		soajsCtx.Log.Error("failed to serialize soajsinjectobj")
+		return
+	}
+
+	// Debug: log the soajsinjectobj content
+	soajsCtx.Log.Debug("soajsinjectobj header", zap.String("content", string(jsonBytes)))
+
+	// Set the header
+	req.Header.Set("soajsinjectobj", string(jsonBytes))
 }
 
 // stripPrefix removes a prefix from the path

@@ -2,12 +2,16 @@ package types
 
 // Key represents API key information
 type Key struct {
-	ExtKey      string                 `json:"extKey"`
+	InternalKey string                 `json:"key"`       // Internal key (32 chars)
+	ExtKey      string                 `json:"extKey"`    // External key (encrypted)
 	TenantCode  string                 `json:"tenantCode"`
 	TenantID    string                 `json:"tenantId"`
 	ProductCode string                 `json:"productCode"`
 	PackageCode string                 `json:"packageCode"`
-	ACL         map[string]*ServiceACL `json:"acl"`
+	AppID       string                 `json:"appId"`              // Application ID from tenant
+	AppACL      map[string]interface{} `json:"applicationAcl"`     // Application-level ACL
+	AppACLAllEnv map[string]interface{} `json:"applicationAclAllEnv"` // Application-level ACL for all envs
+	ACL         map[string]interface{} `json:"acl"`                // Key-level ACL (from extKey)
 	Config      map[string]interface{} `json:"config"`
 }
 

@@ -44,7 +44,7 @@ func NewController(cfg *config.Config, logger *zap.Logger) (*Controller, error) 
 	ctrl.registry = registry.NewMongoRegistry(mongoClient, logger)
 
 	// Initialize provision
-	ctrl.provision = provision.NewProvision(mongoClient, logger)
+	ctrl.provision = provision.NewProvision(mongoClient, logger, cfg.Environment)
 
 	// Initialize awareness
 	ctrl.awareness = awareness.NewAwareness(cfg.Awareness, ctrl.registry, logger)
@@ -63,6 +63,16 @@ func (c *Controller) Setup(r *chi.Mux) error {
 	// Load registry
 	if err := c.registry.Load(c.cfg.Environment); err != nil {
 		return err
+	}
+
+	// Set key encryption config from registry
+	regData := c.registry.Get()
+	if regData != nil && regData.ServiceConfig != nil {
+		keyConfig := regData.ServiceConfig.Key
+		c.provision.SetKeyConfig(keyConfig.Algorithm, keyConfig.Password)
+		c.logger.Debug("key config loaded",
+			zap.String("algorithm", keyConfig.Algorithm),
+		)
 	}
 
 	// Load provision data
@@ -94,6 +104,7 @@ func (c *Controller) Setup(r *chi.Mux) error {
 	r.Use(middleware.MT(c.provision, c.registry, c.urac, c.cfg.Environment))
 	r.Use(middleware.OAuth(c.provision))
 	r.Use(middleware.UserACL())
+	r.Use(middleware.SoajsRoutes()) // Handle /soajs/* routes after MT populates context
 	r.Use(middleware.Traffic(c.registry))
 	r.Use(middleware.LastSeen())
 

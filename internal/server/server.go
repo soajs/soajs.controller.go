@@ -8,6 +8,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/soajs/soajs.controller.go/internal/config"
+	"github.com/soajs/soajs.controller.go/pkg/types"
 	"go.uber.org/zap"
 )
 
@@ -53,8 +54,17 @@ func (s *Server) Run(ctx context.Context) error {
 		IdleTimeout:  time.Duration(s.cfg.Server.IdleTimeout) * time.Second,
 	}
 
-	// Create maintenance server
-	maintPort := s.cfg.ServicePort + s.cfg.Maintenance.PortIncrement
+	// Create maintenance server using registry values
+	// maintPort = registry.services.controller.port + registry.serviceConfig.ports.maintenanceInc
+	maintPort := s.cfg.ServicePort + s.cfg.Maintenance.PortIncrement // fallback
+	regData := ctrl.Registry().Get()
+	if regData != nil && regData.ServiceConfig != nil {
+		controllerPort := regData.ServiceConfig.Ports.Controller
+		maintenanceInc := regData.ServiceConfig.Ports.MaintenanceInc
+		if controllerPort > 0 && maintenanceInc > 0 {
+			maintPort = controllerPort + maintenanceInc
+		}
+	}
 	s.maintServer = NewMaintenanceServer(maintPort, ctrl, s.logger)
 
 	// Start servers
@@ -67,6 +77,47 @@ func (s *Server) Run(ctx context.Context) error {
 		)
 		if err := s.httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			errChan <- fmt.Errorf("HTTP server error: %w", err)
+		}
+	}()
+
+	// Self-register controller as healthy host after startup
+	// This enables other services (like oauth) to find the controller
+	go func() {
+		// Wait briefly for HTTP server to be ready
+		time.Sleep(100 * time.Millisecond)
+
+		// Check if autoRegisterService is enabled (defaults to true)
+		autoRegister := true
+		if regData != nil && regData.ServiceConfig != nil {
+			autoRegister = regData.ServiceConfig.Awareness.AutoRegisterService
+		}
+
+		if autoRegister {
+			controllerVersion := "1"
+			if regData != nil && regData.Services != nil {
+				if ctrlSvc, ok := regData.Services["controller"]; ok && ctrlSvc.Version != "" {
+					controllerVersion = ctrlSvc.Version
+				}
+			}
+
+			hostInfo := types.HostInfo{
+				Name:    "controller",
+				Version: controllerVersion,
+				Host:    "127.0.0.1",
+				Port:    s.cfg.ServicePort,
+			}
+
+			if err := ctrl.Registry().RegisterHost(hostInfo); err != nil {
+				s.logger.Warn("failed to self-register controller host",
+					zap.Error(err),
+				)
+			} else {
+				s.logger.Info("controller self-registered as healthy host",
+					zap.String("host", hostInfo.Host),
+					zap.Int("port", hostInfo.Port),
+					zap.String("version", controllerVersion),
+				)
+			}
 		}
 	}()
 

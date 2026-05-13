@@ -36,6 +36,6 @@ type ExtKey struct {
 	Geo        interface{}            `json:"geo" bson:"geo"`
 	Env        string                 `json:"env" bson:"env"`
 	Expiration interface{}            `json:"expDate" bson:"expDate"`
-	ACL        map[string]*ServiceACL `json:"acl" bson:"acl"`
+	ACL        map[string]interface{} `json:"acl" bson:"acl"` // Flexible ACL structure
 	Config     map[string]interface{} `json:"config" bson:"config"`
 }

@@ -1,10 +1,12 @@
 package types
 
+import "time"
+
 // ServiceParams holds service-related request parameters
 type ServiceParams struct {
 	URLInfo        *URLInfo
-	KeyACL         *ServiceACL
-	FinalACL       *ServiceACL
+	KeyACL         map[string]interface{} // Flexible ACL structure
+	FinalACL       map[string]interface{} // Merged ACL (package + key)
 	Product        *Product
 	Package        *Package
 	UserInfo       map[string]interface{}
@@ -47,16 +49,16 @@ type AccessToken struct {
 	Token     string                 `json:"accessToken" bson:"token"`
 	ClientID  string                 `json:"clientId" bson:"clientId"`
 	UserID    string                 `json:"userId" bson:"userId"`
-	Expires   int64                  `json:"accessTokenExpiresAt" bson:"expires"`
+	Expires   time.Time              `json:"accessTokenExpiresAt" bson:"expires"`
 	Scope     string                 `json:"scope" bson:"scope"`
 	User      map[string]interface{} `json:"user" bson:"user"`
 }
 
 // RefreshToken represents an OAuth refresh token
 type RefreshToken struct {
-	Token    string `json:"refreshToken" bson:"token"`
-	ClientID string `json:"clientId" bson:"clientId"`
-	UserID   string `json:"userId" bson:"userId"`
-	Expires  int64  `json:"refreshTokenExpiresAt" bson:"expires"`
-	Scope    string `json:"scope" bson:"scope"`
+	Token    string    `json:"refreshToken" bson:"token"`
+	ClientID string    `json:"clientId" bson:"clientId"`
+	UserID   string    `json:"userId" bson:"userId"`
+	Expires  time.Time `json:"refreshTokenExpiresAt" bson:"expires"`
+	Scope    string    `json:"scope" bson:"scope"`
 }

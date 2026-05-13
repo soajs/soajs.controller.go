@@ -14,6 +14,6 @@ type Package struct {
 	Code        string                 `json:"code" bson:"code"`
 	Name        string                 `json:"name" bson:"name"`
 	Description string                 `json:"description" bson:"description"`
-	ACL         map[string]*ServiceACL `json:"acl" bson:"acl"`
+	ACL         map[string]interface{} `json:"acl" bson:"acl"` // Nested: ACL[env][service][version]
 	TTL         int64                  `json:"_TTL" bson:"_TTL"`
 }

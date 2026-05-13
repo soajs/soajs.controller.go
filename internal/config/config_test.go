@@ -51,3 +51,18 @@ func TestLoadFromEnv(t *testing.T) {
 		t.Errorf("Environment = %q, want %q", cfg.Environment, "production")
 	}
 }
+
+func TestLoadFromEnv_SOAJS_ENV(t *testing.T) {
+	// Test Node.js compatibility: SOAJS_ENV should work
+	os.Setenv("SOAJS_ENV", "dashboard")
+	defer os.Unsetenv("SOAJS_ENV")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+
+	if cfg.Environment != "dashboard" {
+		t.Errorf("Environment = %q, want %q (SOAJS_ENV compatibility)", cfg.Environment, "dashboard")
+	}
+}

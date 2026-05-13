@@ -1,17 +1,47 @@
 package types
 
+import "encoding/json"
+
 // ServiceConfig represents a service configuration
 type ServiceConfig struct {
-	ID                string            `json:"_id" bson:"_id"`
-	Name              string            `json:"name" bson:"name"`
-	Group             string            `json:"group" bson:"group"`
-	Version           string            `json:"version" bson:"version"`
-	Port              int               `json:"port" bson:"port"`
-	Host              string            `json:"host" bson:"host"`
-	RequestTimeout    int               `json:"requestTimeout" bson:"requestTimeout"`
-	RequestTimeoutRenewal int           `json:"requestTimeoutRenewal" bson:"requestTimeoutRenewal"`
-	Maintenance       *MaintenanceInfo  `json:"maintenance" bson:"maintenance"`
-	Versions          map[string]*VersionInfo `json:"versions" bson:"versions"`
+	ID                    string                  `json:"_id" bson:"_id"`
+	Name                  string                  `json:"name" bson:"name"`
+	Group                 string                  `json:"group" bson:"group"`
+	Version               string                  `json:"version" bson:"version"`
+	Port                  int                     `json:"port" bson:"port"`
+	Host                  string                  `json:"host" bson:"host"`
+	RequestTimeout        int                     `json:"requestTimeout" bson:"requestTimeout"`
+	RequestTimeoutRenewal int                     `json:"requestTimeoutRenewal" bson:"requestTimeoutRenewal"`
+	Maintenance           *MaintenanceInfo        `json:"maintenance" bson:"maintenance"`
+	Versions              map[string]*VersionInfo `json:"versions" bson:"versions"`
+	// Hosts stores host IPs by version (like Node.js registry.services[name].hosts)
+	Hosts *ServiceHosts `json:"hosts,omitempty"`
+}
+
+// ServiceHosts stores hosts for a service, organized by version
+type ServiceHosts struct {
+	// Latest holds the latest version string
+	Latest string `json:"latest,omitempty"`
+	// ByVersion maps version string to list of host IPs
+	ByVersion map[string][]string `json:"-"`
+}
+
+// MarshalJSON implements custom JSON marshaling for ServiceHosts
+// Output format matches Node.js: {"latest": "1", "1": ["127.0.0.1"]}
+func (h ServiceHosts) MarshalJSON() ([]byte, error) {
+	// Create a map to hold all fields
+	result := make(map[string]interface{})
+
+	if h.Latest != "" {
+		result["latest"] = h.Latest
+	}
+
+	// Add version entries
+	for version, ips := range h.ByVersion {
+		result[version] = ips
+	}
+
+	return json.Marshal(result)
 }
 
 // MaintenanceInfo holds maintenance configuration

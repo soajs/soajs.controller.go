@@ -51,7 +51,7 @@ func OAuth(prov provision.Provision) Middleware {
 			}
 
 			// Check if token is expired
-			if accessToken.Expires > 0 && accessToken.Expires < time.Now().Unix() {
+			if !accessToken.Expires.IsZero() && accessToken.Expires.Before(time.Now()) {
 				soajsCtx.Log.Debug("OAuth token expired")
 				WriteError(w, http.StatusUnauthorized,
 					config.ErrCodeUnauthorized,

@@ -31,16 +31,21 @@ func KeyACL() Middleware {
 			// Check if key has access to this service
 			keyACL := soajsCtx.Key.ACL
 			if keyACL != nil {
-				// Check service-level ACL
+				// Check service-level ACL (could be direct or nested by env)
 				if serviceACL, exists := keyACL[serviceName]; exists {
-					if !serviceACL.Access {
-						WriteError(w, http.StatusForbidden,
-							config.ErrCodeForbidden,
-							config.DefaultErrors[config.ErrCodeForbidden])
-						return
+					// Check if access is explicitly denied
+					if svcMap, ok := serviceACL.(map[string]interface{}); ok {
+						if access, hasAccess := svcMap["access"]; hasAccess {
+							if b, ok := access.(bool); ok && !b {
+								WriteError(w, http.StatusForbidden,
+									config.ErrCodeForbidden,
+									config.DefaultErrors[config.ErrCodeForbidden])
+								return
+							}
+						}
+						// Store service ACL for later use
+						soajsCtx.Controller.ServiceParams.KeyACL = svcMap
 					}
-					// Store service ACL for later use
-					soajsCtx.Controller.ServiceParams.KeyACL = serviceACL
 				}
 			}
 

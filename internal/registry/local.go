@@ -115,7 +115,7 @@ func (r *LocalRegistry) AddUpdateEnvControllers(data types.ControllerUpdate) err
 }
 
 // GetCustomRegistry returns a custom registry entry
-func (r *LocalRegistry) GetCustomRegistry(name string) (*types.CustomEntry, error) {
+func (r *LocalRegistry) GetCustomRegistry(name string) (interface{}, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 

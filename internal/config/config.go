@@ -75,6 +75,10 @@ func Load() (*Config, error) {
 	v.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
 	v.AutomaticEnv()
 
+	// Bind SOAJS_ENV to environment (Node.js compatibility)
+	// Node.js uses SOAJS_ENV, viper would expect SOAJS_ENVIRONMENT
+	v.BindEnv("environment", "SOAJS_ENV")
+
 	// Read from config file if exists
 	v.SetConfigName("config")
 	v.SetConfigType("yaml")
@@ -121,8 +125,8 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("server.idle_timeout", 60)
 	v.SetDefault("server.shutdown_timeout", 10)
 
-	// Maintenance defaults
-	v.SetDefault("maintenance.port_increment", 1000)
+	// Maintenance defaults (Node.js uses maintenanceInc = 1001)
+	v.SetDefault("maintenance.port_increment", 1001)
 	v.SetDefault("maintenance.readiness", "/heartbeat")
 
 	// Awareness defaults

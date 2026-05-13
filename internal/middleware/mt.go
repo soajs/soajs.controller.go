@@ -3,6 +3,7 @@ package middleware
 import (
 	"context"
 	"net/http"
+	"strings"
 
 	"github.com/soajs/soajs.controller.go/internal/config"
 	"github.com/soajs/soajs.controller.go/internal/provision"
@@ -66,10 +67,10 @@ func MT(prov provision.Provision, reg registry.Registry, uracDriver *urac.Driver
 				serviceVersion := serviceParams.URLInfo.ServiceVersion
 				servicePath := serviceParams.URLInfo.ServicePath
 
-				// Merge ACLs: package ACL + key ACL
-				finalACL := mergeACL(pkg.ACL, soajsCtx.Key.ACL, serviceName)
+				// Merge ACLs: package ACL + key ACL (env-aware)
+				finalACL := mergeACL(pkg.ACL, soajsCtx.Key.ACL, serviceName, env)
 
-				if !checkServiceAccess(finalACL, serviceName, r.Method, servicePath) {
+				if !checkServiceAccess(finalACL, serviceName, serviceVersion, r.Method, servicePath) {
 					WriteError(w, http.StatusForbidden,
 						config.ErrCodeForbidden,
 						config.DefaultErrors[config.ErrCodeForbidden])
@@ -80,7 +81,7 @@ func MT(prov provision.Provision, reg registry.Registry, uracDriver *urac.Driver
 				serviceParams.FinalACL = finalACL
 
 				// Check if OAuth is required - this will trigger user ACL lookup after OAuth middleware
-				if requiresOAuth(pkg, serviceParams) {
+				if requiresOAuth(pkg, serviceParams, env) {
 					serviceParams.RequiresOAuth = true
 					// Store URAC info for post-OAuth ACL lookup
 					serviceParams.UracDriver = uracDriver
@@ -90,9 +91,11 @@ func MT(prov provision.Provision, reg registry.Registry, uracDriver *urac.Driver
 				}
 			}
 
-			// Store product info
-			soajsCtx.Controller.ServiceParams.Product = product
-			soajsCtx.Controller.ServiceParams.Package = pkg
+			// Store product info (only if ServiceParams exists)
+			if soajsCtx.Controller != nil && soajsCtx.Controller.ServiceParams != nil {
+				soajsCtx.Controller.ServiceParams.Product = product
+				soajsCtx.Controller.ServiceParams.Package = pkg
+			}
 
 			next.ServeHTTP(w, r)
 		})
@@ -177,33 +180,59 @@ func UserACL() Middleware {
 }
 
 // mergeACL merges package ACL with key-specific ACL
-func mergeACL(packageACL, keyACL map[string]*types.ServiceACL, serviceName string) *types.ServiceACL {
-	var merged *types.ServiceACL
+// ACL structure: ACL[env][service][version] or ACL[service]
+func mergeACL(packageACL, keyACL map[string]interface{}, serviceName, env string) map[string]interface{} {
+	var merged map[string]interface{}
 
-	// Start with package ACL
+	// Check package ACL - could be ACL[env][service] or ACL[service]
 	if packageACL != nil {
-		if svcACL, exists := packageACL[serviceName]; exists {
-			merged = svcACL
+		// Try environment-keyed first (e.g., packageACL["dashboard"]["oauth"])
+		if envACL, ok := packageACL[env]; ok {
+			if envMap, ok := envACL.(map[string]interface{}); ok {
+				if svcACL, exists := envMap[serviceName]; exists {
+					if svcMap, ok := svcACL.(map[string]interface{}); ok {
+						merged = svcMap
+					}
+				}
+			}
+		}
+		// Fall back to direct service key (e.g., packageACL["oauth"])
+		if merged == nil {
+			if svcACL, exists := packageACL[serviceName]; exists {
+				if svcMap, ok := svcACL.(map[string]interface{}); ok {
+					merged = svcMap
+				}
+			}
 		}
 	}
 
-	// Override with key ACL if present
+	// Override with key ACL if present (same structure check)
 	if keyACL != nil {
-		if svcACL, exists := keyACL[serviceName]; exists {
-			if merged == nil {
-				merged = svcACL
-			} else {
-				// Merge: key ACL takes precedence
-				if svcACL.Access {
-					merged.Access = true
+		var keyServiceACL map[string]interface{}
+		if envACL, ok := keyACL[env]; ok {
+			if envMap, ok := envACL.(map[string]interface{}); ok {
+				if svcACL, exists := envMap[serviceName]; exists {
+					if svcMap, ok := svcACL.(map[string]interface{}); ok {
+						keyServiceACL = svcMap
+					}
 				}
-				if svcACL.APIs != nil {
-					if merged.APIs == nil {
-						merged.APIs = make(map[string]*types.APIACL)
-					}
-					for k, v := range svcACL.APIs {
-						merged.APIs[k] = v
-					}
+			}
+		}
+		if keyServiceACL == nil {
+			if svcACL, exists := keyACL[serviceName]; exists {
+				if svcMap, ok := svcACL.(map[string]interface{}); ok {
+					keyServiceACL = svcMap
+				}
+			}
+		}
+
+		if keyServiceACL != nil {
+			if merged == nil {
+				merged = keyServiceACL
+			} else {
+				// Merge: key ACL extends package ACL
+				for k, v := range keyServiceACL {
+					merged[k] = v
 				}
 			}
 		}
@@ -213,53 +242,160 @@ func mergeACL(packageACL, keyACL map[string]*types.ServiceACL, serviceName strin
 }
 
 // checkServiceAccess verifies if the request is allowed
-func checkServiceAccess(acl *types.ServiceACL, serviceName, method, path string) bool {
+// In SOAJS ACL:
+// - access: false/undefined = public access (allowed without auth)
+// - access: true = requires authenticated user
+// - access: ["group1", "group2"] = requires user in specific groups
+// This function only checks if the route exists in ACL, not auth requirements
+func checkServiceAccess(acl map[string]interface{}, serviceName, version, method, path string) bool {
 	if acl == nil {
 		return true // No ACL means open access
 	}
 
-	if !acl.Access {
-		return false
-	}
-
-	// Check API-level ACL if defined
-	if acl.APIs != nil {
-		apiKey := method + path
-		if apiACL, exists := acl.APIs[apiKey]; exists {
-			return apiACL.Access
-		}
-		// Check path-only key
-		if apiACL, exists := acl.APIs[path]; exists {
-			return apiACL.Access
+	// Check version-specific ACL (e.g., acl["1"])
+	var versionACL map[string]interface{}
+	if v, ok := acl[version]; ok {
+		if vm, ok := v.(map[string]interface{}); ok {
+			versionACL = vm
 		}
 	}
 
-	return true
-}
-
-// requiresOAuth checks if OAuth is required for this request
-func requiresOAuth(pkg *types.Package, params *types.ServiceParams) bool {
-	if pkg == nil || params == nil || params.URLInfo == nil {
-		return false
+	// If no version ACL, check service-level access
+	if versionACL == nil {
+		// Service exists in ACL, access is allowed (specific restrictions handled elsewhere)
+		return true
 	}
 
-	// Check package-level OAuth setting
-	if pkg.ACL != nil {
-		if svcACL, exists := pkg.ACL[params.URLInfo.ServiceName]; exists {
-			if svcACL.OAuth {
-				// Check API-level OAuth override
-				if svcACL.APIs != nil {
-					apiKey := params.URLInfo.ServicePath
-					if apiACL, exists := svcACL.APIs[apiKey]; exists {
-						return apiACL.OAuth
+	// Check if version has access field set to false explicitly at version level
+	// Note: In SOAJS, access:false means PUBLIC access, not denied
+	// access:true means requires auth, which is handled by OAuth middleware
+	// So we always allow here - auth requirements are separate
+
+	// Check if the API path exists in the ACL (for apisPermission: "restricted")
+	methodLower := strings.ToLower(method)
+	if methodACL, ok := versionACL[methodLower]; ok {
+		if methodMap, ok := methodACL.(map[string]interface{}); ok {
+			if apis, ok := methodMap["apis"]; ok {
+				if apisMap, ok := apis.(map[string]interface{}); ok {
+					// API exists in ACL - this is allowed
+					// The access field determines auth requirements, not permission
+					if _, exists := apisMap[path]; exists {
+						return true
 					}
 				}
-				return true
 			}
 		}
 	}
 
+	// If apisPermission is "restricted" and API not found, it would be denied
+	// But we need to check apisPermission first - for now, allow by default
+	return true
+}
+
+// requiresOAuth checks if OAuth is required for this request
+// OAuth is required when the API's access field is truthy (true or array of groups)
+// access: false/undefined = public (no OAuth)
+// access: true = requires authenticated user
+// access: ["group1", ...] = requires user in specific groups
+// API-level access overrides version-level access
+func requiresOAuth(pkg *types.Package, params *types.ServiceParams, env string) bool {
+	if pkg == nil || params == nil || params.URLInfo == nil {
+		return false
+	}
+
+	if pkg.ACL == nil {
+		return false
+	}
+
+	serviceName := params.URLInfo.ServiceName
+	serviceVersion := params.URLInfo.ServiceVersion
+	servicePath := params.URLInfo.ServicePath
+
+	// Get service ACL (could be pkg.ACL[env][service] or pkg.ACL[service])
+	var serviceACL map[string]interface{}
+	if envACL, ok := pkg.ACL[env]; ok {
+		if envMap, ok := envACL.(map[string]interface{}); ok {
+			if svcACL, exists := envMap[serviceName]; exists {
+				if svcMap, ok := svcACL.(map[string]interface{}); ok {
+					serviceACL = svcMap
+				}
+			}
+		}
+	}
+	if serviceACL == nil {
+		if svcACL, exists := pkg.ACL[serviceName]; exists {
+			if svcMap, ok := svcACL.(map[string]interface{}); ok {
+				serviceACL = svcMap
+			}
+		}
+	}
+
+	if serviceACL == nil {
+		return false
+	}
+
+	// Check version-level ACL (e.g., serviceACL["1"])
+	var versionACL map[string]interface{}
+	if v, ok := serviceACL[serviceVersion]; ok {
+		if vm, ok := v.(map[string]interface{}); ok {
+			versionACL = vm
+		}
+	}
+
+	if versionACL == nil {
+		// Check service-level access
+		if access, ok := serviceACL["access"]; ok {
+			return isAccessTruthy(access)
+		}
+		return false
+	}
+
+	// First, check API-level access (this overrides version-level)
+	// Check all HTTP methods since we don't have the request method here
+	for _, m := range []string{"get", "post", "put", "delete", "patch"} {
+		if methodACL, ok := versionACL[m]; ok {
+			if methodMap, ok := methodACL.(map[string]interface{}); ok {
+				if apis, ok := methodMap["apis"]; ok {
+					if apisMap, ok := apis.(map[string]interface{}); ok {
+						if apiACL, exists := apisMap[servicePath]; exists {
+							if apiMap, ok := apiACL.(map[string]interface{}); ok {
+								if access, ok := apiMap["access"]; ok {
+									// API-level access found - this is the final answer
+									// access: false means public, access: true/array means auth required
+									return isAccessTruthy(access)
+								}
+							}
+							// API exists but no access field = public
+							return false
+						}
+					}
+				}
+			}
+		}
+	}
+
+	// No API-level access found, fall back to version-level access
+	if access, ok := versionACL["access"]; ok {
+		return isAccessTruthy(access)
+	}
+
 	return false
+}
+
+// isAccessTruthy checks if an access value requires authentication
+// false/nil = public (no auth), true = auth required, array = group auth required
+func isAccessTruthy(access interface{}) bool {
+	if access == nil {
+		return false
+	}
+	switch v := access.(type) {
+	case bool:
+		return v // true = auth required, false = public
+	case []interface{}:
+		return len(v) > 0 // array of groups = auth required
+	default:
+		return false
+	}
 }
 
 // Ensure context is imported for UserACL

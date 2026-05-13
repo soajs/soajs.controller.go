@@ -17,7 +17,7 @@ type Registry interface {
 	GetService(name string) (*types.ServiceConfig, error)
 
 	// GetCustomRegistry returns a custom registry entry
-	GetCustomRegistry(name string) (*types.CustomEntry, error)
+	GetCustomRegistry(name string) (interface{}, error)
 
 	// GetResource returns a resource by type and name
 	GetResource(resourceType, name string) (*types.Resource, error)

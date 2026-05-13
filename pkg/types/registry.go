@@ -4,18 +4,24 @@ import "time"
 
 // RegistryData holds the complete registry state
 type RegistryData struct {
-	TimeLoaded     int64                      `json:"timeLoaded"`
-	Name           string                     `json:"name"`
-	Environment    string                     `json:"environment"`
-	ProfileOnly    bool                       `json:"profileOnly"`
-	Services       map[string]*ServiceConfig  `json:"services"`
-	Daemons        map[string]*DaemonConfig   `json:"daemons"`
-	CoreDB         *CoreDBConfig              `json:"coreDB"`
-	ServiceConfig  *GlobalServiceConfig       `json:"serviceConfig"`
-	CustomRegistry map[string]*CustomEntry    `json:"customRegistry"`
+	TimeLoaded     int64                           `json:"timeLoaded"`
+	Name           string                          `json:"name"`
+	Environment    string                          `json:"environment"`
+	Domain         string                          `json:"domain,omitempty"`
+	SitePrefix     string                          `json:"sitePrefix,omitempty"`
+	APIPrefix      string                          `json:"apiPrefix,omitempty"`
+	Protocol       string                          `json:"protocol,omitempty"`
+	Port           int                             `json:"port,omitempty"`
+	ProfileOnly    bool                            `json:"profileOnly,omitempty"`
+	Services       map[string]*ServiceConfig       `json:"services"`
+	Daemons        map[string]*DaemonConfig        `json:"daemons"`
+	CoreDB         *CoreDBConfig                   `json:"coreDB"`
+	TenantMetaDB   map[string]*DBConnectionConfig  `json:"tenantMetaDB,omitempty"`
+	ServiceConfig  *GlobalServiceConfig            `json:"serviceConfig"`
+	CustomRegistry map[string]interface{}          `json:"custom,omitempty"`
 	Resources      map[string]map[string]*Resource `json:"resources"`
-	Hosts          map[string][]*HostRecord   `json:"hosts"`
-	Deployer       *DeployerConfig            `json:"deployer"`
+	Hosts          map[string][]*HostRecord        `json:"hosts,omitempty"`
+	Deployer       *DeployerConfig                 `json:"deployer"`
 }
 
 // NewRegistryData creates a new registry data instance
@@ -26,7 +32,7 @@ func NewRegistryData(env string) *RegistryData {
 		Environment:    env,
 		Services:       make(map[string]*ServiceConfig),
 		Daemons:        make(map[string]*DaemonConfig),
-		CustomRegistry: make(map[string]*CustomEntry),
+		CustomRegistry: make(map[string]interface{}),
 		Resources:      make(map[string]map[string]*Resource),
 		Hosts:          make(map[string][]*HostRecord),
 	}
@@ -139,17 +145,74 @@ type CredentialsConfig struct {
 
 // GlobalServiceConfig holds global service settings
 type GlobalServiceConfig struct {
-	MaintenanceMode bool            `json:"maintenanceMode"`
-	Logger          LoggerConfig    `json:"logger"`
-	Ports           PortsConfig     `json:"ports"`
-	Awareness       AwarenessConfig `json:"awareness"`
-	OAuth           OAuthConfig     `json:"oauth"`
+	MaintenanceMode bool                   `json:"maintenanceMode,omitempty"`
+	Logger          LoggerConfig           `json:"logger"`
+	Ports           PortsConfig            `json:"ports"`
+	Awareness       AwarenessConfig        `json:"awareness"`
+	OAuth           OAuthConfig            `json:"oauth,omitempty"`
+	Key             KeyEncryptionConfig    `json:"key"`
+	Cookie          CookieConfig           `json:"cookie,omitempty"`
+	Session         SessionConfig          `json:"session,omitempty"`
+	CORS            CORSConfig             `json:"cors,omitempty"`
+	Throttling      map[string]interface{} `json:"throttling,omitempty"`
+}
+
+// CookieConfig holds cookie settings
+type CookieConfig struct {
+	Secret string `json:"secret"`
+}
+
+// SessionConfig holds session settings
+type SessionConfig struct {
+	Name              string            `json:"name"`
+	Secret            string            `json:"secret"`
+	Cookie            SessionCookieConf `json:"cookie"`
+	Resave            bool              `json:"resave"`
+	SaveUninitialized bool              `json:"saveUninitialized"`
+	Rolling           bool              `json:"rolling"`
+	Unset             string            `json:"unset"`
+}
+
+// SessionCookieConf holds session cookie settings
+type SessionCookieConf struct {
+	Path     string      `json:"path"`
+	HTTPOnly bool        `json:"httpOnly"`
+	Secure   bool        `json:"secure"`
+	MaxAge   interface{} `json:"maxAge"`
+}
+
+// CORSConfig holds CORS settings
+type CORSConfig struct {
+	Credentials string `json:"credentials"`
+	Enabled     bool   `json:"enabled"`
+	Headers     string `json:"headers"`
+	MaxAge      int    `json:"maxage"`
+	Methods     string `json:"methods"`
+	Origin      string `json:"origin"`
+}
+
+// ServiceKeyConfig holds service key configuration
+type ServiceKeyConfig struct {
+	Key KeyEncryptionConfig `json:"key" bson:"key"`
+}
+
+// KeyEncryptionConfig holds key encryption settings
+type KeyEncryptionConfig struct {
+	Algorithm string `json:"algorithm" bson:"algorithm"`
+	Password  string `json:"password" bson:"password"`
 }
 
 // LoggerConfig holds logging configuration
 type LoggerConfig struct {
-	Level     string `json:"level"`
-	Formatter string `json:"formatter"`
+	Src       bool            `json:"src"`
+	Level     string          `json:"level"`
+	Formatter FormatterConfig `json:"formatter"`
+}
+
+// FormatterConfig holds logger formatter settings
+type FormatterConfig struct {
+	LevelInString bool   `json:"levelInString"`
+	OutputMode    string `json:"outputMode"`
 }
 
 // PortsConfig holds port configuration
@@ -177,11 +240,46 @@ type OAuthConfig struct {
 
 // EnvironmentDoc represents an environment document
 type EnvironmentDoc struct {
-	Code          string              `json:"code" bson:"code"`
-	Description   string              `json:"description" bson:"description"`
-	Domain        string              `json:"domain" bson:"domain"`
-	ServiceConfig GlobalServiceConfig `json:"services" bson:"services"`
-	CoreDB        CoreDBConfig        `json:"coreDB" bson:"coreDB"`
+	Code          string                 `json:"code" bson:"code"`
+	Description   string                 `json:"description" bson:"description"`
+	Domain        string                 `json:"domain" bson:"domain"`
+	SitePrefix    string                 `json:"sitePrefix" bson:"sitePrefix"`
+	APIPrefix     string                 `json:"apiPrefix" bson:"apiPrefix"`
+	Protocol      string                 `json:"protocol" bson:"protocol"`
+	Port          int                    `json:"port" bson:"port"`
+	ServiceConfig EnvironmentServices    `json:"services" bson:"services"`
+	DBs           EnvironmentDBs         `json:"dbs" bson:"dbs"`
+	Deployer      *DeployerConfig        `json:"deployer" bson:"deployer"`
+}
+
+// EnvironmentServices holds services configuration from environment doc
+type EnvironmentServices struct {
+	Controller ControllerConfig     `json:"controller" bson:"controller"`
+	Config     GlobalServiceConfig  `json:"config" bson:"config"`
+}
+
+// ControllerConfig holds controller-specific configuration
+type ControllerConfig struct {
+	Authorization         bool `json:"authorization" bson:"authorization"`
+	RequestTimeout        int  `json:"requestTimeout" bson:"requestTimeout"`
+	RequestTimeoutRenewal int  `json:"requestTimeoutRenewal" bson:"requestTimeoutRenewal"`
+}
+
+// EnvironmentDBs holds database configuration
+type EnvironmentDBs struct {
+	Config    DBConfigPrefix           `json:"config" bson:"config"`
+	Databases map[string]DBReference   `json:"databases" bson:"databases"`
+}
+
+// DBConfigPrefix holds DB prefix configuration
+type DBConfigPrefix struct {
+	Prefix string `json:"prefix" bson:"prefix"`
+}
+
+// DBReference holds database reference with cluster name
+type DBReference struct {
+	Cluster        string `json:"cluster" bson:"cluster"`
+	TenantSpecific bool   `json:"tenantSpecific" bson:"tenantSpecific"`
 }
 
 // ControllerUpdate holds controller update data
