@@ -106,7 +106,7 @@ func (c *Controller) Setup(r *chi.Mux) error {
 	r.Use(middleware.UserACL())
 	r.Use(middleware.SoajsRoutes()) // Handle /soajs/* routes after MT populates context
 	r.Use(middleware.Traffic(c.registry))
-	r.Use(middleware.LastSeen())
+	r.Use(middleware.LastSeen(c.registry, c.awareness))
 
 	// Final handler - proxy to service
 	r.HandleFunc("/*", c.handleRequest)

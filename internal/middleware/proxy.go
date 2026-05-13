@@ -1,6 +1,10 @@
 package middleware
 
 import (
+	"context"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -56,6 +60,13 @@ func GotoService(prov provision.Provision, reg registry.Registry, aw awareness.A
 			serviceParams := soajsCtx.Controller.ServiceParams
 			if serviceParams == nil || serviceParams.URLInfo == nil {
 				next.ServeHTTP(w, r)
+				return
+			}
+
+			// Check for roaming header - if present and valid, handle roaming
+			// This must happen before normal service routing
+			if HandleRoaming(w, r, soajsCtx, reg) {
+				// Roaming was handled (success or error)
 				return
 			}
 
@@ -147,8 +158,19 @@ func buildTargetURL(host string, port int, path string, query string) string {
 }
 
 func proxyRequest(w http.ResponseWriter, r *http.Request, targetURL string, soajsCtx *SOAJSContext) {
-	// Create proxy request
-	proxyReq, err := http.NewRequestWithContext(r.Context(), r.Method, targetURL, r.Body)
+	// Get request timeout from service params (with default fallback)
+	requestTimeout := 30 * time.Second
+	if soajsCtx.Controller != nil && soajsCtx.Controller.ServiceParams != nil {
+		// Check if service has custom timeout
+		// TODO: Read from registry.services[name].requestTimeout
+	}
+
+	// Create context with timeout for the request
+	ctx, cancel := context.WithTimeout(r.Context(), requestTimeout)
+	defer cancel()
+
+	// Create proxy request with timeout context
+	proxyReq, err := http.NewRequestWithContext(ctx, r.Method, targetURL, r.Body)
 	if err != nil {
 		soajsCtx.Log.Error("failed to create proxy request")
 		WriteError(w, http.StatusBadGateway, config.ErrCodeServiceNotFound, "Failed to proxy request")
@@ -162,6 +184,9 @@ func proxyRequest(w http.ResponseWriter, r *http.Request, targetURL string, soaj
 	proxyReq.Header.Set("X-Forwarded-For", getClientIP(r))
 	proxyReq.Header.Set("X-Forwarded-Host", r.Host)
 	proxyReq.Header.Set("X-Forwarded-Proto", getScheme(r))
+
+	// Handle soajsauth header - convert to session cookie
+	handleSoajsAuth(r, proxyReq, soajsCtx)
 
 	// Inject SOAJS context if configured
 	if soajsCtx.Tenant != nil {
@@ -305,4 +330,131 @@ func injectSOAJSHeaders(req *http.Request, soajsCtx *SOAJSContext) {
 // stripPrefix removes a prefix from the path
 func stripPrefix(path, prefix string) string {
 	return strings.TrimPrefix(path, prefix)
+}
+
+// handleSoajsAuth checks for soajsauth header/query and converts to session cookie
+// Note: Session config should be obtained from registry.serviceConfig.session
+// Currently uses defaults - will be enhanced when registry is available in context
+func handleSoajsAuth(r, proxyReq *http.Request, soajsCtx *SOAJSContext) {
+	// Check for soajsauth header
+	soajsauth := r.Header.Get("soajsauth")
+	if soajsauth == "" {
+		// Check query params
+		soajsauth = r.URL.Query().Get("soajsauth")
+	}
+
+	if soajsauth == "" {
+		return
+	}
+
+	// TODO: Get session config from registry.serviceConfig.session
+	// For now, use ServicesConfig if available
+	sessionSecret := ""
+	sessionName := "soajs.sid"
+
+	if soajsCtx.ServicesConfig != nil {
+		if session, ok := soajsCtx.ServicesConfig["session"].(map[string]interface{}); ok {
+			if secret, ok := session["secret"].(string); ok && secret != "" {
+				sessionSecret = secret
+			}
+			if name, ok := session["name"].(string); ok && name != "" {
+				sessionName = name
+			}
+		}
+	}
+
+	// If no session secret, we can't create the cookie
+	if sessionSecret == "" {
+		if soajsCtx.Log != nil {
+			soajsCtx.Log.Debug("soajsauth found but no session secret configured")
+		}
+		return
+	}
+
+	// Convert soajsauth to session cookie
+	cookie := setSessionCookie(soajsauth, sessionSecret, sessionName)
+	if cookie == "" {
+		return
+	}
+
+	// Get existing cookies and append
+	cookies := proxyReq.Header.Get("Cookie")
+	if cookies != "" {
+		cookies = cookies + "; " + cookie
+	} else {
+		cookies = cookie
+	}
+	proxyReq.Header.Set("Cookie", cookies)
+}
+
+// setSessionCookie converts soajsauth to a signed session cookie
+// soajsauth format: "Basic BASE64(soajs:MASKED_SESSION_ID)"
+func setSessionCookie(auth, secret, cookieName string) string {
+	// Decode Base64 - format is "Basic BASE64(...)"
+	auth = strings.TrimSpace(auth)
+	parts := strings.Split(auth, "Basic ")
+	if len(parts) < 2 {
+		return ""
+	}
+
+	decoded, err := base64.StdEncoding.DecodeString(parts[1])
+	if err != nil {
+		return ""
+	}
+
+	// Format is "soajs:MASKED_SESSION_ID"
+	ascii := string(decoded)
+	if !strings.HasPrefix(ascii, "soajs:") {
+		return ""
+	}
+
+	masked := strings.TrimPrefix(ascii, "soajs:")
+
+	// Unmask the session ID
+	sessionID := umaskSessionID(masked)
+	if sessionID == "" {
+		return ""
+	}
+
+	// Sign the session ID with HMAC-SHA256
+	signed := "s:" + signCookie(sessionID, secret)
+
+	return cookieName + "=" + signed
+}
+
+// umaskSessionID decyphers the session ID using the cypher code prefix
+func umaskSessionID(masked string) string {
+	if len(masked) < 3 {
+		return ""
+	}
+
+	styleCode := masked[0:3]
+	sid := masked[3:]
+
+	if len(sid) != 32 {
+		return sid // Return as-is if not expected length
+	}
+
+	// Apply decypher based on style code
+	switch styleCode {
+	case "C01":
+		// Swap positions: 0-2, 11, 4-6, 15, 8-10, 3, 12-14, 7, 16+
+		return sid[0:3] + string(sid[11]) + sid[4:7] + string(sid[15]) + sid[8:11] + string(sid[3]) + sid[12:15] + string(sid[7]) + sid[16:]
+	case "C02":
+		return sid[0:4] + string(sid[12]) + sid[5:9] + string(sid[15]) + sid[10:12] + string(sid[4]) + sid[13:15] + string(sid[9]) + sid[16:]
+	case "C03":
+		return sid[0:5] + string(sid[13]) + sid[6:11] + string(sid[15]) + sid[12:13] + string(sid[5]) + sid[14:15] + string(sid[11]) + sid[16:]
+	default:
+		return sid
+	}
+}
+
+// signCookie creates HMAC-SHA256 signature for session cookie
+func signCookie(val, secret string) string {
+	h := hmac.New(sha256.New, []byte(secret))
+	h.Write([]byte(val))
+	signature := base64.StdEncoding.EncodeToString(h.Sum(nil))
+	// Remove trailing = signs like Node.js does
+	signature = strings.TrimRight(signature, "=")
+	return val + "." + signature
 }

@@ -13,6 +13,7 @@ const (
 	ErrCodeMaintenanceMode   = 157
 	ErrCodeRateLimitExceeded = 158
 	ErrCodeIPBanned          = 159
+	ErrCodeRoamingFailed     = 165
 )
 
 // Default error messages
@@ -28,6 +29,7 @@ var DefaultErrors = map[int]string{
 	ErrCodeMaintenanceMode:   "System is under maintenance",
 	ErrCodeRateLimitExceeded: "Rate limit exceeded",
 	ErrCodeIPBanned:          "IP address is banned",
+	ErrCodeRoamingFailed:     "Roaming: Unable to login roamed user!",
 }
 
 // Header names
@@ -35,6 +37,7 @@ const (
 	HeaderSOAJSKey         = "key"
 	HeaderSOAJSAccessToken = "access_token"
 	HeaderSOAJSTenant      = "soajsinjectobj"
+	HeaderSOAJSRoaming     = "soajsroaming"
 	HeaderContentType      = "Content-Type"
 	HeaderAuthorization    = "Authorization"
 )
