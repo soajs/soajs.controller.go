@@ -13,26 +13,51 @@ spec:
     - name: http
       port: 4000
       targetPort: 4000
+      protocol: TCP
     - name: maintenance
       port: 5000
       targetPort: 5000
+      protocol: TCP
   selector:
     app: soajs-controller
 ---
+# External LoadBalancer for public access
 apiVersion: v1
 kind: Service
 metadata:
   name: soajs-gateway
   labels:
     app: soajs-controller
+  annotations:
+    # Add cloud provider specific annotations as needed
+    # service.beta.kubernetes.io/aws-load-balancer-type: "nlb"
 spec:
   type: LoadBalancer
   ports:
     - name: http
       port: 80
       targetPort: 4000
+      protocol: TCP
     - name: https
       port: 443
+      targetPort: 4000
+      protocol: TCP
+  selector:
+    app: soajs-controller
+---
+# Headless service for internal DNS-based discovery
+apiVersion: v1
+kind: Service
+metadata:
+  name: soajs-controller-headless
+  labels:
+    app: soajs-controller
+spec:
+  type: ClusterIP
+  clusterIP: None
+  ports:
+    - name: http
+      port: 4000
       targetPort: 4000
   selector:
     app: soajs-controller

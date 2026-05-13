@@ -2,14 +2,57 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: soajs-config
+  labels:
+    app: soajs-controller
 data:
-  environment: "production"
+  # Environment name (e.g., dashboard, dev, production)
+  environment: "dashboard"
+  # Log level (debug, info, warn, error)
   log-level: "info"
 ---
 apiVersion: v1
 kind: Secret
 metadata:
   name: soajs-secrets
+  labels:
+    app: soajs-controller
 type: Opaque
 stringData:
+  # MongoDB connection URI
+  # Note: Go controller uses direct URI (does not support SOAJS_PROFILE)
   mongo-uri: "mongodb://mongo:27017/core_provision"
+---
+# HorizontalPodAutoscaler for auto-scaling
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: soajs-controller-hpa
+  labels:
+    app: soajs-controller
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: soajs-controller
+  minReplicas: 2
+  maxReplicas: 10
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+---
+# PodDisruptionBudget for high availability
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: soajs-controller-pdb
+  labels:
+    app: soajs-controller
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: soajs-controller

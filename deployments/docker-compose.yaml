@@ -6,16 +6,26 @@ services:
       context: ..
       dockerfile: deployments/Dockerfile
     ports:
-      - "4000:4000"
-      - "5000:5000"
+      - "4000:4000"   # API port
+      - "5000:5000"   # Maintenance port
     environment:
-      - SOAJS_ENV=dev
+      # Required: Environment name (e.g., dashboard, dev, production)
+      - SOAJS_ENV=dashboard
+      # MongoDB connection (Go uses direct URI, not SOAJS_PROFILE)
       - SOAJS_MONGO_URI=mongodb://mongo:27017
       - SOAJS_MONGO_DATABASE=core_provision
+      # Logging
       - SOAJS_LOG_LEVEL=debug
     depends_on:
       mongo:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:5000/heartbeat"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
     networks:
       - soajs
 

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/soajs/soajs.controller.go/pkg/types"
@@ -59,10 +60,27 @@ func (a *HAAwareness) GetHost(serviceName, version string) (*types.HostInfo, err
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	// Look up service in Kubernetes
-	svcName := fmt.Sprintf("soajs-service-%s-v%s", serviceName, version)
+	// Get environment from registry (matches Node.js behavior)
+	env := "dev"
+	if a.registry != nil {
+		env = strings.ToLower(a.registry.GetEnvironment())
+	}
+
+	// Build service name matching Node.js convention: {env}-{serviceName}-v{version}-service
+	// Example: dashboard-urac-v1-service
+	svcName := fmt.Sprintf("%s-%s-v%s-service", env, serviceName, version)
+
+	a.logger.Debug("looking up k8s service",
+		zap.String("service", svcName),
+		zap.String("namespace", a.namespace),
+	)
+
 	svc, err := a.k8sClient.CoreV1().Services(a.namespace).Get(ctx, svcName, metav1.GetOptions{})
 	if err != nil {
+		a.logger.Debug("k8s service not found, falling back to default awareness",
+			zap.String("service", svcName),
+			zap.Error(err),
+		)
 		// Fall back to default awareness
 		return a.DefaultAwareness.GetHost(serviceName, version)
 	}
@@ -73,6 +91,12 @@ func (a *HAAwareness) GetHost(serviceName, version string) (*types.HostInfo, err
 	if len(svc.Spec.Ports) > 0 {
 		port = svc.Spec.Ports[0].Port
 	}
+
+	a.logger.Debug("found k8s service",
+		zap.String("service", svcName),
+		zap.String("host", host),
+		zap.Int32("port", port),
+	)
 
 	return &types.HostInfo{
 		Name:    serviceName,

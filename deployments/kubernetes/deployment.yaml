@@ -12,36 +12,63 @@ spec:
   selector:
     matchLabels:
       app: soajs-controller
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
   template:
     metadata:
       labels:
         app: soajs-controller
+        soajs.service: "true"
+        soajs.service.name: controller
     spec:
+      terminationGracePeriodSeconds: 30
       containers:
         - name: controller
-          image: soajs/controller:latest
+          image: soajs/controller-go:latest
+          imagePullPolicy: Always
           ports:
             - name: http
               containerPort: 4000
+              protocol: TCP
             - name: maintenance
               containerPort: 5000
+              protocol: TCP
           env:
+            # Required: Environment name (matches Node.js)
             - name: SOAJS_ENV
               valueFrom:
                 configMapKeyRef:
                   name: soajs-config
                   key: environment
+            # HA mode for Kubernetes awareness (matches Node.js value)
+            - name: SOAJS_DEPLOY_HA
+              value: "kubernetes"
+            # Kubernetes namespace for service discovery
+            - name: SOAJS_DEPLOY_HA_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            # MongoDB connection (Go uses direct URI, not SOAJS_PROFILE)
             - name: SOAJS_MONGO_URI
               valueFrom:
                 secretKeyRef:
                   name: soajs-secrets
                   key: mongo-uri
-            - name: SOAJS_DEPLOY_HA
-              value: "true"
+            - name: SOAJS_MONGO_DATABASE
+              value: "core_provision"
+            # Logging
+            - name: SOAJS_LOG_LEVEL
+              valueFrom:
+                configMapKeyRef:
+                  name: soajs-config
+                  key: log-level
           resources:
             requests:
               memory: "64Mi"
-              cpu: "100m"
+              cpu: "50m"
             limits:
               memory: "256Mi"
               cpu: "500m"
@@ -51,9 +78,27 @@ spec:
               port: maintenance
             initialDelaySeconds: 10
             periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 3
           readinessProbe:
             httpGet:
               path: /heartbeat
               port: maintenance
             initialDelaySeconds: 5
             periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app: soajs-controller
+                topologyKey: kubernetes.io/hostname
