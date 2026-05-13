@@ -35,9 +35,6 @@ func SoajsRoutes() Middleware {
 			case "/soajs/acl":
 				handleSoajsACL(w, r, soajsCtx)
 				return
-			case "/soajs/env":
-				handleSoajsEnv(w, r, soajsCtx)
-				return
 			case "/soajs/proxy":
 				// /soajs/proxy is handled by gotoService middleware
 				// It extracts proxyRoute query param and routes to that service
@@ -113,19 +110,6 @@ func handleSoajsACL(w http.ResponseWriter, r *http.Request, soajsCtx *SOAJSConte
 	response["data"] = data
 
 	// Write response
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(response)
-}
-
-// handleSoajsEnv handles the /soajs/env endpoint
-func handleSoajsEnv(w http.ResponseWriter, r *http.Request, soajsCtx *SOAJSContext) {
-	response := map[string]interface{}{
-		"result": true,
-		"data": map[string]interface{}{
-			"env": soajsCtx.Log.Info, // placeholder
-		},
-	}
-
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(response)
 }
