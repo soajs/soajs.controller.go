@@ -1,306 +1,147 @@
 # Go Project Structure
 
-## Complete Directory Tree
+## Directory Tree
 
 ```
-soajs-controller-go/
+soajs.controller.go/
 ├── cmd/
 │   └── controller/
-│       └── main.go                 # Application entry point
-│
+│       └── main.go              # Application entry point
 ├── internal/
-│   ├── config/
-│   │   ├── config.go               # Configuration loader
-│   │   └── defaults.go             # Default configuration values
-│   │
-│   ├── server/
-│   │   ├── server.go               # HTTP server setup
-│   │   ├── controller.go           # Controller initialization
-│   │   └── maintenance.go          # Maintenance server
-│   │
-│   ├── middleware/
-│   │   ├── chain.go                # Middleware chain builder
-│   │   ├── context.go              # SOAJS context middleware
-│   │   ├── cors.go                 # CORS handling
-│   │   ├── favicon.go              # Favicon handler
-│   │   ├── response.go             # Response formatting
-│   │   ├── enhancer.go             # Request enrichment
-│   │   ├── maintenance.go          # Maintenance mode check
-│   │   ├── ip2ban.go               # IP blacklist
-│   │   ├── url.go                  # URL parsing
-│   │   ├── key.go                  # API key extraction
-│   │   ├── keyacl.go               # Key-based ACL
-│   │   ├── awareness.go            # Service discovery
-│   │   ├── awarenessenv.go         # Env-aware discovery
-│   │   ├── proxy.go                # Request proxy (gotoService)
-│   │   ├── mt.go                   # Multi-tenant resolution
-│   │   ├── oauth.go                # OAuth validation
-│   │   ├── traffic.go              # Rate limiting
-│   │   └── lastseen.go             # Activity tracking
-│   │
-│   ├── registry/
-│   │   ├── registry.go             # Registry interface
-│   │   ├── mongo.go                # MongoDB implementation
-│   │   ├── local.go                # Local/file implementation
-│   │   └── cache.go                # In-memory caching
-│   │
-│   ├── provision/
-│   │   ├── provision.go            # Provision interface
-│   │   ├── tenant.go               # Tenant operations
-│   │   ├── key.go                  # Key operations
-│   │   ├── product.go              # Product operations
-│   │   └── oauth.go                # OAuth model
-│   │
 │   ├── awareness/
-│   │   ├── awareness.go            # Awareness interface
-│   │   ├── custom.go               # Custom awareness mode
-│   │   ├── ha.go                   # Kubernetes/HA mode
-│   │   └── health.go               # Health check logic
-│   │
-│   └── lib/
-│       ├── http.go                 # HTTP utilities
-│       ├── ip.go                   # IP detection
-│       ├── url.go                  # URL parsing
-│       ├── header.go               # Header manipulation
-│       ├── request.go              # Request utilities
-│       └── apipath.go              # API path regex builder
-│
+│   │   ├── awareness.go         # Awareness interface
+│   │   ├── custom.go            # Custom mode (direct MongoDB)
+│   │   └── ha.go                # HA mode (Kubernetes)
+│   ├── config/
+│   │   ├── config.go            # Configuration loading
+│   │   ├── defaults.go          # Default values & constants
+│   │   └── config_test.go       # Configuration tests
+│   ├── lib/
+│   │   └── header.go            # Header utilities
+│   ├── middleware/
+│   │   ├── awareness.go         # Service discovery middleware
+│   │   ├── chain.go             # Middleware chaining
+│   │   ├── context.go           # SOAJS context initialization
+│   │   ├── cors.go              # CORS handling
+│   │   ├── enhancer.go          # Request enhancement
+│   │   ├── favicon.go           # Favicon serving
+│   │   ├── ip2ban.go            # IP blocking
+│   │   ├── key.go               # Key validation/decryption
+│   │   ├── keyacl.go            # Key-level ACL
+│   │   ├── lastseen.go          # Last seen updates
+│   │   ├── maintenance.go       # Maintenance mode
+│   │   ├── monitor.go           # Request monitoring
+│   │   ├── mt.go                # Multi-tenant middleware
+│   │   ├── mt_whitelist.go      # MT whitelist handling
+│   │   ├── oauth.go             # OAuth/JWT validation
+│   │   ├── proxy.go             # Backend proxying
+│   │   ├── response.go          # Response formatting
+│   │   ├── roaming.go           # OAuth roaming
+│   │   ├── soajsroutes.go       # /soajs/* route handlers
+│   │   ├── traffic.go           # Traffic control
+│   │   ├── url.go               # URL parsing
+│   │   └── *_test.go            # Test files
+│   ├── provision/
+│   │   └── provision.go         # Tenant/key/product management
+│   ├── registry/
+│   │   ├── cache.go             # Registry caching
+│   │   ├── local.go             # Local registry
+│   │   ├── mongo.go             # MongoDB registry
+│   │   └── registry.go          # Registry interface
+│   ├── security/
+│   │   └── authorization.go     # Security utilities
+│   └── server/
+│       ├── controller.go        # Controller setup
+│       ├── maintenance.go       # Maintenance server
+│       └── server.go            # HTTP server
 ├── pkg/
-│   ├── core/
-│   │   ├── core.go                 # Core module facade
-│   │   ├── logger.go               # Logger wrapper
-│   │   ├── security.go             # Security utilities
-│   │   ├── key.go                  # Key encryption/decryption
-│   │   ├── meta.go                 # Metadata utilities
-│   │   ├── validator.go            # JSON schema validation
-│   │   └── error.go                # Error handling
-│   │
 │   ├── mongo/
-│   │   ├── client.go               # MongoDB client wrapper
-│   │   ├── crud.go                 # CRUD operations
-│   │   ├── index.go                # Index management
-│   │   └── aggregation.go          # Aggregation helpers
-│   │
-│   ├── urac/
-│   │   ├── driver.go               # URAC driver (unified API)
-│   │   ├── user.go                 # User service (auth, tenant access)
-│   │   ├── group.go                # Group service (ACL resolution)
-│   │   ├── acl/
-│   │   │   └── resolver.go         # ACL permission resolver
-│   │   ├── hasher/
-│   │   │   ├── hasher.go           # Password hashing (bcrypt + SHA)
-│   │   │   └── hasher_test.go      # Hasher tests (94.4% coverage)
-│   │   └── model/
-│   │       ├── user.go             # User model (full SOAJS schema)
-│   │       ├── user_test.go        # User model tests (94.4% coverage)
-│   │       ├── group.go            # Group model (ACL support)
-│   │       └── group_test.go       # Group model tests (94.4% coverage)
-│   │
-│   └── types/
-│       ├── tenant.go               # Tenant types
-│       ├── key.go                  # Key types
-│       ├── product.go              # Product types
-│       ├── service.go              # Service types
-│       ├── registry.go             # Registry types
-│       └── context.go              # Context types
-│
-├── api/
-│   └── openapi.yaml                # OpenAPI specification
-│
-├── configs/
-│   ├── default.yaml                # Default configuration
-│   └── profiles/
-│       ├── single.yaml             # Single MongoDB profile
-│       ├── replica3.yaml           # Replica set profile
-│       └── solo.yaml               # Solo profile
-│
-├── scripts/
-│   ├── build.sh                    # Build script
-│   ├── test.sh                     # Test runner
-│   └── docker-build.sh             # Docker build script
-│
-├── deployments/
-│   ├── Dockerfile                  # Container image
-│   ├── docker-compose.yaml         # Local development
-│   └── kubernetes/
-│       ├── deployment.yaml         # K8s deployment
-│       ├── service.yaml            # K8s service
-│       └── configmap.yaml          # K8s configmap
-│
+│   │   ├── client.go            # MongoDB client wrapper
+│   │   └── options.go           # Connection options
+│   ├── security/
+│   │   ├── key.go               # Key encryption/decryption
+│   │   └── hash.go              # Password hashing
+│   ├── types/
+│   │   ├── context.go           # Context types
+│   │   ├── key.go               # Key types
+│   │   ├── product.go           # Product/package types
+│   │   ├── registry.go          # Registry types
+│   │   ├── service.go           # Service types
+│   │   └── tenant.go            # Tenant types
+│   └── urac/
+│       ├── driver.go            # URAC driver
+│       └── types.go             # URAC types
 ├── test/
-│   ├── integration/
-│   │   ├── gateway_test.go         # Gateway integration tests
-│   │   ├── mt_test.go              # Multi-tenant tests
-│   │   └── proxy_test.go           # Proxy tests
-│   └── fixtures/
-│       ├── tenants.json            # Test tenant data
-│       ├── products.json           # Test product data
-│       └── keys.json               # Test key data
-│
-├── go.mod                          # Go module definition
-├── go.sum                          # Dependency checksums
-├── Makefile                        # Build automation
-└── README.md                       # Project documentation
+│   └── integration/
+│       ├── mocks/
+│       │   └── services.go      # Mock services
+│       ├── gateway_routes_test.go
+│       ├── http_methods_test.go
+│       ├── maintenance_test.go
+│       └── roaming_test.go
+├── go.mod                       # Go module definition
+├── go.sum                       # Dependency checksums
+└── Makefile                     # Build commands
 ```
 
-## Package Purposes
+## Package Descriptions
 
-### `cmd/controller/`
-Application entry point. Initializes configuration, creates server instance, and starts the HTTP listener.
+### `cmd/controller`
+Application entry point. Initializes configuration, creates the controller, and starts the HTTP server.
 
-### `internal/config/`
-Configuration management including:
-- Environment variable loading
-- YAML file parsing
-- Configuration validation
-- Default value handling
+### `internal/awareness`
+Service discovery for locating backend services. Supports two modes:
+- **Custom**: Direct MongoDB queries for service hosts
+- **HA**: Kubernetes service discovery via DNS
 
-### `internal/server/`
-HTTP server lifecycle:
-- Server initialization
-- Middleware chain setup
-- Graceful shutdown
-- Maintenance server for health checks
+### `internal/config`
+Configuration management using Viper. Loads from environment variables and config files. Defines all configuration structs and defaults.
 
-### `internal/middleware/`
-All 17 middleware components, each with:
-- Configuration options
-- Handler implementation
-- Unit tests
+### `internal/middleware`
+The 17+ middleware layers that process every request. Each file implements a single middleware concern following the `func(http.Handler) http.Handler` pattern.
 
-### `internal/registry/`
-Service registry implementation:
-- MongoDB-backed persistent storage
-- In-memory caching with TTL
-- Environment-aware configuration
-- Hot-reload support
+### `internal/provision`
+Manages tenant, application, key, and product data. Loads from MongoDB and provides lookup methods. Includes OAuth token model.
 
-### `internal/provision/`
-Tenant and key management:
-- Tenant loading and caching
-- API key validation
-- Product/package resolution
-- OAuth model integration
+### `internal/registry`
+Registry management for environment configuration. Loads service configurations, custom settings, and resource definitions from MongoDB.
 
-### `internal/awareness/`
-Service discovery:
-- Custom mode (direct registration)
-- HA mode (Kubernetes service discovery)
-- Health checking
-- Load balancing
+### `internal/server`
+HTTP server setup including:
+- Main gateway server (port 4000)
+- Maintenance server (port 5001)
+- Controller orchestration
 
-### `internal/lib/`
-Shared utilities:
-- HTTP helpers
-- IP address detection
-- URL parsing
-- Header manipulation
+### `pkg/mongo`
+MongoDB client wrapper providing connection pooling and database selection.
 
-### `pkg/core/`
-Core module (public API):
-- Logger factory
-- Security utilities
-- Key encryption
-- Error handling
+### `pkg/security`
+Cryptographic utilities:
+- Key encryption/decryption (AES)
+- Password hashing (bcrypt)
 
-### `pkg/mongo/`
-MongoDB wrapper:
-- Connection pooling
-- CRUD operations
-- Index management
-- Aggregation pipelines
+### `pkg/types`
+Shared type definitions used across packages. Includes BSON tags for MongoDB mapping.
 
-### `pkg/urac/`
-User access control (fully implemented):
-- User authentication with bcrypt + optional SHA256/SHA512 pre-hashing
-- Multi-tenant access checking with roaming support
-- Group management with package-based ACL
-- ACL resolver with environment/service/version/API permissions
-- ACL merging using OR logic across groups
+### `pkg/urac`
+URAC (User Registration and Access Control) driver for user lookup and authentication.
 
-### `pkg/types/`
-Shared type definitions:
-- Data transfer objects
-- Configuration structs
-- Interface definitions
+## File Counts
 
-## File-by-File Breakdown
-
-### Entry Point
-
-**`cmd/controller/main.go`**
-```go
-package main
-
-import (
-    "context"
-    "os"
-    "os/signal"
-    "syscall"
-
-    "github.com/soajs/soajs.controller.go/internal/config"
-    "github.com/soajs/soajs.controller.go/internal/server"
-)
-
-func main() {
-    cfg := config.Load()
-    srv := server.New(cfg)
-
-    ctx, cancel := signal.NotifyContext(
-        context.Background(),
-        syscall.SIGINT,
-        syscall.SIGTERM,
-    )
-    defer cancel()
-
-    srv.Run(ctx)
-}
-```
-
-### Key Configuration Files
-
-**`internal/config/config.go`**
-- Loads configuration from environment and files
-- Validates required settings
-- Provides typed access to configuration
-
-**`internal/server/controller.go`**
-- Initializes all dependencies
-- Sets up middleware chain
-- Creates HTTP server
-
-**`internal/server/maintenance.go`**
-- Maintenance port server
-- Health endpoints
-- Reload triggers
-
-### Core Middleware Files
-
-**`internal/middleware/context.go`**
-- Creates `SOAJSContext` for each request
-- Attaches logger, controller context
-
-**`internal/middleware/mt.go`**
-- Multi-tenant resolution (largest middleware)
-- ACL checking
-- OAuth integration point
-
-**`internal/middleware/proxy.go`**
-- Request forwarding to backend services
-- Header manipulation
-- Error handling
-
-### Data Layer Files
-
-**`internal/registry/mongo.go`**
-- MongoDB operations for registry
-- Service configuration storage
-
-**`internal/provision/tenant.go`**
-- Tenant CRUD operations
-- Caching layer
-
-**`pkg/mongo/client.go`**
-- MongoDB connection management
-- Connection pooling
-- Reconnection logic
+| Directory | Go Files | Test Files |
+|-----------|----------|------------|
+| cmd/ | 1 | 0 |
+| internal/awareness/ | 3 | 0 |
+| internal/config/ | 2 | 1 |
+| internal/lib/ | 1 | 0 |
+| internal/middleware/ | 20 | 8 |
+| internal/provision/ | 1 | 0 |
+| internal/registry/ | 4 | 0 |
+| internal/security/ | 1 | 0 |
+| internal/server/ | 3 | 0 |
+| pkg/mongo/ | 2 | 0 |
+| pkg/security/ | 2 | 0 |
+| pkg/types/ | 6 | 0 |
+| pkg/urac/ | 2 | 0 |
+| test/integration/ | 4 | 0 |
+| **Total** | **52** | **9** |
