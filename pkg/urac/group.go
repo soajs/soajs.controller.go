@@ -27,9 +27,17 @@ type GroupService struct {
 	driver *Driver
 }
 
+// collection returns the groups collection from the appropriate database
+func (s *GroupService) collection() *mongo.Collection {
+	if s.driver.uracDB != "" {
+		return s.driver.mongo.UseDatabase(s.driver.uracDB).Collection("groups")
+	}
+	return s.driver.mongo.Collection("groups")
+}
+
 // GetByID retrieves a group by ID
 func (s *GroupService) GetByID(ctx context.Context, id string) (*Group, error) {
-	coll := s.driver.mongo.Collection("groups")
+	coll := s.collection()
 
 	var group Group
 	err := coll.FindOne(ctx, bson.M{"_id": id}).Decode(&group)
@@ -45,7 +53,7 @@ func (s *GroupService) GetByID(ctx context.Context, id string) (*Group, error) {
 
 // GetByCode retrieves a group by code
 func (s *GroupService) GetByCode(ctx context.Context, code string) (*Group, error) {
-	coll := s.driver.mongo.Collection("groups")
+	coll := s.collection()
 
 	var group Group
 	err := coll.FindOne(ctx, bson.M{"code": code}).Decode(&group)
@@ -61,7 +69,7 @@ func (s *GroupService) GetByCode(ctx context.Context, code string) (*Group, erro
 
 // GetByCodeAndTenant retrieves a group by code and tenant
 func (s *GroupService) GetByCodeAndTenant(ctx context.Context, code, tenantID string) (*Group, error) {
-	coll := s.driver.mongo.Collection("groups")
+	coll := s.collection()
 
 	var group Group
 	err := coll.FindOne(ctx, bson.M{
@@ -91,12 +99,24 @@ func (s *GroupService) GetUserGroups(ctx context.Context, userID string) ([]*Gro
 
 // GetGroupsByCodes retrieves groups by their codes
 func (s *GroupService) GetGroupsByCodes(ctx context.Context, codes []string) ([]*Group, error) {
+	return s.GetGroupsByCodesAndTenant(ctx, codes, "")
+}
+
+// GetGroupsByCodesAndTenant retrieves groups by their codes for a specific tenant
+func (s *GroupService) GetGroupsByCodesAndTenant(ctx context.Context, codes []string, tenantID string) ([]*Group, error) {
 	if len(codes) == 0 {
 		return []*Group{}, nil
 	}
 
-	coll := s.driver.mongo.Collection("groups")
-	cursor, err := coll.Find(ctx, bson.M{"code": bson.M{"$in": codes}})
+	coll := s.collection()
+
+	// Build query - filter by codes and optionally by tenant
+	query := bson.M{"code": bson.M{"$in": codes}}
+	if tenantID != "" {
+		query["tenant.id"] = tenantID
+	}
+
+	cursor, err := coll.Find(ctx, query)
 	if err != nil {
 		return nil, fmt.Errorf("failed to find groups: %w", err)
 	}
@@ -112,7 +132,7 @@ func (s *GroupService) GetGroupsByCodes(ctx context.Context, codes []string) ([]
 
 // GetGroupsByTenant retrieves all groups for a tenant
 func (s *GroupService) GetGroupsByTenant(ctx context.Context, tenantID string) ([]*Group, error) {
-	coll := s.driver.mongo.Collection("groups")
+	coll := s.collection()
 
 	cursor, err := coll.Find(ctx, bson.M{"tenant.id": tenantID})
 	if err != nil {

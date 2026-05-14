@@ -9,8 +9,10 @@ import (
 	"github.com/soajs/soajs.controller.go/internal/config"
 	"github.com/soajs/soajs.controller.go/internal/provision"
 	"github.com/soajs/soajs.controller.go/pkg/types"
+	"github.com/soajs/soajs.controller.go/pkg/urac"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
+	"go.uber.org/zap"
 )
 
 // SoajsRoutesSetup middleware runs BEFORE OAuth/UserACL to configure /soajs/* routes
@@ -129,7 +131,7 @@ func handleSoajsACL(w http.ResponseWriter, r *http.Request, soajsCtx *SOAJSConte
 	// Initialize response fields
 	var acl map[string]interface{}
 	var packages []string
-	var urac map[string]interface{}
+	var uracInfo map[string]interface{}
 
 	// Check if we have service params
 	if soajsCtx.Controller != nil && soajsCtx.Controller.ServiceParams != nil {
@@ -141,18 +143,62 @@ func handleSoajsACL(w http.ResponseWriter, r *http.Request, soajsCtx *SOAJSConte
 			productCode = soajsCtx.Key.ProductCode
 		}
 
-		// Priority 1: Try to get packages and user info from OAuth token's embedded user object
-		// The token contains the full user profile with groupsConfig
+		// Get user ID from OAuth token's user info
+		var userID string
 		if params.UserInfo != nil {
-			// Get user ID for urac response
-			if userID, ok := params.UserInfo["_id"].(string); ok && userID != "" {
-				urac = map[string]interface{}{
+			if id, ok := params.UserInfo["_id"].(string); ok && id != "" {
+				userID = id
+				uracInfo = map[string]interface{}{
 					"_id": userID,
 				}
 			}
+		}
 
-			// Get packages from token's embedded groupsConfig
+		// Priority 1: Try to get packages from OAuth token's embedded groupsConfig
+		if params.UserInfo != nil {
 			packages = getPackagesFromUserInfo(params.UserInfo, productCode)
+		}
+
+		// Priority 2: If no packages from token, fetch from URAC using user's groups
+		// The token's user object often doesn't have groupsConfig - we need to build it from user's groups
+		if len(packages) == 0 && userID != "" && params.UracDriver != nil {
+			if uracDriver, ok := params.UracDriver.(*urac.Driver); ok {
+				ctx := r.Context()
+				// Get tenant ID from context - user may have access via AllowedTenants
+				tenantID := ""
+				if soajsCtx.Tenant != nil {
+					tenantID = soajsCtx.Tenant.ID
+				}
+				soajsCtx.Log.Debug("GetAllowedPackagesForTenant called",
+					zap.String("userID", userID),
+					zap.String("productCode", productCode),
+					zap.String("tenantID", tenantID),
+					zap.String("uracDB", uracDriver.GetDatabase()),
+				)
+				pkgs, err := uracDriver.GetAllowedPackagesForTenant(ctx, userID, productCode, tenantID)
+				if err != nil {
+					soajsCtx.Log.Debug("GetAllowedPackagesForTenant error",
+						zap.Error(err),
+						zap.String("userID", userID),
+					)
+				} else if len(pkgs) > 0 {
+					packages = pkgs
+					soajsCtx.Log.Debug("GetAllowedPackagesForTenant success",
+						zap.Int("count", len(pkgs)),
+						zap.Strings("packages", pkgs),
+					)
+				} else {
+					soajsCtx.Log.Debug("GetAllowedPackagesForTenant returned empty")
+				}
+			} else {
+				soajsCtx.Log.Debug("UracDriver type assertion failed")
+			}
+		} else {
+			soajsCtx.Log.Debug("Skipping GetAllowedPackagesForTenant",
+				zap.Int("existingPackages", len(packages)),
+				zap.String("userID", userID),
+				zap.Bool("hasUracDriver", params.UracDriver != nil),
+			)
 		}
 
 		// If we have packages, fetch and merge ACLs from all of them
@@ -190,9 +236,9 @@ func handleSoajsACL(w http.ResponseWriter, r *http.Request, soajsCtx *SOAJSConte
 			}
 
 			// Get user profile for urac field (if not already set)
-			if urac == nil {
+			if uracInfo == nil {
 				if userID := getUserID(params.User); userID != "" {
-					urac = map[string]interface{}{
+					uracInfo = map[string]interface{}{
 						"_id": userID,
 					}
 				}
@@ -243,7 +289,7 @@ func handleSoajsACL(w http.ResponseWriter, r *http.Request, soajsCtx *SOAJSConte
 		"acl":      acl,
 		"finalACL": finalACL,
 		"packages": packages,
-		"urac":     urac,
+		"urac":     uracInfo,
 		"tenant":   tenant,
 	}
 
@@ -804,3 +850,4 @@ func mergeVersionACL(target, source map[string]interface{}) {
 		}
 	}
 }
+

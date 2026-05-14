@@ -27,7 +27,8 @@ func URL() Middleware {
 
 func parseURL(path string) *types.URLInfo {
 	info := &types.URLInfo{
-		OriginalPath: path,
+		OriginalPath:     path,
+		VersionRequested: false, // Will be set to true if version found in URL
 	}
 
 	// Remove leading slash
@@ -39,27 +40,60 @@ func parseURL(path string) *types.URLInfo {
 		return info
 	}
 
-	// First part is typically the service name
-	info.ServiceName = parts[0]
+	// First part is typically the service name (or service:version)
+	serviceNV := parts[0]
+	info.ServiceName = serviceNV
 
-	// Check for version pattern (v1, v2, etc.)
+	// Check for version in /v1/ or /v1.1/ format (matches Node.js: /v[0-9]+(.[0-9]+)?/)
 	if len(parts) > 1 {
 		if isVersionPattern(parts[1]) {
 			info.ServiceVersion = strings.TrimPrefix(parts[1], "v")
+			info.VersionRequested = true
 			if len(parts) > 2 {
 				info.ServicePath = "/" + strings.Join(parts[2:], "/")
+			} else {
+				info.ServicePath = "/"
 			}
 		} else {
 			info.ServicePath = "/" + strings.Join(parts[1:], "/")
 		}
 	}
 
-	// Default version if not specified
+	// Check for version in service:1 or service:1.1 format (matches Node.js)
 	if info.ServiceVersion == "" {
-		info.ServiceVersion = "1"
+		if idx := strings.Index(serviceNV, ":"); idx != -1 {
+			possibleVersion := serviceNV[idx+1:]
+			// Check if it's a valid version number
+			if isNumericVersion(possibleVersion) {
+				info.ServiceName = serviceNV[:idx]
+				info.ServiceVersion = possibleVersion
+				info.VersionRequested = true
+			}
+		}
 	}
 
+	// NOTE: Do NOT set default version here
+	// The version should be resolved from ACL in the MT middleware if not requested
+	// This matches Node.js behavior in mw/mt/utils.js line 233-243
+
 	return info
+}
+
+// isNumericVersion checks if a string is a valid numeric version (1, 1.0, 1.0.0)
+func isNumericVersion(s string) bool {
+	if len(s) == 0 {
+		return false
+	}
+	for i, c := range s {
+		if c >= '0' && c <= '9' {
+			continue
+		}
+		if c == '.' && i > 0 && i < len(s)-1 {
+			continue
+		}
+		return false
+	}
+	return true
 }
 
 func isVersionPattern(s string) bool {

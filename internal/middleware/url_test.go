@@ -21,14 +21,14 @@ func TestParseURL(t *testing.T) {
 			name:        "service only",
 			path:        "/urac",
 			wantService: "urac",
-			wantVersion: "1",
+			wantVersion: "", // Version resolved from registry later
 			wantPath:    "",
 		},
 		{
 			name:        "service with path",
 			path:        "/urac/user/get",
 			wantService: "urac",
-			wantVersion: "1",
+			wantVersion: "", // Version resolved from registry later
 			wantPath:    "/user/get",
 		},
 		{
@@ -49,14 +49,14 @@ func TestParseURL(t *testing.T) {
 			name:        "empty path",
 			path:        "/",
 			wantService: "",
-			wantVersion: "1",
+			wantVersion: "", // Version resolved from registry later
 			wantPath:    "",
 		},
 		{
 			name:        "deep path no version",
 			path:        "/dashboard/admin/settings/general",
 			wantService: "dashboard",
-			wantVersion: "1",
+			wantVersion: "", // Version resolved from registry later
 			wantPath:    "/admin/settings/general",
 		},
 	}

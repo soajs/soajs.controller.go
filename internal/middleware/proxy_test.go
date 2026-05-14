@@ -150,7 +150,13 @@ func TestGotoService_ReturnsErrorWhenServiceNotFound(t *testing.T) {
 	urlMW := URL()
 	gotoMW := GotoService(prov, reg, aw)
 
+	// The inner handler must call Gotoservice to trigger service resolution
 	handler := contextMW(urlMW(gotoMW(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		soajsCtx := GetSOAJSContext(r.Context())
+		if soajsCtx != nil && soajsCtx.Controller != nil && soajsCtx.Controller.Gotoservice != nil {
+			soajsCtx.Controller.Gotoservice(w, r)
+			return
+		}
 		w.WriteHeader(http.StatusOK)
 	}))))
 
@@ -393,7 +399,7 @@ func TestInjectSOAJSHeaders_Basic(t *testing.T) {
 		},
 	}
 
-	injectSOAJSHeaders(req, soajsCtx)
+	injectSOAJSHeaders(req, soajsCtx, nil, nil)
 
 	header := req.Header.Get("soajsinjectobj")
 	if header == "" {
@@ -422,7 +428,7 @@ func TestInjectSOAJSHeaders_WithNilKey(t *testing.T) {
 		Key: nil, // No key
 	}
 
-	injectSOAJSHeaders(req, soajsCtx)
+	injectSOAJSHeaders(req, soajsCtx, nil, nil)
 
 	header := req.Header.Get("soajsinjectobj")
 	if header == "" {

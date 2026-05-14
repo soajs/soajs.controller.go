@@ -3,6 +3,7 @@ package config
 // Default error codes
 const (
 	ErrCodeInvalidRoute      = 130
+	ErrCodeKeyRequired       = 132
 	ErrCodeInvalidKey        = 150
 	ErrCodeInvalidTenant     = 151
 	ErrCodeInvalidProduct    = 152
@@ -19,6 +20,7 @@ const (
 // Default error messages
 var DefaultErrors = map[int]string{
 	ErrCodeInvalidRoute:      "Invalid route",
+	ErrCodeKeyRequired:       "A valid key is needed to access any API.",
 	ErrCodeInvalidKey:        "Invalid API key",
 	ErrCodeInvalidTenant:     "Invalid tenant",
 	ErrCodeInvalidProduct:    "Invalid product",

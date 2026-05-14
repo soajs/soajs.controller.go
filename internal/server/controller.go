@@ -1,7 +1,10 @@
 package server
 
 import (
+	"fmt"
 	"net/http"
+	"os"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 	chimw "github.com/go-chi/chi/v5/middleware"
@@ -12,18 +15,20 @@ import (
 	"github.com/soajs/soajs.controller.go/internal/registry"
 	"github.com/soajs/soajs.controller.go/pkg/mongo"
 	"github.com/soajs/soajs.controller.go/pkg/urac"
+	"go.mongodb.org/mongo-driver/bson"
 	"go.uber.org/zap"
 )
 
 // Controller manages the gateway components
 type Controller struct {
-	cfg       *config.Config
-	logger    *zap.Logger
-	registry  registry.Registry
-	provision provision.Provision
-	awareness awareness.Awareness
-	urac      *urac.Driver
-	mongo     *mongo.Client
+	cfg        *config.Config
+	logger     *zap.Logger
+	registry   registry.Registry
+	provision  provision.Provision
+	awareness  awareness.Awareness
+	urac       *urac.Driver
+	mongo      *mongo.Client
+	oauthMongo *mongo.Client // Separate MongoDB client for OAuth/URAC cluster
 }
 
 // NewController creates a new controller instance
@@ -44,7 +49,25 @@ func NewController(cfg *config.Config, logger *zap.Logger) (*Controller, error) 
 	ctrl.registry = registry.NewMongoRegistry(mongoClient, logger)
 
 	// Initialize awareness
-	ctrl.awareness = awareness.NewAwareness(cfg.Awareness, ctrl.registry, logger)
+	baseAwareness := awareness.NewAwareness(cfg.Awareness, ctrl.registry, logger)
+
+	// Check if running in HA mode (any value means HA is enabled, matching Node.js behavior)
+	deployHA := os.Getenv("SOAJS_DEPLOY_HA")
+	if deployHA != "" {
+		logger.Info("HA mode enabled, initializing HA awareness",
+			zap.String("SOAJS_DEPLOY_HA", deployHA))
+		haAwareness, err := awareness.NewHAAwareness(baseAwareness)
+		if err != nil {
+			logger.Warn("failed to initialize HA awareness, falling back to default",
+				zap.Error(err),
+			)
+			ctrl.awareness = baseAwareness
+		} else {
+			ctrl.awareness = haAwareness
+		}
+	} else {
+		ctrl.awareness = baseAwareness
+	}
 
 	// Initialize URAC driver
 	ctrl.urac = urac.NewDriverWithConfig(mongoClient, logger, urac.Config{
@@ -70,13 +93,23 @@ func (c *Controller) Setup(r *chi.Mux) error {
 	// Check if OAuth is configured on a different cluster
 	if regData != nil && regData.CoreDB != nil && regData.CoreDB.OAuth.Name != "" {
 		oauthConfig := regData.CoreDB.OAuth
-		provisionCluster := regData.CoreDB.Provision.Cluster
 
-		if oauthConfig.Cluster != "" && oauthConfig.Cluster != provisionCluster && len(oauthConfig.Servers) > 0 {
+		// Check if OAuth is on a different server than what we're currently connected to
+		// The cluster name might be the same, but actual servers could differ
+		oauthHost := ""
+		if len(oauthConfig.Servers) > 0 {
+			oauthHost = oauthConfig.Servers[0].Host
+		}
+
+		// The main mongo client is connected via SOAJS_MONGO_URI, check if OAuth servers are different
+		currentHost := c.cfg.Mongo.URI
+		needsSeparateClient := oauthHost != "" && !strings.Contains(currentHost, oauthHost)
+
+		if needsSeparateClient && len(oauthConfig.Servers) > 0 {
 			// OAuth is on a different cluster - create separate client
 			c.logger.Info("OAuth configured on separate cluster",
-				zap.String("oauthCluster", oauthConfig.Cluster),
-				zap.String("provisionCluster", provisionCluster),
+				zap.String("oauthHost", oauthHost),
+				zap.String("currentURI", currentHost),
 			)
 
 			// Convert types for mongo.NewClientFromDBConfig
@@ -104,6 +137,7 @@ func (c *Controller) Setup(r *chi.Mux) error {
 				c.logger.Info("connected to separate OAuth cluster",
 					zap.String("database", oauthConfig.Name),
 				)
+				c.oauthMongo = oauthClient // Store for URAC operations
 				c.provision = provision.NewProvisionWithOAuthClient(c.mongo, oauthClient, c.logger, c.cfg.Environment)
 			}
 		} else {
@@ -134,6 +168,119 @@ func (c *Controller) Setup(r *chi.Mux) error {
 	}
 
 	c.logger.Info("service provision loaded")
+
+	// Configure URAC database from registry
+	// Priority 1: Check for masterDB in custom registry (soajs.registry.custom.urac.value.masterDB)
+	// Priority 2: Use tenantMetaDB["urac"] configuration
+	uracDBConfigured := false
+	if regData != nil && regData.CustomRegistry != nil {
+		if uracEntry, ok := regData.CustomRegistry["urac"]; ok {
+			c.logger.Debug("Found urac entry in custom registry",
+				zap.String("type", fmt.Sprintf("%T", uracEntry)),
+			)
+			// Handle both map[string]interface{} and bson.M
+			var uracMap map[string]interface{}
+			if m, ok := uracEntry.(map[string]interface{}); ok {
+				uracMap = m
+			} else if m, ok := uracEntry.(bson.M); ok {
+				uracMap = m
+			}
+			if uracMap != nil {
+				var value map[string]interface{}
+				if v, ok := uracMap["value"].(map[string]interface{}); ok {
+					value = v
+				} else if v, ok := uracMap["value"].(bson.M); ok {
+					value = v
+				}
+				if value != nil {
+					if masterDB, ok := value["masterDB"].(string); ok && masterDB != "" {
+						// masterDB refers to a coreDB entry name (e.g., "provision")
+						// Use the database name from that coreDB entry
+						switch masterDB {
+						case "provision":
+							if regData.CoreDB != nil && regData.CoreDB.Provision.Name != "" {
+								c.urac.SetDatabase(regData.CoreDB.Provision.Name)
+								c.logger.Info("URAC database configured from masterDB",
+									zap.String("masterDB", masterDB),
+									zap.String("database", regData.CoreDB.Provision.Name),
+								)
+								uracDBConfigured = true
+							}
+						case "oauth":
+							if regData.CoreDB != nil && regData.CoreDB.OAuth.Name != "" {
+								c.urac.SetDatabase(regData.CoreDB.OAuth.Name)
+								c.logger.Info("URAC database configured from masterDB",
+									zap.String("masterDB", masterDB),
+									zap.String("database", regData.CoreDB.OAuth.Name),
+								)
+								uracDBConfigured = true
+							}
+						default:
+							// masterDB refers to a database definition - check TenantMetaDB first
+							// then fallback to constructing the name as {prefix}{masterDB}
+							if regData.TenantMetaDB != nil {
+								if dbConfig, ok := regData.TenantMetaDB[masterDB]; ok && dbConfig.Name != "" {
+									// Use the database name from TenantMetaDB (might have prefix)
+									dbName := dbConfig.Name
+									if strings.Contains(dbName, "#TENANT_NAME#") {
+										dbPrefix := dbConfig.Prefix
+										if dbPrefix == "" {
+											dbPrefix = strings.ToLower(c.cfg.Environment)
+										}
+										dbName = dbPrefix + masterDB
+									}
+									c.urac.SetDatabase(dbName)
+									c.logger.Info("URAC database configured from TenantMetaDB",
+										zap.String("masterDB", masterDB),
+										zap.String("database", dbName),
+									)
+									uracDBConfigured = true
+									break
+								}
+							}
+							// Fallback: construct full name as {prefix}{masterDB}
+							dbPrefix := strings.ToLower(c.cfg.Environment)
+							fullDBName := dbPrefix + masterDB
+							c.urac.SetDatabase(fullDBName)
+							c.logger.Info("URAC database configured from masterDB (fallback)",
+								zap.String("masterDB", masterDB),
+								zap.String("database", fullDBName),
+							)
+							uracDBConfigured = true
+						}
+					}
+				}
+			}
+		}
+	}
+
+	// Priority 2: Fall back to tenantMetaDB["urac"] if masterDB not configured
+	if !uracDBConfigured && regData != nil && regData.TenantMetaDB != nil {
+		if uracDB, ok := regData.TenantMetaDB["urac"]; ok && uracDB.Name != "" {
+			dbName := uracDB.Name
+			// Replace #TENANT_NAME# with prefix + "core" for controller-level lookups
+			if strings.Contains(dbName, "#TENANT_NAME#") {
+				prefix := uracDB.Prefix
+				if prefix == "" {
+					prefix = "core"
+				}
+				dbName = prefix + "urac"
+			}
+			c.urac.SetDatabase(dbName)
+			c.logger.Info("URAC database configured from tenantMetaDB",
+				zap.String("database", dbName),
+			)
+		}
+	}
+
+	// If OAuth is on a separate cluster and URAC database is configured,
+	// use the OAuth MongoDB client for URAC operations (users/groups are on OAuth cluster)
+	if c.oauthMongo != nil && c.urac.GetDatabase() != "" {
+		c.urac.SetMongoClient(c.oauthMongo)
+		c.logger.Info("URAC configured to use OAuth MongoDB cluster",
+			zap.String("database", c.urac.GetDatabase()),
+		)
+	}
 
 	// Setup base middleware (chi built-in)
 	r.Use(chimw.RequestID)

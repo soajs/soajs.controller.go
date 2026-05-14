@@ -18,6 +18,7 @@ type Driver struct {
 	group      *GroupService
 	hashConfig hasher.Config
 	env        string
+	uracDB     string // URAC database name (if different from provision DB)
 }
 
 // Config holds driver configuration
@@ -126,8 +127,29 @@ func (d *Driver) GetEnvironment() string {
 	return d.env
 }
 
+// SetDatabase sets the URAC database name (for querying users/groups from a separate database)
+func (d *Driver) SetDatabase(dbName string) {
+	d.uracDB = dbName
+}
+
+// GetDatabase returns the URAC database name
+func (d *Driver) GetDatabase() string {
+	return d.uracDB
+}
+
+// SetMongoClient sets the MongoDB client for URAC operations
+// Use this when URAC data is on a different MongoDB cluster
+func (d *Driver) SetMongoClient(client *mongo.Client) {
+	d.mongo = client
+}
+
 // GetUserWithGroupsConfig gets a user and populates GroupsConfig from their groups
 func (d *Driver) GetUserWithGroupsConfig(ctx context.Context, id string) (*User, error) {
+	return d.GetUserWithGroupsConfigForTenant(ctx, id, "")
+}
+
+// GetUserWithGroupsConfigForTenant gets a user and populates GroupsConfig from their groups for a specific tenant
+func (d *Driver) GetUserWithGroupsConfigForTenant(ctx context.Context, id, tenantID string) (*User, error) {
 	user, err := d.user.GetByID(ctx, id)
 	if err != nil {
 		return nil, err
@@ -138,9 +160,17 @@ func (d *Driver) GetUserWithGroupsConfig(ctx context.Context, id string) (*User,
 		return user, nil
 	}
 
+	// Get groups for the specific tenant (or primary tenant if not specified)
+	var groupCodes []string
+	if tenantID != "" {
+		groupCodes = user.GetGroupsForTenant(tenantID)
+	} else {
+		groupCodes = user.Groups
+	}
+
 	// Build GroupsConfig from user's groups
-	if len(user.Groups) > 0 {
-		groups, err := d.group.GetGroupsByCodes(ctx, user.Groups)
+	if len(groupCodes) > 0 {
+		groups, err := d.group.GetGroupsByCodesAndTenant(ctx, groupCodes, tenantID)
 		if err != nil {
 			return user, nil // Return user without groupsConfig on error
 		}
@@ -168,14 +198,10 @@ func (d *Driver) buildGroupsConfig(groups []*Group) *model.GroupsConfig {
 			continue
 		}
 
-		for product, pkgInfo := range group.Config.AllowedPackages {
-			if pkgInfo.Packages == nil {
-				continue
-			}
-
+		for product, packages := range group.Config.AllowedPackages {
 			// Add packages for this product (avoid duplicates)
 			existing := config.AllowedPackages[product]
-			for _, pkg := range pkgInfo.Packages {
+			for _, pkg := range packages {
 				found := false
 				for _, e := range existing {
 					if e == pkg {
@@ -200,7 +226,12 @@ func (d *Driver) buildGroupsConfig(groups []*Group) *model.GroupsConfig {
 
 // GetAllowedPackages returns the allowed packages for a user and product
 func (d *Driver) GetAllowedPackages(ctx context.Context, userID, productCode string) ([]string, error) {
-	user, err := d.GetUserWithGroupsConfig(ctx, userID)
+	return d.GetAllowedPackagesForTenant(ctx, userID, productCode, "")
+}
+
+// GetAllowedPackagesForTenant returns the allowed packages for a user, product, and specific tenant
+func (d *Driver) GetAllowedPackagesForTenant(ctx context.Context, userID, productCode, tenantID string) ([]string, error) {
+	user, err := d.GetUserWithGroupsConfigForTenant(ctx, userID, tenantID)
 	if err != nil {
 		return nil, err
 	}

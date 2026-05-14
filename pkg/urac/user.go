@@ -9,6 +9,7 @@ import (
 	"github.com/soajs/soajs.controller.go/pkg/urac/hasher"
 	"github.com/soajs/soajs.controller.go/pkg/urac/model"
 	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
 )
 
@@ -38,12 +39,33 @@ type HasherConfig struct {
 	OptionalAlgorithm string `json:"optionalAlgorithm"`
 }
 
+// collection returns the users collection from the appropriate database
+func (s *UserService) collection() *mongo.Collection {
+	if s.driver.uracDB != "" {
+		return s.driver.mongo.UseDatabase(s.driver.uracDB).Collection("users")
+	}
+	return s.driver.mongo.Collection("users")
+}
+
 // GetByID retrieves a user by ID
 func (s *UserService) GetByID(ctx context.Context, id string) (*User, error) {
-	coll := s.driver.mongo.Collection("users")
+	coll := s.collection()
 
 	var user User
-	err := coll.FindOne(ctx, bson.M{"_id": id}).Decode(&user)
+	var err error
+
+	// Try to parse as ObjectId first (MongoDB's default _id type)
+	if oid, parseErr := primitive.ObjectIDFromHex(id); parseErr == nil {
+		err = coll.FindOne(ctx, bson.M{"_id": oid}).Decode(&user)
+		if err != nil && errors.Is(err, mongo.ErrNoDocuments) {
+			// If ObjectId lookup fails, also try string lookup as fallback
+			err = coll.FindOne(ctx, bson.M{"_id": id}).Decode(&user)
+		}
+	} else {
+		// Fall back to string lookup if not a valid ObjectId
+		err = coll.FindOne(ctx, bson.M{"_id": id}).Decode(&user)
+	}
+
 	if err != nil {
 		if errors.Is(err, mongo.ErrNoDocuments) {
 			return nil, ErrUserNotFound
@@ -56,7 +78,7 @@ func (s *UserService) GetByID(ctx context.Context, id string) (*User, error) {
 
 // GetByUsername retrieves a user by username
 func (s *UserService) GetByUsername(ctx context.Context, username string) (*User, error) {
-	coll := s.driver.mongo.Collection("users")
+	coll := s.collection()
 
 	var user User
 	err := coll.FindOne(ctx, bson.M{"username": username}).Decode(&user)
@@ -72,7 +94,7 @@ func (s *UserService) GetByUsername(ctx context.Context, username string) (*User
 
 // GetByEmail retrieves a user by email
 func (s *UserService) GetByEmail(ctx context.Context, email string) (*User, error) {
-	coll := s.driver.mongo.Collection("users")
+	coll := s.collection()
 
 	var user User
 	err := coll.FindOne(ctx, bson.M{"email": email}).Decode(&user)
@@ -88,7 +110,7 @@ func (s *UserService) GetByEmail(ctx context.Context, email string) (*User, erro
 
 // GetByUsernameOrEmail retrieves a user by username or email
 func (s *UserService) GetByUsernameOrEmail(ctx context.Context, identifier string) (*User, error) {
-	coll := s.driver.mongo.Collection("users")
+	coll := s.collection()
 
 	var user User
 	err := coll.FindOne(ctx, bson.M{
@@ -146,7 +168,7 @@ func (s *UserService) ValidateCredentialsWithConfig(ctx context.Context, usernam
 
 // updateLastLogin updates the user's last login time
 func (s *UserService) updateLastLogin(ctx context.Context, userID string) {
-	coll := s.driver.mongo.Collection("users")
+	coll := s.collection()
 	coll.UpdateOne(
 		ctx,
 		bson.M{"_id": userID},
@@ -213,7 +235,7 @@ type AutoRoamingConfig struct {
 
 // GetUsersByTenant retrieves all users for a tenant
 func (s *UserService) GetUsersByTenant(ctx context.Context, tenantID string) ([]*User, error) {
-	coll := s.driver.mongo.Collection("users")
+	coll := s.collection()
 
 	cursor, err := coll.Find(ctx, bson.M{"tenant.id": tenantID})
 	if err != nil {
@@ -231,7 +253,7 @@ func (s *UserService) GetUsersByTenant(ctx context.Context, tenantID string) ([]
 
 // GetUsersByGroup retrieves all users in a specific group
 func (s *UserService) GetUsersByGroup(ctx context.Context, groupCode string) ([]*User, error) {
-	coll := s.driver.mongo.Collection("users")
+	coll := s.collection()
 
 	cursor, err := coll.Find(ctx, bson.M{"groups": groupCode})
 	if err != nil {
@@ -249,7 +271,7 @@ func (s *UserService) GetUsersByGroup(ctx context.Context, groupCode string) ([]
 
 // CountUsers counts users matching the filter
 func (s *UserService) CountUsers(ctx context.Context, filter bson.M) (int64, error) {
-	coll := s.driver.mongo.Collection("users")
+	coll := s.collection()
 	return coll.CountDocuments(ctx, filter)
 }
 
