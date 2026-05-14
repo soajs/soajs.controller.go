@@ -44,20 +44,3 @@ spec:
       protocol: TCP
   selector:
     app: soajs-controller
----
-# Headless service for internal DNS-based discovery
-apiVersion: v1
-kind: Service
-metadata:
-  name: soajs-controller-headless
-  labels:
-    app: soajs-controller
-spec:
-  type: ClusterIP
-  clusterIP: None
-  ports:
-    - name: http
-      port: 4000
-      targetPort: 4000
-  selector:
-    app: soajs-controller
