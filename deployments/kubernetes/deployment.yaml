@@ -37,29 +37,17 @@ spec:
               containerPort: 5000
               protocol: TCP
           env:
-            # Required: Environment name (matches Node.js)
             - name: SOAJS_ENV
-              valueFrom:
-                configMapKeyRef:
-                  name: soajs-config
-                  key: environment
-            # HA mode for Kubernetes awareness (matches Node.js value)
+              value: "dashboard"
             - name: SOAJS_DEPLOY_HA
               value: "kubernetes"
-            # MongoDB connection (Go uses direct URI, not SOAJS_PROFILE)
             - name: SOAJS_MONGO_URI
               valueFrom:
                 secretKeyRef:
                   name: soajs-secrets
                   key: mongo-uri
-            - name: SOAJS_MONGO_DATABASE
-              value: "core_provision"
-            # Logging
             - name: SOAJS_LOG_LEVEL
-              valueFrom:
-                configMapKeyRef:
-                  name: soajs-config
-                  key: log-level
+              value: "info"
           resources:
             requests:
               memory: "64Mi"
