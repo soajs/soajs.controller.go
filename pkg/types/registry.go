@@ -183,12 +183,12 @@ type SessionCookieConf struct {
 
 // CORSConfig holds CORS settings
 type CORSConfig struct {
-	Credentials string `json:"credentials"`
-	Enabled     bool   `json:"enabled"`
-	Headers     string `json:"headers"`
-	MaxAge      int    `json:"maxage"`
-	Methods     string `json:"methods"`
-	Origin      string `json:"origin"`
+	Credentials interface{} `json:"credentials" bson:"credentials"` // Can be bool or string
+	Enabled     bool        `json:"enabled"`
+	Headers     string      `json:"headers"`
+	MaxAge      int         `json:"maxage"`
+	Methods     string      `json:"methods"`
+	Origin      string      `json:"origin"`
 }
 
 // ServiceKeyConfig holds service key configuration
