@@ -1,0 +1,336 @@
+{
+  "environment": [
+    {
+      "_id": "55128442e603d7e01ab1688c",
+      "code": "DEV",
+      "domain": "localhost",
+      "sitePrefix": null,
+      "apiPrefix": null,
+      "locked": true,
+      "port": 4500,
+      "protocol": "http",
+      "deployer": {
+        "type": "manual",
+        "selected": "manual"
+      },
+      "description": "Development Environment",
+      "dbs": {
+        "config": { "prefix": "" },
+        "session": {
+          "cluster": "dash_cluster",
+          "tenantSpecific": false,
+          "name": "core_session",
+          "collection": "sessions",
+          "stringify": false,
+          "expireAfter": 1209600000
+        },
+        "databases": {
+          "urac": { "cluster": "dash_cluster", "tenantSpecific": true }
+        }
+      },
+      "services": {
+        "controller": {
+          "maxPoolSize": 100,
+          "authorization": true,
+          "requestTimeout": 30,
+          "requestTimeoutRenewal": 0
+        },
+        "config": {
+          "awareness": {
+            "cacheTTL": 3600000,
+            "healthCheckInterval": 5000,
+            "autoRelaodRegistry": 3600000,
+            "maxLogCount": 5,
+            "autoRegisterService": true
+          },
+          "key": {
+            "algorithm": "aes256",
+            "password": "soajs key lal massa"
+          },
+          "logger": { "src": true, "level": "debug" },
+          "cors": {
+            "enabled": true,
+            "origin": "*",
+            "credentials": "true",
+            "methods": "GET,HEAD,PUT,PATCH,POST,DELETE",
+            "headers": "key,soajsauth,Keep-Alive,User-Agent,X-Requested-With,If-Modified-Since,Cache-Control,Content-Type,Authorization",
+            "maxage": 1728000
+          },
+          "oauth": {
+            "grants": ["password", "refresh_token"],
+            "debug": false,
+            "accessTokenLifetime": 7200,
+            "refreshTokenLifetime": 1209600
+          },
+          "ports": {
+            "controller": 4000,
+            "maintenanceInc": 1001,
+            "randomInc": 100
+          },
+          "cookie": { "secret": "this is a secret sentence" },
+          "session": {
+            "name": "soajsID",
+            "secret": "this is antoine hage app server",
+            "cookie": { "path": "/", "httpOnly": true, "secure": false, "maxAge": null },
+            "resave": false,
+            "saveUninitialized": false,
+            "rolling": false,
+            "unset": "keep"
+          }
+        }
+      }
+    }
+  ],
+  "tenants": [
+    {
+      "_id": "5c0e74ba9acc3c5a84a51259",
+      "type": "product",
+      "code": "DBTN",
+      "locked": true,
+      "name": "Console Tenant",
+      "description": "Console tenant for testing",
+      "oauth": {
+        "secret": "this is a secret",
+        "disabled": 0,
+        "type": 2,
+        "loginMode": "urac"
+      },
+      "applications": [
+        {
+          "product": "DSBRD",
+          "package": "DSBRD_GUEST",
+          "appId": "5c0e74ba9acc3c5a84a5125a",
+          "description": "Dashboard application for DSBRD_GUEST package",
+          "_TTL": 604800000,
+          "keys": [
+            {
+              "key": "a139786a6e6d18e48b4987e83789430b",
+              "extKeys": [
+                {
+                  "extKey": "3d90163cf9d6b3076ad26aa5ed58556348069258e5c6c941ee0f18448b570ad1c5c790e2d2a1989680c55f4904e2005ff5f8e71606e4aa641e67882f4210ebbc5460ff305dcb36e6ec2a2299cf0448ef60b9e38f41950ec251c1cf41f05f3ce9",
+                  "device": null,
+                  "geo": null,
+                  "env": "DEV",
+                  "dashboardAccess": true,
+                  "expDate": null
+                }
+              ],
+              "config": {
+                "dev": {
+                  "oauth": { "loginMode": "urac" },
+                  "urac": { "hashIterations": 1024, "seedLength": 32 }
+                }
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "products": [
+    {
+      "_id": "5512867be603d7e01ab1688d",
+      "locked": true,
+      "code": "DSBRD",
+      "name": "Console UI Product",
+      "description": "Main Console UI Product",
+      "scope": {
+        "acl": {
+          "dev": {
+            "urac": {
+              "2": {
+                "access": true,
+                "apisPermission": "restricted",
+                "get": [
+                  { "group": "Guest", "apis": { "/user": { "access": false }, "/luser": { "access": false } } },
+                  { "group": "Member", "apis": { "/muser/:id": { "access": true } } }
+                ]
+              }
+            },
+            "oauth": {
+              "1": {
+                "access": false,
+                "get": [{ "group": "Guest", "apis": { "/token": { "access": false } } }],
+                "post": [{ "group": "Guest", "apis": { "/passport/login": { "access": false } } }],
+                "delete": [{ "group": "Tokenization", "apis": { "/accessToken/:token": { "access": true } } }]
+              }
+            },
+            "payment": { "1": { "access": true } },
+            "pt": { "1": { "access": true } }
+          }
+        }
+      },
+      "packages": [
+        {
+          "code": "DSBRD_GUEST",
+          "name": "Guest",
+          "locked": true,
+          "description": "Guest package",
+          "acl": {
+            "dev": {
+              "urac": [{ "version": "2", "get": ["Guest"] }],
+              "oauth": [{ "version": "1", "get": ["Guest"], "post": ["Guest"] }],
+              "pt": [{ "version": "1" }]
+            }
+          },
+          "_TTL": 604800000
+        },
+        {
+          "code": "DSBRD_OWNER",
+          "name": "Owner",
+          "locked": true,
+          "description": "Owner package with full access",
+          "acl": {
+            "dev": {
+              "urac": [{ "version": "2", "get": ["Guest", "Member"] }],
+              "oauth": [{ "version": "1", "get": ["Guest"], "post": ["Guest"], "delete": ["Tokenization"] }],
+              "payment": [{ "version": "1" }],
+              "pt": [{ "version": "1" }]
+            }
+          },
+          "_TTL": 604800000
+        }
+      ]
+    }
+  ],
+  "hosts": [
+    { "_id": "5c8d276f95590ea347ceb7c5", "env": "dev", "hostname": "localhost", "ip": "127.0.0.1", "name": "urac", "version": "2", "port": 4001 },
+    { "_id": "5e1f380dc5a59210a8152625", "env": "dev", "hostname": "localhost", "ip": "127.0.0.1", "name": "oauth", "version": "1", "port": 4004 },
+    { "_id": "5cfaa21a4fb588f877b3d44d", "env": "dev", "hostname": "localhost", "ip": "127.0.0.1", "name": "pt", "version": "1", "port": 4002 },
+    { "_id": "5c519bdbde8eec011d6086b4", "env": "dev", "hostname": "localhost", "ip": "127.0.0.1", "name": "pt2", "version": "1", "port": 4003 },
+    { "_id": "5e1f415fc5a59210a8152627", "env": "dev", "hostname": "localhost", "ip": "127.0.0.1", "name": "payment", "version": "1", "port": 4006 }
+  ],
+  "resources": [
+    {
+      "_id": "5cf98f13d1975b4988a84945",
+      "name": "dash_cluster",
+      "type": "cluster",
+      "category": "mongo",
+      "created": "DASHBOARD",
+      "author": "owner",
+      "locked": true,
+      "plugged": true,
+      "shared": true,
+      "sharedEnvs": { "DEV": true },
+      "config": {
+        "name": "core_provision",
+        "prefix": "",
+        "servers": [{ "host": "127.0.0.1", "port": 27017 }],
+        "credentials": null,
+        "URLParam": { "useUnifiedTopology": true }
+      }
+    }
+  ],
+  "marketplace": [
+    {
+      "_id": "5cfb05932ac09278709d013f",
+      "type": "service",
+      "name": "urac",
+      "configuration": { "subType": "soajs", "port": 4001, "group": "SOAJS Core Services", "requestTimeout": 30, "requestTimeoutRenewal": 5 },
+      "versions": [
+        {
+          "version": "2",
+          "maintenance": { "port": { "type": "maintenance" }, "readiness": "/heartbeat" },
+          "extKeyRequired": true,
+          "oauth": true,
+          "apis": [
+            { "l": "Get user", "v": "/user", "m": "get", "group": "Guest" },
+            { "l": "Get user slow", "v": "/luser", "m": "get", "group": "Guest" },
+            { "l": "Get user by id", "v": "/muser/:id", "m": "get", "group": "Member" },
+            { "l": "Private route", "v": "/private", "m": "get", "group": "Admin" }
+          ]
+        }
+      ]
+    },
+    {
+      "_id": "5e1f35fdc5a59210a8152624",
+      "type": "service",
+      "name": "oauth",
+      "configuration": { "subType": "soajs", "port": 4004, "group": "SOAJS Core Services", "requestTimeout": 30, "requestTimeoutRenewal": 5 },
+      "versions": [
+        {
+          "version": "1",
+          "maintenance": { "port": { "type": "maintenance" }, "readiness": "/heartbeat" },
+          "extKeyRequired": true,
+          "oauth": false,
+          "apis": [
+            { "l": "Get token", "v": "/token", "m": "get", "group": "Guest" },
+            { "l": "Passport login", "v": "/passport/login/:strategy", "m": "get", "group": "Guest" },
+            { "l": "Create token", "v": "/token", "m": "post", "group": "Guest" },
+            { "l": "Delete access token", "v": "/accessToken/:token", "m": "delete", "group": "Tokenization" }
+          ]
+        }
+      ]
+    },
+    {
+      "_id": "5cfaa21a4fb588f877b3d440",
+      "type": "service",
+      "name": "pt",
+      "configuration": { "subType": "soajs", "port": 4002, "group": "Test Services", "requestTimeout": 30 },
+      "versions": [
+        {
+          "version": "1",
+          "maintenance": { "port": { "type": "maintenance" }, "readiness": "/heartbeat" },
+          "extKeyRequired": true,
+          "oauth": false,
+          "apis": [
+            { "l": "Check phone", "v": "/CheckPhoneNumber", "m": "get", "group": "Test" }
+          ]
+        }
+      ]
+    },
+    {
+      "_id": "5e1f415fc5a59210a8152620",
+      "type": "service",
+      "name": "payment",
+      "configuration": { "subType": "soajs", "port": 4006, "group": "Business Services", "requestTimeout": 30 },
+      "versions": [
+        {
+          "version": "1",
+          "maintenance": { "port": { "type": "maintenance" }, "readiness": "/heartbeat" },
+          "extKeyRequired": true,
+          "oauth": false,
+          "apis": [
+            { "l": "Process payment", "v": "/process", "m": "post", "group": "Payment" }
+          ]
+        }
+      ]
+    }
+  ],
+  "oauth_token": [
+    {
+      "_id": "5cdc190fd52c82e0ddb1dcd5",
+      "type": "accessToken",
+      "token": "cfb209a91b23896820f510aadbf1f4284b512123",
+      "clientId": "5c0e74ba9acc3c5a84a51259",
+      "user": {
+        "_id": "5c8d0c505653de3985aa0ffd",
+        "locked": true,
+        "username": "owner",
+        "firstName": "Test",
+        "lastName": "Owner",
+        "email": "owner@test.com",
+        "ts": 1704067200000,
+        "status": "active",
+        "profile": {},
+        "groups": ["owner"],
+        "config": {
+          "packages": {},
+          "keys": {},
+          "allowedTenants": [
+            { "tenant": { "id": "THYME_tID", "code": "THYME_CODE" }, "groups": ["waiter"] },
+            { "tenant": { "id": "ELVIRA_tID", "code": "ELVIRA_CODE" }, "groups": ["manager"] }
+          ]
+        },
+        "tenant": { "id": "5c0e74ba9acc3c5a84a51259", "code": "DBTN" },
+        "groupsConfig": {
+          "allowedPackages": { "DSBRD": ["DSBRD_OWNER"] }
+        },
+        "loginMode": "urac",
+        "id": "5c8d0c505653de3985aa0ffd"
+      },
+      "env": "dev",
+      "expires": "2027-01-01T00:00:00.000Z"
+    }
+  ]
+}

@@ -10,12 +10,22 @@ PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 CONTROLLER_PORT=${CONTROLLER_PORT:-4000}
 MAINTENANCE_PORT=${MAINTENANCE_PORT:-5001}
 MONGO_URI=${SOAJS_MONGO_URI:-"mongodb://127.0.0.1:27017"}
+MONGO_DB=${SOAJS_MONGO_DATABASE:-"core_provision"}
 
 echo "=== SOAJS Controller Integration Tests ==="
 echo "Project root: $PROJECT_ROOT"
 echo "Controller port: $CONTROLLER_PORT"
 echo "Maintenance port: $MAINTENANCE_PORT"
 echo "MongoDB URI: $MONGO_URI"
+echo "MongoDB Database: $MONGO_DB"
+echo ""
+
+# Import test data into MongoDB
+echo "Importing test data into MongoDB..."
+cd "$PROJECT_ROOT"
+go run ./test/data/cmd/import.go -uri="$MONGO_URI" -db="$MONGO_DB" || {
+    echo "WARNING: Failed to import test data. Tests may fail."
+}
 echo ""
 
 # Check if controller is already running
