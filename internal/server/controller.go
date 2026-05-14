@@ -43,9 +43,6 @@ func NewController(cfg *config.Config, logger *zap.Logger) (*Controller, error) 
 	// Initialize registry
 	ctrl.registry = registry.NewMongoRegistry(mongoClient, logger)
 
-	// Initialize provision (with optional separate oauth database)
-	ctrl.provision = provision.NewProvisionWithOAuthDB(mongoClient, logger, cfg.Environment, cfg.Mongo.OAuthDatabase)
-
 	// Initialize awareness
 	ctrl.awareness = awareness.NewAwareness(cfg.Awareness, ctrl.registry, logger)
 
@@ -55,18 +52,74 @@ func NewController(cfg *config.Config, logger *zap.Logger) (*Controller, error) 
 		Environment:    cfg.Environment,
 	})
 
+	// Provision will be initialized in Setup() after registry loads
+	// so we can get OAuth database from registry resources
+
 	return ctrl, nil
 }
 
 // Setup configures the router with middleware and routes
 func (c *Controller) Setup(r *chi.Mux) error {
-	// Load registry
+	// Load registry first - this loads resources including OAuth cluster config
 	if err := c.registry.Load(c.cfg.Environment); err != nil {
 		return err
 	}
 
-	// Set key encryption config from registry
 	regData := c.registry.Get()
+
+	// Check if OAuth is configured on a different cluster
+	if regData != nil && regData.CoreDB != nil && regData.CoreDB.OAuth.Name != "" {
+		oauthConfig := regData.CoreDB.OAuth
+		provisionCluster := regData.CoreDB.Provision.Cluster
+
+		if oauthConfig.Cluster != "" && oauthConfig.Cluster != provisionCluster && len(oauthConfig.Servers) > 0 {
+			// OAuth is on a different cluster - create separate client
+			c.logger.Info("OAuth configured on separate cluster",
+				zap.String("oauthCluster", oauthConfig.Cluster),
+				zap.String("provisionCluster", provisionCluster),
+			)
+
+			// Convert types for mongo.NewClientFromDBConfig
+			servers := make([]mongo.ServerConfig, len(oauthConfig.Servers))
+			for i, s := range oauthConfig.Servers {
+				servers[i] = mongo.ServerConfig{Host: s.Host, Port: s.Port}
+			}
+
+			var creds *mongo.CredentialsConfig
+			if oauthConfig.Credentials.Username != "" {
+				creds = &mongo.CredentialsConfig{
+					Username: oauthConfig.Credentials.Username,
+					Password: oauthConfig.Credentials.Password,
+				}
+			}
+
+			oauthClient, err := mongo.NewClientFromDBConfig(servers, creds, oauthConfig.Name, oauthConfig.URLParam)
+			if err != nil {
+				c.logger.Warn("failed to connect to OAuth cluster, falling back to provision cluster",
+					zap.Error(err),
+				)
+				// Fall back to same cluster with different database
+				c.provision = provision.NewProvisionWithOAuthDB(c.mongo, c.logger, c.cfg.Environment, oauthConfig.Name)
+			} else {
+				c.logger.Info("connected to separate OAuth cluster",
+					zap.String("database", oauthConfig.Name),
+				)
+				c.provision = provision.NewProvisionWithOAuthClient(c.mongo, oauthClient, c.logger, c.cfg.Environment)
+			}
+		} else {
+			// Same cluster, possibly different database
+			c.logger.Debug("using OAuth database from registry",
+				zap.String("database", oauthConfig.Name),
+				zap.String("cluster", oauthConfig.Cluster),
+			)
+			c.provision = provision.NewProvisionWithOAuthDB(c.mongo, c.logger, c.cfg.Environment, oauthConfig.Name)
+		}
+	} else {
+		// No separate OAuth config - use default
+		c.provision = provision.NewProvision(c.mongo, c.logger, c.cfg.Environment)
+	}
+
+	// Set key encryption config from registry
 	if regData != nil && regData.ServiceConfig != nil {
 		keyConfig := regData.ServiceConfig.Key
 		c.provision.SetKeyConfig(keyConfig.Algorithm, keyConfig.Password)

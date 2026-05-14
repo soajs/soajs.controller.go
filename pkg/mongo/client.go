@@ -173,3 +173,87 @@ func Upsert() *options.UpdateOptions {
 func IsNotFound(err error) bool {
 	return errors.Is(err, mongo.ErrNoDocuments)
 }
+
+// NewClientFromDBConfig creates a MongoDB client from DBConnectionConfig
+// This is used when connecting to a different cluster (e.g., OAuth on separate cluster)
+func NewClientFromDBConfig(servers []ServerConfig, credentials *CredentialsConfig, dbName string, urlParams map[string]string) (*Client, error) {
+	if len(servers) == 0 {
+		return nil, fmt.Errorf("no servers configured")
+	}
+
+	// Build connection URI
+	uri := buildConnectionURI(servers, credentials, dbName, urlParams)
+
+	cfg := config.MongoConfig{
+		URI:            uri,
+		Database:       dbName,
+		MaxPoolSize:    100,
+		MinPoolSize:    10,
+		ConnectTimeout: 10,
+	}
+
+	return NewClient(cfg)
+}
+
+// ServerConfig matches types.ServerConfig
+type ServerConfig struct {
+	Host string `json:"host"`
+	Port int    `json:"port"`
+}
+
+// CredentialsConfig matches types.CredentialsConfig
+type CredentialsConfig struct {
+	Username string `json:"username"`
+	Password string `json:"password"`
+}
+
+// buildConnectionURI builds a MongoDB URI from config
+func buildConnectionURI(servers []ServerConfig, credentials *CredentialsConfig, dbName string, urlParams map[string]string) string {
+	var uri string
+
+	// Check if this looks like a replica set or Atlas
+	if len(servers) > 1 || (len(servers) == 1 && servers[0].Port == 0) {
+		// MongoDB Atlas or replica set (SRV)
+		uri = "mongodb+srv://"
+	} else {
+		uri = "mongodb://"
+	}
+
+	// Add credentials if present
+	if credentials != nil && credentials.Username != "" {
+		uri += credentials.Username
+		if credentials.Password != "" {
+			uri += ":" + credentials.Password
+		}
+		uri += "@"
+	}
+
+	// Add servers
+	for i, server := range servers {
+		if i > 0 {
+			uri += ","
+		}
+		uri += server.Host
+		if server.Port > 0 {
+			uri += fmt.Sprintf(":%d", server.Port)
+		}
+	}
+
+	// Add database
+	uri += "/" + dbName
+
+	// Add URL parameters
+	if len(urlParams) > 0 {
+		uri += "?"
+		first := true
+		for k, v := range urlParams {
+			if !first {
+				uri += "&"
+			}
+			uri += k + "=" + v
+			first = false
+		}
+	}
+
+	return uri
+}

@@ -80,6 +80,21 @@ func NewProvisionWithOAuthDB(client *mongo.Client, logger *zap.Logger, env, oaut
 	}
 }
 
+// NewProvisionWithOAuthClient creates a new MongoDB-backed provision with separate oauth client
+// Use this when OAuth is on a different MongoDB cluster
+func NewProvisionWithOAuthClient(client *mongo.Client, oauthClient *mongo.Client, logger *zap.Logger, env string) *MongoProvision {
+	envLower := strings.ToLower(env)
+	return &MongoProvision{
+		client:     client,
+		logger:     logger,
+		env:        envLower,
+		tenants:    make(map[string]*types.Tenant),
+		products:   make(map[string]*types.Product),
+		keys:       make(map[string]*types.Key),
+		oauthModel: &mongoOAuthModel{client: client, oauthClient: oauthClient, env: envLower},
+	}
+}
+
 // LoadProvision loads all provision data from MongoDB
 func (p *MongoProvision) LoadProvision() error {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -291,8 +306,9 @@ func (p *MongoProvision) OAuthModel() OAuthModel {
 // mongoOAuthModel implements OAuthModel using MongoDB
 type mongoOAuthModel struct {
 	client        *mongo.Client
-	env           string // environment name for token validation
-	oauthDatabase string // separate oauth database name (empty = use default)
+	oauthClient   *mongo.Client // separate client for OAuth (different cluster)
+	env           string        // environment name for token validation
+	oauthDatabase string        // separate oauth database name (empty = use default)
 }
 
 func (m *mongoOAuthModel) GetAccessToken(token string) (*types.AccessToken, error) {
@@ -304,19 +320,23 @@ func (m *mongoOAuthModel) GetAccessToken(token string) (*types.AccessToken, erro
 	// Node.js: oauthMongo.findOne(tokenCollectionName, {"token": bearerToken, "type": "accessToken"}, ...)
 	query := bson.M{"token": token, "type": "accessToken"}
 
-	// Try oauth database first if configured, then fall back to provision database
+	// Try oauth database/client first if configured, then fall back to provision database
 	// This mirrors Node.js behavior when oauthSeparate is true
 	var t types.AccessToken
 	var err error
 
-	if m.oauthDatabase != "" {
-		// Try oauth database first
+	if m.oauthClient != nil {
+		// Use separate OAuth client (different cluster)
+		coll := m.oauthClient.Database().Collection("oauth_token")
+		err = coll.FindOne(ctx, query).Decode(&t)
+	} else if m.oauthDatabase != "" {
+		// Use same client but different database
 		coll := m.client.UseDatabase(m.oauthDatabase).Collection("oauth_token")
 		err = coll.FindOne(ctx, query).Decode(&t)
 	}
 
-	// If not found in oauth database (or no oauth database configured), try provision database
-	if err != nil || m.oauthDatabase == "" {
+	// If not found in oauth database/client (or no oauth configured), try provision database
+	if err != nil || (m.oauthClient == nil && m.oauthDatabase == "") {
 		coll := m.client.Database().Collection("oauth_token")
 		err = coll.FindOne(ctx, query).Decode(&t)
 	}
