@@ -3,6 +3,8 @@ package middleware
 import (
 	"fmt"
 	"net/http"
+	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -98,7 +100,20 @@ func (w *awarenessEnvClientWrapper) GetHost(env string, serviceName string, vers
 		return hostInfo.Host, nil
 	}
 
-	// For other environments, use envHosts manager
+	// Check if running in HA mode
+	deployHA := os.Getenv("SOAJS_DEPLOY_HA")
+	if deployHA != "" {
+		// In HA mode, build DNS hostname for the target environment
+		// Format: {env}-{serviceName}-v{version}-service
+		// This matches Node.js behavior in mw/awarenessEnv/ha.js
+		if version == "" {
+			version = "1"
+		}
+		hostname := fmt.Sprintf("%s-%s-v%s-service", strings.ToLower(env), serviceName, version)
+		return hostname, nil
+	}
+
+	// For other environments in non-HA mode, use envHosts manager
 	if w.envHosts != nil {
 		return w.envHosts.GetHost(env, serviceName, version)
 	}

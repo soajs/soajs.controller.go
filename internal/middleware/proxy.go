@@ -75,6 +75,12 @@ func GotoService(prov provision.Provision, reg registry.Registry, aw awareness.A
 			serviceVersion := serviceParams.URLInfo.ServiceVersion
 			servicePath := serviceParams.URLInfo.ServicePath
 
+			// Skip routing if no service name (e.g., root path "/")
+			if serviceName == "" {
+				next.ServeHTTP(w, r)
+				return
+			}
+
 			// Handle /soajs/proxy - extract proxyRoute query param and route to that service
 			// Note: URL middleware parses /soajs/proxy as ServiceName="soajs", ServicePath="/proxy"
 			if serviceName == "soajs" && serviceParams.URLInfo.ServicePath == "/proxy" {
@@ -126,20 +132,76 @@ func GotoService(prov provision.Provision, reg registry.Registry, aw awareness.A
 				return
 			}
 
-			// Get service host from awareness
-			hostInfo, err := aw.GetHost(serviceName, serviceVersion)
-			if err != nil || hostInfo == nil {
-				WriteError(w, http.StatusBadGateway,
-					config.ErrCodeServiceNotFound,
-					config.DefaultErrors[config.ErrCodeServiceNotFound])
-				return
+			// Check if service requires external key (extKeyRequired)
+			// If true and no key is provided, return error 132
+			regData := reg.Get()
+			if regData != nil && regData.Services != nil {
+				if svc, ok := regData.Services[serviceName]; ok {
+					// Check version-specific extKeyRequired
+					extKeyRequired := false
+					if svc.Versions != nil {
+						// Get version to check - use specified version or find latest
+						ver := serviceVersion
+						if ver == "" {
+							// Get latest version from service hosts or find from versions map
+							if svc.Hosts != nil && svc.Hosts.Latest != "" {
+								ver = svc.Hosts.Latest
+							} else {
+								// Find latest from versions map
+								for v := range svc.Versions {
+									if ver == "" || v > ver {
+										ver = v
+									}
+								}
+							}
+						}
+						if ver != "" {
+							if vInfo, vok := svc.Versions[ver]; vok && vInfo != nil {
+								extKeyRequired = vInfo.ExtKeyRequired
+							}
+						}
+					}
+
+					// If extKeyRequired, check for key
+					if extKeyRequired {
+						key := r.Header.Get("key")
+						if key == "" {
+							key = r.URL.Query().Get("key")
+						}
+						if key == "" {
+							WriteError(w, http.StatusUnauthorized,
+								config.ErrCodeKeyRequired,
+								config.DefaultErrors[config.ErrCodeKeyRequired])
+							return
+						}
+					}
+				}
 			}
 
-			// Build target URL
-			targetURL := buildTargetURL(hostInfo.Host, hostInfo.Port, serviceParams.URLInfo.ServicePath, r.URL.RawQuery)
-
 			// Set the gotoservice function
+			// Note: Host resolution is deferred to execution time so MT middleware can
+			// resolve the correct version from finalACL when version wasn't in URL
 			soajsCtx.Controller.Gotoservice = func(w http.ResponseWriter, r *http.Request) {
+				// Get the service version (may have been updated by MT middleware from finalACL)
+				svcVersion := soajsCtx.Controller.ServiceParams.URLInfo.ServiceVersion
+
+				// If version is still empty and not requested in URL, default to "1"
+				// (This happens when finalACL didn't have version info)
+				if svcVersion == "" && !soajsCtx.Controller.ServiceParams.URLInfo.VersionRequested {
+					svcVersion = "1"
+				}
+
+				// Get service host from awareness
+				hostInfo, err := aw.GetHost(serviceName, svcVersion)
+				if err != nil || hostInfo == nil {
+					WriteError(w, http.StatusBadGateway,
+						config.ErrCodeServiceNotFound,
+						config.DefaultErrors[config.ErrCodeServiceNotFound])
+					return
+				}
+
+				// Build target URL
+				targetURL := buildTargetURL(hostInfo.Host, hostInfo.Port, soajsCtx.Controller.ServiceParams.URLInfo.ServicePath, r.URL.RawQuery)
 				proxyRequest(w, r, targetURL, soajsCtx, reg, aw)
 			}
 
@@ -223,6 +285,15 @@ func proxyRequest(w http.ResponseWriter, r *http.Request, targetURL string, soaj
 	// Copy headers
 	copyHeaders(proxyReq.Header, r.Header)
 
+	// Parse target URL to get hostname for Host header
+	targetURLParsed, _ := url.Parse(targetURL)
+	if targetURLParsed != nil && targetURLParsed.Host != "" {
+		// Set Host header to match target hostname (matches Node.js behavior)
+		// This is critical - the target service expects Host to match its hostname
+		proxyReq.Host = targetURLParsed.Host
+		proxyReq.Header.Set("Host", targetURLParsed.Host)
+	}
+
 	// Add/modify proxy headers
 	proxyReq.Header.Set("X-Forwarded-For", getClientIP(r))
 	proxyReq.Header.Set("X-Forwarded-Host", r.Host)
@@ -233,7 +304,7 @@ func proxyRequest(w http.ResponseWriter, r *http.Request, targetURL string, soaj
 
 	// Inject SOAJS context if configured
 	if soajsCtx.Tenant != nil {
-		injectSOAJSHeaders(proxyReq, soajsCtx)
+		injectSOAJSHeaders(proxyReq, soajsCtx, reg, aw)
 	}
 
 	// Record request body timing for monitoring
@@ -307,7 +378,7 @@ func getScheme(r *http.Request) string {
 	return "http"
 }
 
-func injectSOAJSHeaders(req *http.Request, soajsCtx *SOAJSContext) {
+func injectSOAJSHeaders(req *http.Request, soajsCtx *SOAJSContext, reg registry.Registry, aw awareness.Awareness) {
 	// Build the soajsinjectobj - this is the JSON object that SOAJS services expect
 	injectObj := make(map[string]interface{})
 
@@ -383,12 +454,83 @@ func injectSOAJSHeaders(req *http.Request, soajsCtx *SOAJSContext) {
 		injectObj["geo"] = map[string]interface{}{}
 	}
 
+	// Urac info - user profile from OAuth token
+	if soajsCtx.Controller != nil && soajsCtx.Controller.ServiceParams != nil && soajsCtx.Controller.ServiceParams.UserInfo != nil {
+		userInfo := soajsCtx.Controller.ServiceParams.UserInfo
+		// Include the full user info object from the OAuth token
+		injectObj["urac"] = userInfo
+	}
+
 	// Awareness info - controller host and port for service callbacks
 	// Default to localhost:4000 (standard controller port)
-	injectObj["awareness"] = map[string]interface{}{
+	awarenessObj := map[string]interface{}{
 		"host": "127.0.0.1",
 		"port": 4000,
 	}
+
+	// Build interConnect array if service has interConnect configured
+	if soajsCtx.Controller != nil && soajsCtx.Controller.ServiceParams != nil && reg != nil && aw != nil {
+		serviceName := soajsCtx.Controller.ServiceParams.URLInfo.ServiceName
+		serviceVersion := soajsCtx.Controller.ServiceParams.URLInfo.ServiceVersion
+
+		regData := reg.Get()
+		if regData != nil && regData.Services != nil {
+			if svc, ok := regData.Services[serviceName]; ok && svc.Versions != nil {
+				if vInfo, vok := svc.Versions[serviceVersion]; vok && vInfo != nil && len(vInfo.InterConnect) > 0 {
+					interConnectArr := make([]map[string]interface{}, 0)
+
+					for _, ic := range vInfo.InterConnect {
+						if ic.Name == "" {
+							continue
+						}
+						// Check if service exists in registry
+						icSvc, icExists := regData.Services[ic.Name]
+						if !icExists || icSvc.Port == 0 {
+							soajsCtx.Log.Debug("interConnect service not found in registry",
+								zap.String("service", ic.Name))
+							continue
+						}
+
+						// Get host from awareness
+						hostInfo, err := aw.GetHost(ic.Name, ic.Version)
+						if err != nil || hostInfo == nil {
+							soajsCtx.Log.Debug("interConnect failed to get host",
+								zap.String("service", ic.Name),
+								zap.String("version", ic.Version))
+							continue
+						}
+
+						// Get latest version
+						latestVersion := ""
+						if icSvc.Hosts != nil && icSvc.Hosts.Latest != "" {
+							latestVersion = icSvc.Hosts.Latest
+						} else if icSvc.Versions != nil {
+							for v := range icSvc.Versions {
+								if latestVersion == "" || v > latestVersion {
+									latestVersion = v
+								}
+							}
+						}
+
+						icItem := map[string]interface{}{
+							"name":    ic.Name,
+							"version": hostInfo.Version,
+							"host":    hostInfo.Host,
+							"port":    icSvc.Port,
+							"latest":  latestVersion,
+						}
+						interConnectArr = append(interConnectArr, icItem)
+					}
+
+					if len(interConnectArr) > 0 {
+						awarenessObj["interConnect"] = interConnectArr
+					}
+				}
+			}
+		}
+	}
+
+	injectObj["awareness"] = awarenessObj
 
 	// Serialize to JSON
 	jsonBytes, err := json.Marshal(injectObj)
@@ -397,8 +539,8 @@ func injectSOAJSHeaders(req *http.Request, soajsCtx *SOAJSContext) {
 		return
 	}
 
-	// Debug: log the soajsinjectobj content
-	soajsCtx.Log.Debug("soajsinjectobj header", zap.String("content", string(jsonBytes)))
+	// Log the soajsinjectobj content (INFO level for debugging)
+	soajsCtx.Log.Info("soajsinjectobj header", zap.String("content", string(jsonBytes)))
 
 	// Set the header
 	req.Header.Set("soajsinjectobj", string(jsonBytes))

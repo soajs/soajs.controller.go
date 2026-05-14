@@ -52,58 +52,72 @@ func NewHAAwareness(base *DefaultAwareness) (*HAAwareness, error) {
 	}, nil
 }
 
-// GetHost returns a service host from Kubernetes
+// GetHost returns a service host from Kubernetes using DNS naming convention
+// This matches Node.js behavior: just build the DNS hostname directly
+// Format: {env}-{serviceName}-v{version}-service
 func (a *HAAwareness) GetHost(serviceName, version string) (*types.HostInfo, error) {
-	if a.k8sClient == nil {
-		return a.DefaultAwareness.GetHost(serviceName, version)
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
 	// Get environment from registry (matches Node.js behavior)
 	env := "dev"
 	if a.registry != nil {
 		env = strings.ToLower(a.registry.GetEnvironment())
 	}
 
-	// Build service name matching Node.js convention: {env}-{serviceName}-v{version}-service
-	// Example: dashboard-urac-v1-service
-	svcName := fmt.Sprintf("%s-%s-v%s-service", env, serviceName, version)
-
-	a.logger.Debug("looking up k8s service",
-		zap.String("service", svcName),
-		zap.String("namespace", a.namespace),
-	)
-
-	svc, err := a.k8sClient.CoreV1().Services(a.namespace).Get(ctx, svcName, metav1.GetOptions{})
-	if err != nil {
-		a.logger.Debug("k8s service not found, falling back to default awareness",
-			zap.String("service", svcName),
-			zap.Error(err),
-		)
-		// Fall back to default awareness
-		return a.DefaultAwareness.GetHost(serviceName, version)
+	// Get service config from registry for port and latest version
+	port := 0
+	latestVersion := ""
+	if a.registry != nil {
+		regData := a.registry.Get()
+		if regData != nil && regData.Services != nil {
+			if svc, ok := regData.Services[serviceName]; ok {
+				port = svc.Port
+				// Get latest version from service hosts
+				if svc.Hosts != nil && svc.Hosts.Latest != "" {
+					latestVersion = svc.Hosts.Latest
+				}
+				// Fallback: find latest version from Versions map
+				if latestVersion == "" && len(svc.Versions) > 0 {
+					for v := range svc.Versions {
+						if latestVersion == "" || v > latestVersion {
+							latestVersion = v
+						}
+					}
+				}
+			}
+		}
 	}
 
-	// Get cluster IP and port
-	host := svc.Spec.ClusterIP
-	var port int32
-	if len(svc.Spec.Ports) > 0 {
-		port = svc.Spec.Ports[0].Port
+	// Use latest version if version not provided or is default "1"
+	// This matches Node.js behavior where it queries for latest version
+	if version == "" || version == "1" {
+		if latestVersion != "" {
+			version = latestVersion
+		} else if version == "" {
+			version = "1"
+		}
 	}
 
-	a.logger.Debug("found k8s service",
-		zap.String("service", svcName),
-		zap.String("host", host),
-		zap.Int32("port", port),
+	// Default port if not found in registry
+	if port == 0 {
+		port = 4000 // Default SOAJS service port
+	}
+
+	// Build Kubernetes DNS hostname matching Node.js convention
+	// Node.js: return cb(env + "-" + serviceName + "-v" + version + "-service");
+	hostname := fmt.Sprintf("%s-%s-v%s-service", env, serviceName, version)
+
+	a.logger.Debug("built k8s service hostname",
+		zap.String("serviceName", serviceName),
+		zap.String("version", version),
+		zap.String("latestVersion", latestVersion),
+		zap.String("hostname", hostname),
+		zap.Int("port", port),
 	)
 
 	return &types.HostInfo{
 		Name:    serviceName,
 		Version: version,
-		Host:    host,
-		Port:    int(port),
+		Host:    hostname,
+		Port:    port,
 	}, nil
 }
 

@@ -1,9 +1,5 @@
 package model
 
-import (
-	"time"
-)
-
 // User represents a URAC user with full SOAJS schema
 type User struct {
 	ID           string        `json:"_id" bson:"_id"`
@@ -20,8 +16,8 @@ type User struct {
 	Profile      interface{}   `json:"profile,omitempty" bson:"profile,omitempty"`
 	Config       *UserConfig   `json:"config,omitempty" bson:"config,omitempty"`
 	SocialLogin  *SocialLogin  `json:"socialLogin,omitempty" bson:"socialLogin,omitempty"`
-	CreatedAt    time.Time     `json:"ts" bson:"ts"`
-	LastLogin    time.Time     `json:"lastLogin,omitempty" bson:"lastLogin,omitempty"`
+	CreatedAt    interface{}   `json:"ts,omitempty" bson:"ts,omitempty"`
+	LastLogin    interface{}   `json:"lastLogin,omitempty" bson:"lastLogin,omitempty"`
 	Locked       bool          `json:"locked,omitempty" bson:"locked,omitempty"`
 	LoginMode    string        `json:"loginMode,omitempty" bson:"loginMode,omitempty"`
 }

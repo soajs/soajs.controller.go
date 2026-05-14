@@ -13,14 +13,10 @@ type Group struct {
 
 // GroupConfig holds group-specific configuration including ACL
 type GroupConfig struct {
-	AllowedPackages map[string]AllowedPackage `json:"allowedPackages,omitempty" bson:"allowedPackages,omitempty"`
-	Keys            []GroupKey                `json:"keys,omitempty" bson:"keys,omitempty"`
-}
-
-// AllowedPackage represents product/package access configuration
-type AllowedPackage struct {
-	Product  string   `json:"product" bson:"product"`
-	Packages []string `json:"packages" bson:"packages"`
+	// AllowedPackages maps product code to array of package codes
+	// In MongoDB: {"allowedPackages": {"ENTER": ["ENTER_DEFAU", "ENTER_OWNER"], "AVAPP": ["AVAPP_USER"]}}
+	AllowedPackages map[string][]string `json:"allowedPackages,omitempty" bson:"allowedPackages,omitempty"`
+	Keys            []GroupKey          `json:"keys,omitempty" bson:"keys,omitempty"`
 }
 
 // GroupKey holds group-specific key configuration

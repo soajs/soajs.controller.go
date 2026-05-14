@@ -81,6 +81,23 @@ func MT(prov provision.Provision, reg registry.Registry, uracDriver *urac.Driver
 				// Merge ACLs: package ACL + key ACL (env-aware)
 				finalACL := mergeACL(pkg.ACL, soajsCtx.Key.ACL, serviceName, env)
 
+				// If version was not explicitly requested in URL, get latest from ACL
+				// This matches Node.js behavior in mw/mt/utils.js line 233-243
+				if !serviceParams.URLInfo.VersionRequested && finalACL != nil {
+					latestVersion := getLatestVersionFromACL(finalACL)
+					if latestVersion != "" {
+						serviceVersion = latestVersion
+						serviceParams.URLInfo.ServiceVersion = serviceVersion
+						soajsCtx.Log.Debug("resolved version from ACL: " + serviceVersion)
+					}
+				}
+
+				// Default to "1" if still no version
+				if serviceVersion == "" {
+					serviceVersion = "1"
+					serviceParams.URLInfo.ServiceVersion = serviceVersion
+				}
+
 				// Check ACL unless whitelisted
 				if !skipACL {
 					if !checkServiceAccess(finalACL, serviceName, serviceVersion, r.Method, servicePath) {
@@ -124,6 +141,13 @@ func MT(prov provision.Provision, reg registry.Registry, uracDriver *urac.Driver
 func UserACL() Middleware {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// Skip /soajs/* routes - they're handled by SoajsRoutes middleware
+			path := r.URL.Path
+			if strings.HasPrefix(path, "/soajs/") {
+				next.ServeHTTP(w, r)
+				return
+			}
+
 			ctx := r.Context()
 			soajsCtx := GetSOAJSContext(ctx)
 
@@ -145,18 +169,18 @@ func UserACL() Middleware {
 				return
 			}
 
-			// Get user from URAC (with groupsConfig populated from groups)
+			// Get tenant info first
+			tenantID := soajsCtx.Tenant.ID
+			tenantCode := soajsCtx.Tenant.Code
+
+			// Get user from URAC (with groupsConfig populated from groups for the current tenant)
 			uracDriver := params.UracDriver.(*urac.Driver)
-			user, err := uracDriver.GetUserWithGroupsConfig(ctx, userID)
+			user, err := uracDriver.GetUserWithGroupsConfigForTenant(ctx, userID, tenantID)
 			if err != nil {
 				soajsCtx.Log.Debug("Failed to get user from URAC")
 				next.ServeHTTP(w, r)
 				return
 			}
-
-			// Check tenant access
-			tenantID := soajsCtx.Tenant.ID
-			tenantCode := soajsCtx.Tenant.Code
 			access := uracDriver.CheckTenantAccess(user, tenantID, tenantCode, "", nil)
 			if access == nil {
 				WriteError(w, http.StatusForbidden,
@@ -413,6 +437,85 @@ func isAccessTruthy(access interface{}) bool {
 	default:
 		return false
 	}
+}
+
+// getLatestVersionFromACL iterates through ACL keys to find the latest version
+// ACL structure has version keys like "1", "2", "3" at the top level
+// This matches Node.js behavior in mw/mt/utils.js line 233-243
+func getLatestVersionFromACL(acl map[string]interface{}) string {
+	latestVersion := ""
+	for key := range acl {
+		// Skip non-version keys (access, apisPermission, etc.)
+		if !isVersionKey(key) {
+			continue
+		}
+		// Compare versions - simple string comparison works for single digits
+		// For more complex versions, would need semantic version comparison
+		if latestVersion == "" || compareACLVersions(key, latestVersion) > 0 {
+			latestVersion = key
+		}
+	}
+	return latestVersion
+}
+
+// isVersionKey checks if a key looks like a version number (1, 2, 1.0, 2.1, etc.)
+func isVersionKey(key string) bool {
+	if key == "" {
+		return false
+	}
+	// Check if key starts with a digit
+	if key[0] < '0' || key[0] > '9' {
+		return false
+	}
+	// Check if all characters are digits or dots
+	for _, c := range key {
+		if (c < '0' || c > '9') && c != '.' {
+			return false
+		}
+	}
+	return true
+}
+
+// compareACLVersions compares two version strings and returns:
+// -1 if v1 < v2, 0 if v1 == v2, 1 if v1 > v2
+func compareACLVersions(v1, v2 string) int {
+	// Split by dots
+	parts1 := strings.Split(v1, ".")
+	parts2 := strings.Split(v2, ".")
+
+	maxLen := len(parts1)
+	if len(parts2) > maxLen {
+		maxLen = len(parts2)
+	}
+
+	for i := 0; i < maxLen; i++ {
+		var n1, n2 int
+		if i < len(parts1) {
+			n1, _ = parseInt(parts1[i])
+		}
+		if i < len(parts2) {
+			n2, _ = parseInt(parts2[i])
+		}
+		if n1 < n2 {
+			return -1
+		}
+		if n1 > n2 {
+			return 1
+		}
+	}
+	return 0
+}
+
+// parseInt safely parses an integer string
+func parseInt(s string) (int, bool) {
+	result := 0
+	for _, c := range s {
+		if c < '0' || c > '9' {
+			return 0, false
+		}
+		result = result*10 + int(c-'0')
+	}
+	return result, true
 }
 
 // Ensure context is imported for UserACL

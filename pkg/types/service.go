@@ -65,9 +65,16 @@ type Command struct {
 
 // VersionInfo holds version-specific configuration
 type VersionInfo struct {
-	APIs      []APIInfo `json:"apis" bson:"apis"`
-	ExtKeyRequired bool  `json:"extKeyRequired" bson:"extKeyRequired"`
-	OAuth     bool      `json:"oauth" bson:"oauth"`
+	APIs           []APIInfo          `json:"apis" bson:"apis"`
+	ExtKeyRequired bool               `json:"extKeyRequired" bson:"extKeyRequired"`
+	OAuth          bool               `json:"oauth" bson:"oauth"`
+	InterConnect   []InterConnectItem `json:"interConnect" bson:"interConnect"`
+}
+
+// InterConnectItem defines a service that this service can connect to
+type InterConnectItem struct {
+	Name    string `json:"name" bson:"name"`
+	Version string `json:"version" bson:"version"`
 }
 
 // APIInfo holds API endpoint information
