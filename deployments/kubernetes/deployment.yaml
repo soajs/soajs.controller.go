@@ -27,7 +27,7 @@ spec:
       terminationGracePeriodSeconds: 30
       containers:
         - name: controller
-          image: soajs/controller-go:latest
+          image: soajsorg/gateway-go:latest
           imagePullPolicy: Always
           ports:
             - name: http
