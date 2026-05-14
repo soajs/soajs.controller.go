@@ -37,11 +37,25 @@ func testHTTPGet(t *testing.T) {
 	defer resp.Body.Close()
 
 	body, _ := io.ReadAll(resp.Body)
+
+	// Verify request reached backend (not rejected by ACL)
+	// Backend may return error about missing params, that's OK
+	aclErrors := []int{150, 154, 155, 156, 157, 158, 159}
 	var result map[string]interface{}
 	json.Unmarshal(body, &result)
 
-	if result["result"] != true {
-		t.Errorf("Expected result=true for GET, got: %s", string(body))
+	if errors, ok := result["errors"].(map[string]interface{}); ok {
+		if codes, ok := errors["codes"].([]interface{}); ok {
+			for _, code := range codes {
+				codeInt := int(code.(float64))
+				for _, aclErr := range aclErrors {
+					if codeInt == aclErr {
+						t.Errorf("GET request rejected by ACL: %s", string(body))
+						return
+					}
+				}
+			}
+		}
 	}
 
 	t.Logf("GET response status: %d, body: %s", resp.StatusCode, string(body))

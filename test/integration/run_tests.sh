@@ -42,8 +42,8 @@ else
         go build -o controller ./cmd/controller
     fi
 
-    # Start controller in background
-    SOAJS_ENV=dashboard SOAJS_MONGO_URI="$MONGO_URI" ./controller > /tmp/go-ctrl-test.log 2>&1 &
+    # Start controller in background (use DEV environment from test data)
+    SOAJS_ENV=dev SOAJS_MONGO_URI="$MONGO_URI" SOAJS_MONGO_DATABASE="$MONGO_DB" ./controller > /tmp/go-ctrl-test.log 2>&1 &
     CONTROLLER_PID=$!
     CONTROLLER_STARTED=true
 
