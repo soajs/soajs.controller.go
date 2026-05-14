@@ -1,0 +1,107 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, develop, feature/*, features/* ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    services:
+      mongodb:
+        image: mongo:8
+        ports:
+          - 27017:27017
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+
+      - name: Download dependencies
+        run: go mod download
+
+      - name: Run vet
+        run: go vet ./...
+
+      - name: Run unit tests
+        run: go test ./... -v -race -coverprofile=coverage.out
+
+      - name: Import test data
+        run: go run ./test/data/cmd/import.go -uri=mongodb://127.0.0.1:27017 -db=core_provision
+
+      - name: Build controller
+        run: go build -o controller ./cmd/controller
+
+      - name: Run integration tests
+        env:
+          INTEGRATION_TEST: "true"
+          SOAJS_ENV: "dev"
+          SOAJS_MONGO_URI: "mongodb://127.0.0.1:27017"
+          SOAJS_MONGO_DATABASE: "core_provision"
+        run: |
+          # Start controller in background
+          ./controller &
+          CONTROLLER_PID=$!
+
+          # Wait for controller to be ready
+          for i in {1..30}; do
+            if curl -s http://127.0.0.1:5001/heartbeat > /dev/null 2>&1; then
+              echo "Controller is ready"
+              break
+            fi
+            sleep 1
+          done
+
+          # Run integration tests
+          go test -v ./test/integration/...
+          TEST_EXIT=$?
+
+          # Stop controller
+          kill $CONTROLLER_PID 2>/dev/null || true
+
+          exit $TEST_EXIT
+
+      - name: Upload coverage
+        if: github.ref == 'refs/heads/main'
+        uses: codecov/codecov-action@v4
+        with:
+          files: ./coverage.out
+          fail_ci_if_error: false
+
+  build:
+    runs-on: ubuntu-latest
+    needs: test
+    strategy:
+      matrix:
+        goos: [linux, darwin]
+        goarch: [amd64, arm64]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+
+      - name: Build binary
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+        run: |
+          go build -ldflags="-w -s" -o controller-${{ matrix.goos }}-${{ matrix.goarch }} ./cmd/controller
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: controller-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: controller-${{ matrix.goos }}-${{ matrix.goarch }}

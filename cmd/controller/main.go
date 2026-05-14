@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"flag"
+	"fmt"
 	"os"
 	"os/signal"
 	"syscall"
@@ -12,7 +14,18 @@ import (
 	"go.uber.org/zap"
 )
 
+// Version is set at build time via -ldflags
+var Version = "4.3.4"
+
 func main() {
+	// Version flag
+	showVersion := flag.Bool("version", false, "Print version and exit")
+	flag.Parse()
+
+	if *showVersion {
+		fmt.Printf("soajs.controller.go version %s\n", Version)
+		os.Exit(0)
+	}
 	// Load configuration
 	cfg, err := config.Load()
 	if err != nil {
@@ -35,7 +48,7 @@ func main() {
 	defer log.Sync()
 
 	log.Info("starting SOAJS controller",
-		zap.String("version", cfg.ServiceVersion),
+		zap.String("version", Version),
 	)
 
 	// Create server
