@@ -103,14 +103,15 @@ type ItemConfiguration struct {
 
 // ItemVersion holds version info for marketplace items
 type ItemVersion struct {
-	Version        string    `json:"version" bson:"version"`
-	ExtKeyRequired bool      `json:"extKeyRequired" bson:"extKeyRequired"`
-	OAuth          bool      `json:"oauth" bson:"oauth"`
-	Urac           bool      `json:"urac" bson:"urac"`
-	UracProfile    bool      `json:"urac_Profile" bson:"urac_Profile"`
-	UracACL        bool      `json:"urac_ACL" bson:"urac_ACL"`
-	ProvisionACL   bool      `json:"provision_ACL" bson:"provision_ACL"`
-	APIs           []APIInfo `json:"apis" bson:"apis"`
+	Version        string             `json:"version" bson:"version"`
+	ExtKeyRequired bool               `json:"extKeyRequired" bson:"extKeyRequired"`
+	OAuth          bool               `json:"oauth" bson:"oauth"`
+	Urac           bool               `json:"urac" bson:"urac"`
+	UracProfile    bool               `json:"urac_Profile" bson:"urac_Profile"`
+	UracACL        bool               `json:"urac_ACL" bson:"urac_ACL"`
+	ProvisionACL   bool               `json:"provision_ACL" bson:"provision_ACL"`
+	APIs           []APIInfo          `json:"apis" bson:"apis"`
+	InterConnect   []InterConnectItem `json:"interConnect" bson:"interConnect"`
 }
 
 // CoreDBConfig holds core database configuration

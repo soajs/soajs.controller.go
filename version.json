@@ -1,7 +1,7 @@
 {
   "name": "soajs.controller.go",
   "description": "SOAJS multi-tenant API gateway (Go implementation)",
-  "version": "4.3.4",
+  "version": "4.4.0",
   "author": {
     "name": "soajs team",
     "email": "team@soajs.org"

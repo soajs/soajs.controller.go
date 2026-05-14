@@ -393,7 +393,7 @@ func TestInjectSOAJSHeaders_Basic(t *testing.T) {
 		},
 	}
 
-	injectSOAJSHeaders(req, soajsCtx)
+	injectSOAJSHeaders(req, soajsCtx, nil, nil)
 
 	header := req.Header.Get("soajsinjectobj")
 	if header == "" {
@@ -422,7 +422,7 @@ func TestInjectSOAJSHeaders_WithNilKey(t *testing.T) {
 		Key: nil, // No key
 	}
 
-	injectSOAJSHeaders(req, soajsCtx)
+	injectSOAJSHeaders(req, soajsCtx, nil, nil)
 
 	header := req.Header.Get("soajsinjectobj")
 	if header == "" {

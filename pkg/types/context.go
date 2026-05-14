@@ -24,10 +24,11 @@ type ServiceParams struct {
 
 // URLInfo holds parsed URL information
 type URLInfo struct {
-	OriginalPath   string
-	ServiceName    string
-	ServiceVersion string
-	ServicePath    string
+	OriginalPath     string
+	ServiceName      string
+	ServiceVersion   string
+	ServicePath      string
+	VersionRequested bool // True if version was explicitly requested in URL
 }
 
 // DeviceInfo holds device information

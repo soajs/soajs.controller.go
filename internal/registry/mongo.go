@@ -261,8 +261,11 @@ func (r *MongoRegistry) buildDatabaseConfigs(data *types.RegistryData, envDoc *t
 		return
 	}
 
-	// Get the database prefix
+	// Get the database prefix - defaults to environment code (lowercase) if not set
 	dbPrefix := envDoc.DBs.Config.Prefix
+	if dbPrefix == "" {
+		dbPrefix = strings.ToLower(envDoc.Code)
+	}
 
 	// Build TenantMetaDB and CoreDB from dbs.databases
 	data.TenantMetaDB = make(map[string]*types.DBConnectionConfig)
@@ -489,6 +492,15 @@ func (r *MongoRegistry) loadMarketplaceServices(ctx context.Context, data *types
 
 		svc := r.marketplaceToServiceConfig(&item)
 		data.Services[svc.Name] = svc
+
+		// Debug: log service versions
+		if svc.Hosts != nil && svc.Hosts.Latest != "" {
+			r.logger.Debug("marketplace service loaded",
+				zap.String("name", svc.Name),
+				zap.String("latestVersion", svc.Hosts.Latest),
+				zap.Int("versionsCount", len(item.Versions)),
+			)
+		}
 	}
 
 	return nil
@@ -558,6 +570,9 @@ func (r *MongoRegistry) marketplaceToServiceConfig(item *types.MarketplaceItem) 
 		ID:       item.ID,
 		Name:     item.Name,
 		Versions: make(map[string]*types.VersionInfo),
+		Hosts: &types.ServiceHosts{
+			ByVersion: make(map[string][]string),
+		},
 	}
 
 	if item.Configuration != nil {
@@ -567,13 +582,26 @@ func (r *MongoRegistry) marketplaceToServiceConfig(item *types.MarketplaceItem) 
 		svc.RequestTimeoutRenewal = item.Configuration.RequestTimeoutRenewal
 	}
 
+	// Track the latest (highest) version from marketplace
+	latestVersion := ""
 	for _, v := range item.Versions {
 		vInfo := &types.VersionInfo{
 			ExtKeyRequired: v.ExtKeyRequired,
 			OAuth:          v.OAuth,
 			APIs:           v.APIs,
+			InterConnect:   v.InterConnect,
 		}
 		svc.Versions[v.Version] = vInfo
+
+		// Update latest version (compare as strings - "3" > "2" > "1")
+		if latestVersion == "" || v.Version > latestVersion {
+			latestVersion = v.Version
+		}
+	}
+
+	// Set the latest version for HA/Kubernetes discovery
+	if latestVersion != "" {
+		svc.Hosts.Latest = latestVersion
 	}
 
 	return svc
