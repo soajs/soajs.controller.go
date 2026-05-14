@@ -39,9 +39,10 @@ func NewHAAwareness(base *DefaultAwareness) (*HAAwareness, error) {
 		return nil, fmt.Errorf("failed to create Kubernetes client: %w", err)
 	}
 
-	namespace := os.Getenv("SOAJS_DEPLOY_HA_NAMESPACE")
-	if namespace == "" {
-		namespace = "soajs"
+	// Get namespace from Kubernetes service account (standard location)
+	namespace := "soajs"
+	if data, err := os.ReadFile("/var/run/secrets/kubernetes.io/serviceaccount/namespace"); err == nil {
+		namespace = strings.TrimSpace(string(data))
 	}
 
 	return &HAAwareness{

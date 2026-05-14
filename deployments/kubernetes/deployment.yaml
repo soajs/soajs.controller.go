@@ -46,11 +46,6 @@ spec:
             # HA mode for Kubernetes awareness (matches Node.js value)
             - name: SOAJS_DEPLOY_HA
               value: "kubernetes"
-            # Kubernetes namespace for service discovery
-            - name: SOAJS_DEPLOY_HA_NAMESPACE
-              valueFrom:
-                fieldRef:
-                  fieldPath: metadata.namespace
             # MongoDB connection (Go uses direct URI, not SOAJS_PROFILE)
             - name: SOAJS_MONGO_URI
               valueFrom:
