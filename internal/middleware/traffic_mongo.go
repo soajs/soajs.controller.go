@@ -20,21 +20,36 @@ const (
 
 // MongoThrottlingModel implements ThrottlingModel using MongoDB storage
 type MongoThrottlingModel struct {
-	client        *mongo.Client
-	logger        *zap.Logger
-	indexesOnce   sync.Once
-	indexesErr    error
+	client      *mongo.Client
+	database    *mongoDB.Database
+	logger      *zap.Logger
+	indexesOnce sync.Once
+	indexesErr  error
 }
 
 // NewMongoThrottlingModel creates a new MongoDB-based throttling model
-func NewMongoThrottlingModel(client *mongo.Client, logger *zap.Logger) *MongoThrottlingModel {
+// If database is empty, it uses the client's default database
+func NewMongoThrottlingModel(client *mongo.Client, database string, logger *zap.Logger) *MongoThrottlingModel {
+	var db *mongoDB.Database
+	if database != "" {
+		db = client.UseDatabase(database)
+	} else {
+		db = client.Database()
+	}
+
 	m := &MongoThrottlingModel{
-		client: client,
-		logger: logger,
+		client:   client,
+		database: db,
+		logger:   logger,
 	}
 	// Ensure indexes are created
 	m.ensureIndexes()
 	return m
+}
+
+// collection returns the collection from the throttling database
+func (m *MongoThrottlingModel) collection(name string) *mongoDB.Collection {
+	return m.database.Collection(name)
 }
 
 // ensureIndexes creates the required indexes for throttling collections
@@ -44,7 +59,7 @@ func (m *MongoThrottlingModel) ensureIndexes() {
 		defer cancel()
 
 		// Create index on throttling_monitor: { l1: 1, l2: 1 }
-		monitorColl := m.client.Collection(CollThrottlingMonitor)
+		monitorColl := m.collection(CollThrottlingMonitor)
 		indexModel := mongoDB.IndexModel{
 			Keys:    bson.D{{Key: "l1", Value: 1}, {Key: "l2", Value: 1}},
 			Options: options.Index().SetUnique(true),
@@ -53,10 +68,14 @@ func (m *MongoThrottlingModel) ensureIndexes() {
 		if err != nil {
 			m.logger.Warn("failed to create throttling_monitor index", zap.Error(err))
 			m.indexesErr = err
+		} else {
+			m.logger.Info("throttling_monitor index created",
+				zap.String("database", m.database.Name()),
+				zap.String("collection", CollThrottlingMonitor))
 		}
 
 		// Create index on throttling_error: { timestamp: -1 } with TTL
-		errorColl := m.client.Collection(CollThrottlingError)
+		errorColl := m.collection(CollThrottlingError)
 		ttlIndexModel := mongoDB.IndexModel{
 			Keys:    bson.D{{Key: "timestamp", Value: -1}},
 			Options: options.Index().SetExpireAfterSeconds(86400 * 7), // 7 days TTL
@@ -65,6 +84,10 @@ func (m *MongoThrottlingModel) ensureIndexes() {
 		if err != nil {
 			m.logger.Warn("failed to create throttling_error TTL index", zap.Error(err))
 			m.indexesErr = err
+		} else {
+			m.logger.Info("throttling_error index created",
+				zap.String("database", m.database.Name()),
+				zap.String("collection", CollThrottlingError))
 		}
 	})
 }
@@ -80,7 +103,7 @@ func (m *MongoThrottlingModel) GetThrottling(key TrafficKey) (*ThrottlingModelEn
 	}
 
 	var entry ThrottlingModelEntry
-	err := m.client.FindOne(ctx, CollThrottlingMonitor, filter, &entry)
+	err := m.collection(CollThrottlingMonitor).FindOne(ctx, filter).Decode(&entry)
 	if err != nil {
 		if mongo.IsNotFound(err) {
 			return nil, nil
@@ -108,7 +131,7 @@ func (m *MongoThrottlingModel) ResetThrottling(key TrafficKey) error {
 		},
 	}
 
-	_, err := m.client.UpdateOne(ctx, CollThrottlingMonitor, filter, update, options.Update().SetUpsert(true))
+	_, err := m.collection(CollThrottlingMonitor).UpdateOne(ctx, filter, update, options.Update().SetUpsert(true))
 	return err
 }
 
@@ -135,7 +158,7 @@ func (m *MongoThrottlingModel) IncrementThrottling(key TrafficKey) error {
 		},
 	}
 
-	_, err := m.client.UpdateOne(ctx, CollThrottlingMonitor, filter, update, options.Update().SetUpsert(true))
+	_, err := m.collection(CollThrottlingMonitor).UpdateOne(ctx, filter, update, options.Update().SetUpsert(true))
 	return err
 }
 
@@ -151,17 +174,15 @@ func (m *MongoThrottlingModel) LogTooManyRequests(key TrafficKey, strategy strin
 		Timestamp: time.Now(),
 	}
 
-	_, err := m.client.InsertOne(ctx, CollThrottlingError, entry)
+	_, err := m.collection(CollThrottlingError).InsertOne(ctx, entry)
 	if err != nil {
 		m.logger.Warn("failed to log throttling error", zap.Error(err))
 	}
 	return err
 }
 
-// Cleanup is a no-op for MongoDB model as TTL indexes handle cleanup
+// Cleanup removes expired entries from throttling_monitor
 func (m *MongoThrottlingModel) Cleanup(maxAge time.Duration) {
-	// MongoDB TTL indexes handle automatic cleanup
-	// Manual cleanup can be done here if needed for throttling_monitor
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
@@ -170,7 +191,7 @@ func (m *MongoThrottlingModel) Cleanup(maxAge time.Duration) {
 		"firstReqTime": bson.M{"$lt": cutoff},
 	}
 
-	result, err := m.client.Collection(CollThrottlingMonitor).DeleteMany(ctx, filter)
+	result, err := m.collection(CollThrottlingMonitor).DeleteMany(ctx, filter)
 	if err != nil {
 		m.logger.Warn("failed to cleanup old throttling entries", zap.Error(err))
 		return
@@ -198,7 +219,7 @@ func (m *MongoThrottlingModel) GetOrCreateEntry(key TrafficKey, windowMs int) (*
 
 	// First, try to find existing entry
 	var entry ThrottlingModelEntry
-	err := m.client.FindOne(ctx, CollThrottlingMonitor, filter, &entry)
+	err := m.collection(CollThrottlingMonitor).FindOne(ctx, filter).Decode(&entry)
 	if err != nil && !mongo.IsNotFound(err) {
 		return nil, false, err
 	}
@@ -214,7 +235,7 @@ func (m *MongoThrottlingModel) GetOrCreateEntry(key TrafficKey, windowMs int) (*
 					"firstReqTime": now,
 				},
 			}
-			_, updateErr := m.client.UpdateOne(ctx, CollThrottlingMonitor, filter, resetUpdate)
+			_, updateErr := m.collection(CollThrottlingMonitor).UpdateOne(ctx, filter, resetUpdate)
 			if updateErr != nil {
 				return nil, false, updateErr
 			}
@@ -230,7 +251,7 @@ func (m *MongoThrottlingModel) GetOrCreateEntry(key TrafficKey, windowMs int) (*
 
 		// Use FindOneAndUpdate to get the new count
 		opts := options.FindOneAndUpdate().SetReturnDocument(options.After)
-		result := m.client.Collection(CollThrottlingMonitor).FindOneAndUpdate(ctx, filter, incrementUpdate, opts)
+		result := m.collection(CollThrottlingMonitor).FindOneAndUpdate(ctx, filter, incrementUpdate, opts)
 		if err := result.Decode(&entry); err != nil {
 			return nil, false, err
 		}
@@ -246,7 +267,7 @@ func (m *MongoThrottlingModel) GetOrCreateEntry(key TrafficKey, windowMs int) (*
 		Count:        1,
 	}
 
-	_, err = m.client.InsertOne(ctx, CollThrottlingMonitor, newEntry)
+	_, err = m.collection(CollThrottlingMonitor).InsertOne(ctx, newEntry)
 	if err != nil {
 		// Check for duplicate key error (race condition - another pod created it)
 		if mongoDB.IsDuplicateKeyError(err) {
@@ -270,7 +291,7 @@ func (m *MongoThrottlingModel) GetRemainingTime(key TrafficKey, windowMs int) (t
 	}
 
 	var entry ThrottlingModelEntry
-	err := m.client.FindOne(ctx, CollThrottlingMonitor, filter, &entry)
+	err := m.collection(CollThrottlingMonitor).FindOne(ctx, filter).Decode(&entry)
 	if err != nil {
 		if mongo.IsNotFound(err) {
 			return 0, nil

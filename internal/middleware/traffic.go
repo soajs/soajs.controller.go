@@ -27,6 +27,7 @@ type ThrottlingStrategy struct {
 type TrafficConfig struct {
 	Model       string // "memory" or "mongo"
 	MongoClient *mongo.Client
+	Database    string // database name for throttling collections (e.g., "avdevgateway")
 	Logger      *zap.Logger
 }
 
@@ -74,7 +75,7 @@ func InitTrafficModel(cfg TrafficConfig) {
 		if logger == nil {
 			logger = zap.NewNop()
 		}
-		manager.mongoModel = NewMongoThrottlingModel(cfg.MongoClient, logger)
+		manager.mongoModel = NewMongoThrottlingModel(cfg.MongoClient, cfg.Database, logger)
 		manager.currentModel = "mongo"
 	} else {
 		manager.currentModel = "memory"

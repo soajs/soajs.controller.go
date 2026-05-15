@@ -14,6 +14,7 @@ import (
 	"github.com/soajs/soajs.controller.go/internal/provision"
 	"github.com/soajs/soajs.controller.go/internal/registry"
 	"github.com/soajs/soajs.controller.go/pkg/mongo"
+	"github.com/soajs/soajs.controller.go/pkg/types"
 	"github.com/soajs/soajs.controller.go/pkg/urac"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.uber.org/zap"
@@ -282,6 +283,9 @@ func (c *Controller) Setup(r *chi.Mux) error {
 		)
 	}
 
+	// Initialize traffic model based on registry config
+	c.initTrafficModel(regData)
+
 	// Setup base middleware (chi built-in)
 	r.Use(chimw.RequestID)
 	r.Use(chimw.RealIP)
@@ -352,4 +356,134 @@ func (c *Controller) ReloadProvision() error {
 // ReloadRegistry reloads the registry data
 func (c *Controller) ReloadRegistry() error {
 	return c.registry.Reload()
+}
+
+// initTrafficModel initializes the traffic throttling model based on registry config
+func (c *Controller) initTrafficModel(regData *types.RegistryData) {
+	if regData == nil || regData.CustomRegistry == nil {
+		return
+	}
+
+	// Check custom registry for traffic model config
+	// Path: gateway.value.traffic.model
+	gateway, ok := regData.CustomRegistry["gateway"]
+	if !ok {
+		return
+	}
+
+	var gatewayValue map[string]interface{}
+	switch v := gateway.(type) {
+	case map[string]interface{}:
+		if val, exists := v["value"]; exists {
+			gatewayValue, _ = val.(map[string]interface{})
+		} else {
+			gatewayValue = v
+		}
+	case bson.M:
+		if val, exists := v["value"]; exists {
+			gatewayValue, _ = val.(map[string]interface{})
+			if gatewayValue == nil {
+				if bsonVal, ok := val.(bson.M); ok {
+					gatewayValue = bsonVal
+				}
+			}
+		} else {
+			gatewayValue = v
+		}
+	default:
+		return
+	}
+
+	traffic, ok := gatewayValue["traffic"].(map[string]interface{})
+	if !ok {
+		if trafficBson, ok := gatewayValue["traffic"].(bson.M); ok {
+			traffic = trafficBson
+		} else {
+			return
+		}
+	}
+
+	model, ok := traffic["model"].(string)
+	if !ok || model != "mongo" {
+		c.logger.Info("Traffic throttling using memory model")
+		return
+	}
+
+	// Initialize MongoDB throttling model
+	// Use the gateway database from CoreDB config
+	var gatewayConfig *types.DBConnectionConfig
+	if regData.CoreDB != nil && regData.CoreDB.Gateway.Name != "" {
+		gatewayConfig = &regData.CoreDB.Gateway
+	}
+
+	// Determine database name: prefix + name (e.g., "avdev" + "gateway" = "avdevgateway")
+	databaseName := ""
+	if gatewayConfig != nil && gatewayConfig.Name != "" {
+		if gatewayConfig.Prefix != "" {
+			databaseName = gatewayConfig.Prefix + gatewayConfig.Name
+		} else {
+			databaseName = gatewayConfig.Name
+		}
+	} else {
+		// Fallback: construct as {env}gateway (e.g., "avdevgateway")
+		databaseName = strings.ToLower(c.cfg.Environment) + "gateway"
+	}
+
+	// Check if gateway is on a different cluster
+	var mongoClient *mongo.Client
+	if gatewayConfig != nil && len(gatewayConfig.Servers) > 0 {
+		gatewayHost := gatewayConfig.Servers[0].Host
+		currentHost := c.cfg.Mongo.URI
+		needsSeparateClient := gatewayHost != "" && !strings.Contains(currentHost, gatewayHost)
+
+		if needsSeparateClient {
+			// Gateway is on a different cluster - create separate client
+			c.logger.Info("Gateway configured on separate cluster",
+				zap.String("gatewayHost", gatewayHost),
+			)
+
+			servers := make([]mongo.ServerConfig, len(gatewayConfig.Servers))
+			for i, s := range gatewayConfig.Servers {
+				servers[i] = mongo.ServerConfig{Host: s.Host, Port: s.Port}
+			}
+
+			var creds *mongo.CredentialsConfig
+			if gatewayConfig.Credentials.Username != "" {
+				creds = &mongo.CredentialsConfig{
+					Username: gatewayConfig.Credentials.Username,
+					Password: gatewayConfig.Credentials.Password,
+				}
+			}
+
+			gatewayClient, err := mongo.NewClientFromDBConfig(servers, creds, databaseName, gatewayConfig.URLParam)
+			if err != nil {
+				c.logger.Warn("failed to connect to gateway cluster, using main cluster",
+					zap.Error(err),
+				)
+				mongoClient = c.mongo
+			} else {
+				c.logger.Info("connected to separate gateway cluster",
+					zap.String("database", databaseName),
+				)
+				mongoClient = gatewayClient
+				// Set database to empty since NewClientFromDBConfig already sets it
+				databaseName = ""
+			}
+		} else {
+			mongoClient = c.mongo
+		}
+	} else {
+		mongoClient = c.mongo
+	}
+
+	c.logger.Info("Traffic throttling using MongoDB model",
+		zap.String("database", databaseName),
+	)
+
+	middleware.InitTrafficModel(middleware.TrafficConfig{
+		Model:       "mongo",
+		MongoClient: mongoClient,
+		Database:    databaseName,
+		Logger:      c.logger,
+	})
 }
