@@ -312,7 +312,8 @@ func (c *Controller) Setup(r *chi.Mux) error {
 	r.Use(middleware.SoajsRoutes(c.provision)) // Handle /soajs/* routes after OAuth/UserACL populate context
 	r.Use(middleware.Traffic(c.registry))
 	r.Use(middleware.LastSeen(c.registry, c.awareness))
-	r.Use(middleware.Monitor(c.registry, c.awareness))
+	// TODO: Re-enable after fixing response blocking issue
+	// r.Use(middleware.Monitor(c.registry, c.awareness))
 
 	// Final handler - proxy to service
 	r.HandleFunc("/*", c.handleRequest)
