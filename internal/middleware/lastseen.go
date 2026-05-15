@@ -84,10 +84,15 @@ func LastSeen(reg registry.Registry, aw awareness.Awareness) Middleware {
 				return
 			}
 
-			// Get user ID from URAC driver
-			userId := getUserIDFromUracDriver(soajsCtx.Controller.ServiceParams.UracDriver)
+			// Get user ID from UserInfo (set by OAuth middleware)
+			userId := ""
+			if soajsCtx.Controller.ServiceParams.UserInfo != nil {
+				if id, ok := soajsCtx.Controller.ServiceParams.UserInfo["_id"].(string); ok {
+					userId = id
+				}
+			}
 			if userId == "" {
-				soajsCtx.Log.Debug("lastSeen failed - no userId")
+				soajsCtx.Log.Debug("lastSeen skipped - no userId")
 				return
 			}
 
@@ -282,13 +287,6 @@ func getLastSeenRouteRegExp(route string) *regexp.Regexp {
 	regexpCacheMu.Unlock()
 
 	return compiled
-}
-
-// getUserIDFromUracDriver extracts user ID from URAC driver
-func getUserIDFromUracDriver(driver interface{}) string {
-	// Check if driver has GetProfile method via reflection or type assertion
-	// For now, return empty - full implementation depends on URAC driver interface
-	return ""
 }
 
 // updateLastSeenAsync makes async call to update last seen
