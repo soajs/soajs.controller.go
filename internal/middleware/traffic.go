@@ -1,7 +1,6 @@
 package middleware
 
 import (
-	"fmt"
 	"net/http"
 	"strconv"
 	"sync"
@@ -9,7 +8,9 @@ import (
 
 	"github.com/soajs/soajs.controller.go/internal/config"
 	"github.com/soajs/soajs.controller.go/internal/registry"
+	"github.com/soajs/soajs.controller.go/pkg/mongo"
 	"github.com/soajs/soajs.controller.go/pkg/types"
+	"go.uber.org/zap"
 )
 
 // ThrottlingStrategy holds throttling strategy configuration
@@ -22,30 +23,98 @@ type ThrottlingStrategy struct {
 	Delay   int `json:"delay"`   // retry delay in ms
 }
 
-// ThrottlingEntry tracks request counts for a key
-type ThrottlingEntry struct {
-	Count        int
-	FirstReqTime time.Time
+// TrafficConfig holds traffic middleware configuration
+type TrafficConfig struct {
+	Model       string // "memory" or "mongo"
+	MongoClient *mongo.Client
+	Logger      *zap.Logger
 }
 
-// ThrottlingStore manages throttling entries
-type ThrottlingStore struct {
-	mu      sync.RWMutex
-	entries map[string]*ThrottlingEntry
+// throttlingManager manages the throttling model instance
+type throttlingManager struct {
+	mu           sync.RWMutex
+	memoryModel  *MemoryThrottlingModel
+	mongoModel   *MongoThrottlingModel
+	currentModel string
+	initialized  bool
 }
 
-var throttlingStore = &ThrottlingStore{
-	entries: make(map[string]*ThrottlingEntry),
-}
+var manager = &throttlingManager{}
 
 func init() {
-	// Start cleanup goroutine
+	// Initialize default memory model
+	manager.memoryModel = NewMemoryThrottlingModel()
+	manager.currentModel = "memory"
+	manager.initialized = true
+
+	// Start cleanup goroutine for memory model
 	go func() {
 		ticker := time.NewTicker(time.Minute)
 		for range ticker.C {
-			throttlingStore.cleanup()
+			manager.mu.RLock()
+			if manager.memoryModel != nil {
+				manager.memoryModel.Cleanup(time.Hour)
+			}
+			if manager.mongoModel != nil {
+				manager.mongoModel.Cleanup(time.Hour)
+			}
+			manager.mu.RUnlock()
 		}
 	}()
+}
+
+// InitTrafficModel initializes the throttling model based on configuration
+// This should be called during server startup with the appropriate config
+func InitTrafficModel(cfg TrafficConfig) {
+	manager.mu.Lock()
+	defer manager.mu.Unlock()
+
+	if cfg.Model == "mongo" && cfg.MongoClient != nil {
+		logger := cfg.Logger
+		if logger == nil {
+			logger = zap.NewNop()
+		}
+		manager.mongoModel = NewMongoThrottlingModel(cfg.MongoClient, logger)
+		manager.currentModel = "mongo"
+	} else {
+		manager.currentModel = "memory"
+	}
+	manager.initialized = true
+}
+
+// getThrottlingModelFromConfig reads model config from registry
+func getThrottlingModelFromConfig(regData *types.RegistryData) string {
+	if regData == nil || regData.CustomRegistry == nil {
+		return "memory"
+	}
+
+	gateway, ok := regData.CustomRegistry["gateway"]
+	if !ok {
+		return "memory"
+	}
+
+	var gatewayValue map[string]interface{}
+	switch v := gateway.(type) {
+	case map[string]interface{}:
+		if val, exists := v["value"]; exists {
+			gatewayValue, _ = val.(map[string]interface{})
+		} else {
+			gatewayValue = v
+		}
+	default:
+		return "memory"
+	}
+
+	traffic, ok := gatewayValue["traffic"].(map[string]interface{})
+	if !ok {
+		return "memory"
+	}
+
+	if model, ok := traffic["model"].(string); ok {
+		return model
+	}
+
+	return "memory"
 }
 
 // Traffic middleware handles rate limiting/throttling
@@ -101,10 +170,10 @@ func Traffic(reg registry.Registry) Middleware {
 			}
 
 			// Build traffic key
-			trafficKey := buildTrafficKey(soajsCtx.Tenant.ID, getClientIP(r), strategy.Type)
+			trafficKey := buildTrafficKeyStruct(soajsCtx.Tenant.ID, getClientIP(r), strategy.Type)
 
-			// Check throttling
-			result, headers := checkThrottling(trafficKey, strategy, 0)
+			// Check throttling using appropriate model
+			result, headers := checkThrottlingWithModel(trafficKey, strategy, strategyName, 0)
 
 			// Set rate limit headers
 			for k, v := range headers {
@@ -261,62 +330,92 @@ func getStrategyConfig(throttling map[string]interface{}, strategyName string) *
 	return strategy
 }
 
-// buildTrafficKey creates the throttling key
-func buildTrafficKey(tenantID, clientIP string, keyType int) string {
-	if keyType == 0 {
-		// Tenant only
-		return fmt.Sprintf("tenant:%s", tenantID)
+// buildTrafficKeyStruct creates a TrafficKey struct
+func buildTrafficKeyStruct(tenantID, clientIP string, keyType int) TrafficKey {
+	key := TrafficKey{
+		L1: tenantID,
+		L2: "_ALL_",
 	}
-	// Tenant + IP
-	return fmt.Sprintf("tenant:%s:ip:%s", tenantID, clientIP)
+	if keyType == 1 {
+		// Tenant + IP
+		key.L2 = clientIP
+	}
+	return key
 }
 
-// checkThrottling checks if request is within limits
-func checkThrottling(key string, strategy *ThrottlingStrategy, retry int) (bool, map[string]string) {
-	throttlingStore.mu.Lock()
-	defer throttlingStore.mu.Unlock()
+// checkThrottlingWithModel checks if request is within limits using the configured model
+func checkThrottlingWithModel(key TrafficKey, strategy *ThrottlingStrategy, strategyName string, retry int) (bool, map[string]string) {
+	manager.mu.RLock()
+	currentModel := manager.currentModel
+	memModel := manager.memoryModel
+	mongoModel := manager.mongoModel
+	manager.mu.RUnlock()
 
-	now := time.Now()
-	entry, exists := throttlingStore.entries[key]
-
-	if !exists {
-		// First request
-		throttlingStore.entries[key] = &ThrottlingEntry{
-			Count:        1,
-			FirstReqTime: now,
-		}
-		remaining := strategy.Limit - 1
-		return true, buildRateLimitHeaders(strategy.Window, strategy.Limit, remaining)
+	if currentModel == "mongo" && mongoModel != nil {
+		return checkThrottlingMongo(mongoModel, key, strategy, strategyName, retry)
 	}
+	return checkThrottlingMemory(memModel, key, strategy, strategyName, retry)
+}
 
-	// Check if window has expired
-	windowDuration := time.Duration(strategy.Window) * time.Millisecond
-	remainingTime := windowDuration - now.Sub(entry.FirstReqTime)
+// checkThrottlingMemory checks throttling using memory model
+func checkThrottlingMemory(model *MemoryThrottlingModel, key TrafficKey, strategy *ThrottlingStrategy, strategyName string, retry int) (bool, map[string]string) {
+	entry, windowExpired := model.GetOrCreateEntry(key, strategy.Window)
 
-	if remainingTime <= 0 {
-		// Window expired, reset
-		entry.Count = 1
-		entry.FirstReqTime = now
-		remaining := strategy.Limit - 1
-		return true, buildRateLimitHeaders(strategy.Window, strategy.Limit, remaining)
-	}
-
-	// Increment count
-	if retry == 0 {
-		entry.Count++
+	// Calculate remaining time
+	var remainingTimeMs int
+	if windowExpired {
+		remainingTimeMs = strategy.Window
+	} else {
+		remainingTime := model.GetRemainingTime(key, strategy.Window)
+		remainingTimeMs = int(remainingTime.Milliseconds())
 	}
 
 	remaining := strategy.Limit - entry.Count
-	headers := buildRateLimitHeaders(int(remainingTime.Milliseconds()), strategy.Limit, remaining)
+	headers := buildRateLimitHeaders(remainingTimeMs, strategy.Limit, remaining)
 
 	if entry.Count > strategy.Limit {
 		// Over limit, check retries
 		if retry < strategy.Retries {
 			// Sleep and retry
 			time.Sleep(time.Duration(strategy.Delay) * time.Millisecond)
-			return checkThrottling(key, strategy, retry+1)
+			return checkThrottlingMemory(model, key, strategy, strategyName, retry+1)
 		}
 		// All retries exhausted
+		return false, headers
+	}
+
+	return true, headers
+}
+
+// checkThrottlingMongo checks throttling using MongoDB model
+func checkThrottlingMongo(model *MongoThrottlingModel, key TrafficKey, strategy *ThrottlingStrategy, strategyName string, retry int) (bool, map[string]string) {
+	entry, windowExpired, err := model.GetOrCreateEntry(key, strategy.Window)
+	if err != nil {
+		// On error, allow the request (fail open for availability)
+		return true, buildRateLimitHeaders(strategy.Window, strategy.Limit, strategy.Limit)
+	}
+
+	// Calculate remaining time
+	var remainingTimeMs int
+	if windowExpired {
+		remainingTimeMs = strategy.Window
+	} else {
+		remainingTime, _ := model.GetRemainingTime(key, strategy.Window)
+		remainingTimeMs = int(remainingTime.Milliseconds())
+	}
+
+	remaining := strategy.Limit - entry.Count
+	headers := buildRateLimitHeaders(remainingTimeMs, strategy.Limit, remaining)
+
+	if entry.Count > strategy.Limit {
+		// Over limit, check retries
+		if retry < strategy.Retries {
+			// Sleep and retry
+			time.Sleep(time.Duration(strategy.Delay) * time.Millisecond)
+			return checkThrottlingMongo(model, key, strategy, strategyName, retry+1)
+		}
+		// All retries exhausted - log the error
+		_ = model.LogTooManyRequests(key, strategyName)
 		return false, headers
 	}
 
@@ -328,27 +427,25 @@ func buildRateLimitHeaders(remainingMs, limit, remaining int) map[string]string 
 	if remaining < 0 {
 		remaining = 0
 	}
-	return map[string]string{
-		"Retry-After":          strconv.Itoa(remainingMs / 1000),
-		"X-RateLimit-Limit":    strconv.Itoa(limit),
-		"X-RateLimit-Remaining": strconv.Itoa(remaining),
+	retryAfter := remainingMs / 1000
+	if retryAfter < 1 {
+		retryAfter = 1
 	}
-}
-
-// cleanup removes expired entries
-func (s *ThrottlingStore) cleanup() {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	cutoff := time.Now().Add(-time.Hour)
-	for key, entry := range s.entries {
-		if entry.FirstReqTime.Before(cutoff) {
-			delete(s.entries, key)
-		}
+	return map[string]string{
+		"Retry-After":           strconv.Itoa(retryAfter),
+		"X-RateLimit-Limit":     strconv.Itoa(limit),
+		"X-RateLimit-Remaining": strconv.Itoa(remaining),
 	}
 }
 
 // SetRateLimit sets a custom rate limit for a key (kept for compatibility)
 func SetRateLimit(key string, rps int, burst int) {
 	// Not used in new implementation
+}
+
+// GetCurrentModel returns the current throttling model type (for testing/debugging)
+func GetCurrentModel() string {
+	manager.mu.RLock()
+	defer manager.mu.RUnlock()
+	return manager.currentModel
 }
