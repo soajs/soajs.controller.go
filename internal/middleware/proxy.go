@@ -1,7 +1,6 @@
 package middleware
 
 import (
-	"bytes"
 	"context"
 	"crypto/hmac"
 	"crypto/sha256"
@@ -229,59 +228,6 @@ func proxyRequest(w http.ResponseWriter, r *http.Request, targetURL string, soaj
 		// TODO: Read from registry.services[name].requestTimeout
 	}
 
-	// Initialize monitoring
-	var monitorDoc *MonitorDocument
-	var monitorConfig *MonitorConfig
-	var monitorBlacklisted bool
-	reqStart := time.Now()
-
-	if reg != nil {
-		regData := reg.Get()
-		monitorConfig = getMonitorConfig(regData)
-		if monitorConfig != nil && soajsCtx.Controller != nil && soajsCtx.Controller.ServiceParams != nil {
-			serviceName := soajsCtx.Controller.ServiceParams.ServiceName
-			if serviceName == "" && soajsCtx.Controller.ServiceParams.URLInfo != nil {
-				serviceName = soajsCtx.Controller.ServiceParams.URLInfo.ServiceName
-			}
-			monitorBlacklisted = isServiceBlacklisted(serviceName, monitorConfig)
-
-			// Check if renewReqMonitorOff is enabled and this is a token renew request
-			if !monitorBlacklisted {
-				gotoServiceConfig := GetGotoServiceConfig(regData)
-				if gotoServiceConfig != nil && gotoServiceConfig.RenewReqMonitorOff {
-					// Skip monitoring for OAuth token renew/refresh requests
-					if isTokenRenewRequest(serviceName, soajsCtx.Controller.ServiceParams.URLInfo) {
-						monitorBlacklisted = true
-					}
-				}
-			}
-
-			if !monitorBlacklisted {
-				monitorDoc = &MonitorDocument{
-					Name:   serviceName,
-					Method: r.Method,
-					Time: MonitorTime{
-						ReqStart: reqStart.UnixMilli(),
-					},
-				}
-				if soajsCtx.Controller.ServiceParams.URLInfo != nil {
-					monitorDoc.API = soajsCtx.Controller.ServiceParams.URLInfo.ServicePath
-					monitorDoc.Version = soajsCtx.Controller.ServiceParams.URLInfo.ServiceVersion
-				}
-				if monitorConfig.ReqInfo {
-					monitorDoc.Host = r.Host
-					monitorDoc.URL = r.URL.String()
-				}
-				if monitorConfig.ReqHeader {
-					monitorDoc.Headers = r.Header
-				}
-				if monitorConfig.ReqQuery {
-					monitorDoc.Query = r.URL.Query()
-				}
-			}
-		}
-	}
-
 	// Create context with timeout for the request
 	ctx, cancel := context.WithTimeout(r.Context(), requestTimeout)
 	defer cancel()
@@ -324,17 +270,6 @@ func proxyRequest(w http.ResponseWriter, r *http.Request, targetURL string, soaj
 		}
 	}
 
-	// Record request body timing for monitoring
-	if monitorDoc != nil {
-		monitorDoc.Time.ReqBodyStart = time.Now().UnixMilli()
-		monitorDoc.Time.ReqBodyEnd = time.Now().UnixMilli()
-	}
-
-	// Execute proxy request
-	if monitorDoc != nil {
-		monitorDoc.Time.ResStart = time.Now().UnixMilli()
-	}
-
 	soajsCtx.Log.Debug("proxy request starting", zap.String("targetURL", targetURL))
 
 	resp, err := proxyClient.Do(proxyReq)
@@ -353,32 +288,8 @@ func proxyRequest(w http.ResponseWriter, r *http.Request, targetURL string, soaj
 	// Write status code
 	w.WriteHeader(resp.StatusCode)
 
-	// Copy response body (and capture for monitoring if needed)
-	if monitorDoc != nil && monitorConfig != nil && monitorConfig.ReqResponse {
-		// Capture response body for monitoring
-		var respBody bytes.Buffer
-		io.Copy(&respBody, resp.Body)
-
-		// Write to client
-		w.Write(respBody.Bytes())
-
-		// Limit captured response size to 10KB for monitoring
-		respBytes := respBody.Bytes()
-		if len(respBytes) > 10240 {
-			respBytes = respBytes[:10240]
-		}
-		monitorDoc.Response = string(respBytes)
-	} else {
-		io.Copy(w, resp.Body)
-	}
-
-	// Record response end time and send to monitor
-	if monitorDoc != nil && aw != nil {
-		monitorDoc.Time.ResEnd = time.Now().UnixMilli()
-		buffer := GetMonitorBuffer(reg, aw, soajsCtx.Log)
-		buffer.SetConfig(monitorConfig.Buffer)
-		buffer.Add(*monitorDoc)
-	}
+	// Copy response body
+	io.Copy(w, resp.Body)
 }
 
 func copyHeaders(dst, src http.Header) {
