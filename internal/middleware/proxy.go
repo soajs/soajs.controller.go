@@ -329,13 +329,17 @@ func proxyRequest(w http.ResponseWriter, r *http.Request, targetURL string, soaj
 		monitorDoc.Time.ResStart = time.Now().UnixMilli()
 	}
 
+	soajsCtx.Log.Debug("proxy request starting", zap.String("targetURL", targetURL))
+
 	resp, err := proxyClient.Do(proxyReq)
 	if err != nil {
-		soajsCtx.Log.Error("proxy request failed")
+		soajsCtx.Log.Error("proxy request failed", zap.Error(err), zap.String("targetURL", targetURL))
 		WriteError(w, http.StatusBadGateway, config.ErrCodeServiceNotFound, "Service unavailable")
 		return
 	}
 	defer resp.Body.Close()
+
+	soajsCtx.Log.Debug("proxy response received", zap.Int("statusCode", resp.StatusCode))
 
 	// Copy response headers
 	copyHeaders(w.Header(), resp.Header)
