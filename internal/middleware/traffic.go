@@ -157,9 +157,14 @@ func Traffic(reg registry.Registry) Middleware {
 			isPublic := false
 
 			if soajsCtx.Controller != nil && soajsCtx.Controller.ServiceParams != nil {
-				serviceName = soajsCtx.Controller.ServiceParams.ServiceName
+				// Get service name from URLInfo (always set by URL middleware)
+				// Fall back to ServiceParams.ServiceName (only set for OAuth-required APIs)
 				if soajsCtx.Controller.ServiceParams.URLInfo != nil {
+					serviceName = soajsCtx.Controller.ServiceParams.URLInfo.ServiceName
 					apiPath = soajsCtx.Controller.ServiceParams.URLInfo.ServicePath
+				}
+				if serviceName == "" {
+					serviceName = soajsCtx.Controller.ServiceParams.ServiceName
 				}
 				// Check if API is public (no auth required)
 				isPublic = !soajsCtx.Controller.ServiceParams.RequiresOAuth
