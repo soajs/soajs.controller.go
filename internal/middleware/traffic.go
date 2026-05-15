@@ -125,6 +125,7 @@ func Traffic(reg registry.Registry) Middleware {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			ctx := r.Context()
 			soajsCtx := GetSOAJSContext(ctx)
+			logger := getLoggerFromContext(ctx)
 
 			// Get throttling configuration
 			if reg == nil {
@@ -133,6 +134,13 @@ func Traffic(reg registry.Registry) Middleware {
 			}
 			regData := reg.Get()
 			if regData == nil || regData.ServiceConfig == nil || regData.ServiceConfig.Throttling == nil {
+				if logger != nil {
+					logger.Debug("throttling skipped: no throttling config",
+						zap.Bool("regDataNil", regData == nil),
+						zap.Bool("serviceConfigNil", regData != nil && regData.ServiceConfig == nil),
+						zap.Bool("throttlingNil", regData != nil && regData.ServiceConfig != nil && regData.ServiceConfig.Throttling == nil),
+					)
+				}
 				next.ServeHTTP(w, r)
 				return
 			}
@@ -160,6 +168,13 @@ func Traffic(reg registry.Registry) Middleware {
 			// Determine strategy
 			strategyName := getThrottlingStrategy(regData, soajsCtx, serviceName, apiPath, isPublic)
 			if strategyName == "" {
+				if logger != nil {
+					logger.Debug("throttling skipped: no strategy found",
+						zap.String("service", serviceName),
+						zap.String("apiPath", apiPath),
+						zap.Bool("isPublic", isPublic),
+					)
+				}
 				next.ServeHTTP(w, r)
 				return
 			}
@@ -167,8 +182,23 @@ func Traffic(reg registry.Registry) Middleware {
 			// Get strategy config
 			strategy := getStrategyConfig(regData.ServiceConfig.Throttling, strategyName)
 			if strategy == nil || strategy.Status == 0 {
+				if logger != nil {
+					logger.Debug("throttling skipped: strategy disabled or not found",
+						zap.String("strategyName", strategyName),
+						zap.Bool("strategyNil", strategy == nil),
+					)
+				}
 				next.ServeHTTP(w, r)
 				return
+			}
+
+			if logger != nil {
+				logger.Debug("throttling applied",
+					zap.String("service", serviceName),
+					zap.String("apiPath", apiPath),
+					zap.String("strategy", strategyName),
+					zap.Int("limit", strategy.Limit),
+				)
 			}
 
 			// Build traffic key

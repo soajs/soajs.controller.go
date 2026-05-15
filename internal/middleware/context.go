@@ -107,3 +107,12 @@ func GetStartTime(ctx context.Context) time.Time {
 	}
 	return time.Time{}
 }
+
+// getLoggerFromContext retrieves the logger from SOAJS context
+func getLoggerFromContext(ctx context.Context) *zap.Logger {
+	soajsCtx := GetSOAJSContext(ctx)
+	if soajsCtx != nil {
+		return soajsCtx.Log
+	}
+	return nil
+}
