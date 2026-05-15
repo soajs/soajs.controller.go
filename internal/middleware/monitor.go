@@ -163,7 +163,9 @@ func (mb *MonitorBuffer) sendItems(items []MonitorDocument) {
 	// Get soamonitor host
 	hostInfo, err := mb.aw.GetHost("soamonitor", "1")
 	if err != nil || hostInfo == nil {
-		mb.logger.Debug("Monitor buffer flush: Unable to find host for soamonitor")
+		if mb.logger != nil {
+			mb.logger.Debug("Monitor buffer flush: Unable to find host for soamonitor", zap.Error(err))
+		}
 		// Put items back in buffer
 		mb.mu.Lock()
 		mb.buffer = append(items, mb.buffer...)
@@ -211,8 +213,6 @@ func (mb *MonitorBuffer) sendItems(items []MonitorDocument) {
 		return
 	}
 	defer resp.Body.Close()
-
-	mb.logger.Debug("Monitor buffer flushed", zap.Int("items", len(items)))
 }
 
 // Monitor middleware tracks request/response metrics
@@ -226,7 +226,14 @@ func Monitor(reg registry.Registry, aw awareness.Awareness) Middleware {
 			regData := reg.Get()
 			monitorConfig := getMonitorConfig(regData)
 
-			if monitorConfig == nil || soajsCtx == nil {
+			if monitorConfig == nil {
+				if soajsCtx != nil && soajsCtx.Log != nil {
+					soajsCtx.Log.Debug("monitor skipped - no config")
+				}
+				next.ServeHTTP(w, r)
+				return
+			}
+			if soajsCtx == nil {
 				next.ServeHTTP(w, r)
 				return
 			}
@@ -256,7 +263,8 @@ func Monitor(reg registry.Registry, aw awareness.Awareness) Middleware {
 
 			if soajsCtx.Controller != nil && soajsCtx.Controller.ServiceParams != nil {
 				if soajsCtx.Controller.ServiceParams.URLInfo != nil {
-					doc.API = soajsCtx.Controller.ServiceParams.URLInfo.ServicePath
+					// Use full path (e.g., /connectspaces/me) to match Node.js behavior
+					doc.API = r.URL.Path
 					doc.Version = soajsCtx.Controller.ServiceParams.URLInfo.ServiceVersion
 				}
 			}
@@ -293,6 +301,11 @@ func Monitor(reg registry.Registry, aw awareness.Awareness) Middleware {
 			buffer := GetMonitorBuffer(reg, aw, soajsCtx.Log)
 			buffer.SetConfig(monitorConfig.Buffer)
 			buffer.Add(doc)
+
+			soajsCtx.Log.Debug("monitor captured request",
+				zap.String("service", serviceName),
+				zap.String("api", doc.API),
+				zap.Int("responseSize", len(rw.body)))
 		})
 	}
 }
@@ -342,6 +355,24 @@ func toSlice(v interface{}) []interface{} {
 		return s
 	default:
 		return nil
+	}
+}
+
+// toInt converts interface{} to int, handling various numeric types from MongoDB
+func toInt(v interface{}) int {
+	switch n := v.(type) {
+	case int:
+		return n
+	case int32:
+		return int(n)
+	case int64:
+		return int(n)
+	case float64:
+		return int(n)
+	case float32:
+		return int(n)
+	default:
+		return 0
 	}
 }
 
@@ -425,12 +456,8 @@ func getMonitorConfig(regData *types.RegistryData) *MonitorConfig {
 
 	if buffer := toMap(monitorData["buffer"]); buffer != nil {
 		config.Buffer = &MonitorBufferConfig{}
-		if t, ok := buffer["time"].(float64); ok {
-			config.Buffer.Time = int(t)
-		}
-		if l, ok := buffer["limit"].(float64); ok {
-			config.Buffer.Limit = int(l)
-		}
+		config.Buffer.Time = toInt(buffer["time"])
+		config.Buffer.Limit = toInt(buffer["limit"])
 	}
 
 	return config

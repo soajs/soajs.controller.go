@@ -69,6 +69,14 @@ type VersionInfo struct {
 	ExtKeyRequired bool               `json:"extKeyRequired" bson:"extKeyRequired"`
 	OAuth          bool               `json:"oauth" bson:"oauth"`
 	InterConnect   []InterConnectItem `json:"interConnect" bson:"interConnect"`
+	// Service parameter flags - determine what data to include in soajsinjectobj
+	Urac            bool `json:"urac" bson:"urac"`
+	UracProfile     bool `json:"urac_Profile" bson:"urac_Profile"`
+	UracACL         bool `json:"urac_ACL" bson:"urac_ACL"`
+	UracConfig      bool `json:"urac_Config" bson:"urac_Config"`
+	UracGroupConfig bool `json:"urac_GroupConfig" bson:"urac_GroupConfig"`
+	TenantProfile   bool `json:"tenant_Profile" bson:"tenant_Profile"`
+	ProvisionACL    bool `json:"provision_ACL" bson:"provision_ACL"`
 }
 
 // InterConnectItem defines a service that this service can connect to

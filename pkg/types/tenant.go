@@ -7,8 +7,11 @@ type Tenant struct {
 	Name            string        `json:"name" bson:"name"`
 	Description     string        `json:"description" bson:"description"`
 	Type            string        `json:"type" bson:"type"`
+	Locked          bool          `json:"locked" bson:"locked"`
 	MaintenanceMode bool          `json:"maintenance" bson:"maintenance"`
 	Profile         interface{}   `json:"profile" bson:"profile"`
+	Roaming         interface{}   `json:"roaming,omitempty" bson:"roaming,omitempty"`
+	Main            interface{}   `json:"main,omitempty" bson:"main,omitempty"`
 	Applications    []Application `json:"applications" bson:"applications"`
 }
 

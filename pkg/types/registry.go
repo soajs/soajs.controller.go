@@ -103,15 +103,18 @@ type ItemConfiguration struct {
 
 // ItemVersion holds version info for marketplace items
 type ItemVersion struct {
-	Version        string             `json:"version" bson:"version"`
-	ExtKeyRequired bool               `json:"extKeyRequired" bson:"extKeyRequired"`
-	OAuth          bool               `json:"oauth" bson:"oauth"`
-	Urac           bool               `json:"urac" bson:"urac"`
-	UracProfile    bool               `json:"urac_Profile" bson:"urac_Profile"`
-	UracACL        bool               `json:"urac_ACL" bson:"urac_ACL"`
-	ProvisionACL   bool               `json:"provision_ACL" bson:"provision_ACL"`
-	APIs           []APIInfo          `json:"apis" bson:"apis"`
-	InterConnect   []InterConnectItem `json:"interConnect" bson:"interConnect"`
+	Version         string             `json:"version" bson:"version"`
+	ExtKeyRequired  bool               `json:"extKeyRequired" bson:"extKeyRequired"`
+	OAuth           bool               `json:"oauth" bson:"oauth"`
+	Urac            bool               `json:"urac" bson:"urac"`
+	UracProfile     bool               `json:"urac_Profile" bson:"urac_Profile"`
+	UracACL         bool               `json:"urac_ACL" bson:"urac_ACL"`
+	UracConfig      bool               `json:"urac_Config" bson:"urac_Config"`
+	UracGroupConfig bool               `json:"urac_GroupConfig" bson:"urac_GroupConfig"`
+	TenantProfile   bool               `json:"tenant_Profile" bson:"tenant_Profile"`
+	ProvisionACL    bool               `json:"provision_ACL" bson:"provision_ACL"`
+	APIs            []APIInfo          `json:"apis" bson:"apis"`
+	InterConnect    []InterConnectItem `json:"interConnect" bson:"interConnect"`
 }
 
 // CoreDBConfig holds core database configuration

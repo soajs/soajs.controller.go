@@ -18,6 +18,7 @@ import (
 	"github.com/soajs/soajs.controller.go/internal/config"
 	"github.com/soajs/soajs.controller.go/internal/provision"
 	"github.com/soajs/soajs.controller.go/internal/registry"
+	"github.com/soajs/soajs.controller.go/pkg/types"
 	"go.uber.org/zap"
 )
 
@@ -315,7 +316,12 @@ func proxyRequest(w http.ResponseWriter, r *http.Request, targetURL string, soaj
 
 	// Inject SOAJS context if configured
 	if soajsCtx.Tenant != nil {
-		injectSOAJSHeaders(proxyReq, soajsCtx, reg, aw)
+		if err := injectSOAJSHeaders(proxyReq, soajsCtx, reg, aw); err != nil {
+			soajsCtx.Log.Error("failed to inject SOAJS headers", zap.Error(err))
+			WriteError(w, http.StatusRequestHeaderFieldsTooLarge, config.ErrCodeHeaderTooLarge,
+				config.DefaultErrors[config.ErrCodeHeaderTooLarge])
+			return
+		}
 	}
 
 	// Record request body timing for monitoring
@@ -393,71 +399,120 @@ func getScheme(r *http.Request) string {
 	return "http"
 }
 
-func injectSOAJSHeaders(req *http.Request, soajsCtx *SOAJSContext, reg registry.Registry, aw awareness.Awareness) {
+func injectSOAJSHeaders(req *http.Request, soajsCtx *SOAJSContext, reg registry.Registry, aw awareness.Awareness) error {
 	// Build the soajsinjectobj - this is the JSON object that SOAJS services expect
+	// Matches Node.js mw/mt/index.js behavior exactly
 	injectObj := make(map[string]interface{})
 
-	// Tenant info
+	// Get service version config to determine what to include
+	var serviceConfig *types.VersionInfo
+	serviceName := ""
+	serviceVersion := ""
+	if soajsCtx.Controller != nil && soajsCtx.Controller.ServiceParams != nil && reg != nil {
+		regData := reg.Get()
+		if regData != nil && regData.Services != nil {
+			if soajsCtx.Controller.ServiceParams.URLInfo != nil {
+				serviceName = soajsCtx.Controller.ServiceParams.URLInfo.ServiceName
+				serviceVersion = soajsCtx.Controller.ServiceParams.URLInfo.ServiceVersion
+			}
+			if svc, ok := regData.Services[serviceName]; ok && svc.Versions != nil {
+				if vInfo, vok := svc.Versions[serviceVersion]; vok {
+					serviceConfig = vInfo
+				}
+			}
+		}
+	}
+
+	// Service parameter flags - all false unless service explicitly requests (Node.js line 58)
+	provisionACL := false
+	urac := false
+	uracProfile := false
+	uracACL := false
+	uracConfig := false
+	uracGroupConfig := false
+	tenantProfile := false
+
+	if serviceConfig != nil {
+		provisionACL = serviceConfig.ProvisionACL
+		urac = serviceConfig.Urac
+		uracProfile = serviceConfig.UracProfile
+		uracACL = serviceConfig.UracACL
+		uracConfig = serviceConfig.UracConfig
+		uracGroupConfig = serviceConfig.UracGroupConfig
+		tenantProfile = serviceConfig.TenantProfile
+	}
+
+	// Tenant info (Node.js builds full tenant object)
 	if soajsCtx.Tenant != nil {
-		injectObj["tenant"] = map[string]interface{}{
+		tenantObj := map[string]interface{}{
 			"id":     soajsCtx.Tenant.ID,
 			"code":   soajsCtx.Tenant.Code,
 			"name":   soajsCtx.Tenant.Name,
 			"type":   soajsCtx.Tenant.Type,
-			"locked": false,
+			"locked": soajsCtx.Tenant.Locked,
 		}
+		// Add roaming if present
+		if soajsCtx.Tenant.Roaming != nil {
+			tenantObj["roaming"] = soajsCtx.Tenant.Roaming
+		}
+		// Add main if present
+		if soajsCtx.Tenant.Main != nil {
+			tenantObj["main"] = soajsCtx.Tenant.Main
+		}
+		// Only include tenant profile if service requests it
+		if tenantProfile && soajsCtx.Tenant.Profile != nil {
+			tenantObj["profile"] = soajsCtx.Tenant.Profile
+		}
+		injectObj["tenant"] = tenantObj
 	}
 
-	// Key info - config must be at least an empty object, never null
+	// Key info - only include service-specific config, not full config
 	if soajsCtx.Key != nil {
-		keyConfig := soajsCtx.Key.Config
-		if keyConfig == nil {
-			keyConfig = make(map[string]interface{})
+		// Build minimal config with only commonFields and service-specific config
+		keyConfig := make(map[string]interface{})
+		if soajsCtx.Key.Config != nil {
+			if commonFields, exists := soajsCtx.Key.Config["commonFields"]; exists {
+				keyConfig["commonFields"] = commonFields
+			}
+			if serviceName != "" {
+				if svcConfig, exists := soajsCtx.Key.Config[serviceName]; exists {
+					keyConfig[serviceName] = svcConfig
+				}
+			}
 		}
+
 		injectObj["key"] = map[string]interface{}{
-			"iKey":   soajsCtx.Key.InternalKey, // internal key (32 chars)
+			"iKey":   soajsCtx.Key.InternalKey,
 			"eKey":   soajsCtx.Key.ExtKey,
 			"config": keyConfig,
 		}
 	}
 
-	// Application info (from key)
+	// Application info - build with ACL initially (Node.js includes then deletes)
 	if soajsCtx.Key != nil {
 		appObj := map[string]interface{}{
 			"product": soajsCtx.Key.ProductCode,
 			"package": soajsCtx.Key.PackageCode,
 			"appId":   soajsCtx.Key.AppID,
 		}
-		// Include application ACLs (can be null)
-		if soajsCtx.Key.AppACL != nil {
-			appObj["acl"] = soajsCtx.Key.AppACL
-		} else {
-			appObj["acl"] = nil
-		}
-		if soajsCtx.Key.AppACLAllEnv != nil {
-			appObj["acl_all_env"] = soajsCtx.Key.AppACLAllEnv
-		} else {
-			appObj["acl_all_env"] = nil
-		}
+		// Include ACL - will be removed below if not needed
+		appObj["acl"] = soajsCtx.Key.AppACL
+		appObj["acl_all_env"] = soajsCtx.Key.AppACLAllEnv
 		injectObj["application"] = appObj
 	}
 
-	// Package info
+	// Package info - build with ACL initially (Node.js includes then deletes)
+	pkgObj := make(map[string]interface{})
 	if soajsCtx.Controller != nil && soajsCtx.Controller.ServiceParams != nil {
 		pkg := soajsCtx.Controller.ServiceParams.Package
 		if pkg != nil {
-			pkgACL := pkg.ACL
-			if pkgACL == nil {
-				pkgACL = make(map[string]interface{})
-			}
-			injectObj["package"] = map[string]interface{}{
-				"acl":         pkgACL,
-				"acl_all_env": nil,
-			}
+			pkgObj["acl"] = pkg.ACL
+			pkgObj["acl_all_env"] = pkg.ACLAllEnv
 		}
 	}
+	injectObj["package"] = pkgObj
 
-	// Device and Geo info
+	// Device and Geo info - always included
 	if soajsCtx.Device != nil {
 		injectObj["device"] = soajsCtx.Device
 	} else {
@@ -469,79 +524,138 @@ func injectSOAJSHeaders(req *http.Request, soajsCtx *SOAJSContext, reg registry.
 		injectObj["geo"] = map[string]interface{}{}
 	}
 
-	// Urac info - user profile from OAuth token
-	if soajsCtx.Controller != nil && soajsCtx.Controller.ServiceParams != nil && soajsCtx.Controller.ServiceParams.UserInfo != nil {
-		userInfo := soajsCtx.Controller.ServiceParams.UserInfo
-		// Include the full user info object from the OAuth token
-		injectObj["urac"] = userInfo
+	// Urac info - only if service requests it (Node.js line ~193)
+	if urac && soajsCtx.Controller != nil && soajsCtx.Controller.ServiceParams != nil && soajsCtx.Controller.ServiceParams.UserInfo != nil {
+		userMap := soajsCtx.Controller.ServiceParams.UserInfo
+		// Build urac object with base fields
+		uracObj := map[string]interface{}{
+			"_id":         userMap["_id"],
+			"username":    userMap["username"],
+			"firstName":   encodeHeaderValue(getString(userMap, "firstName")),
+			"lastName":    encodeHeaderValue(getString(userMap, "lastName")),
+			"email":       userMap["email"],
+			"groups":      userMap["groups"],
+			"socialLogin": userMap["socialLogin"],
+		}
+		if tenant, ok := userMap["tenant"].(map[string]interface{}); ok {
+			uracObj["tenant"] = map[string]interface{}{
+				"id":   tenant["id"],
+				"code": tenant["code"],
+			}
+		}
+
+		// Add param to indicate what was included
+		injectObj["param"] = map[string]interface{}{
+			"urac_Profile": uracProfile,
+			"urac_ACL":     uracACL,
+		}
+
+		if uracProfile {
+			uracObj["profile"] = userMap["profile"]
+		}
+		if uracACL {
+			uracObj["acl"] = userMap["acl"]
+			uracObj["acl_AllEnv"] = userMap["acl_AllEnv"]
+		}
+		if uracConfig {
+			uracObj["config"] = userMap["config"]
+		}
+		if uracGroupConfig {
+			uracObj["groupsConfig"] = userMap["groupsConfig"]
+		}
+		injectObj["urac"] = uracObj
+	}
+
+	// Delete ACL data if not requested (Node.js line ~286)
+	if !provisionACL {
+		if appObj, ok := injectObj["application"].(map[string]interface{}); ok {
+			delete(appObj, "acl")
+			delete(appObj, "acl_all_env")
+		}
+		if pkgObj, ok := injectObj["package"].(map[string]interface{}); ok {
+			delete(pkgObj, "acl")
+			delete(pkgObj, "acl_all_env")
+		}
 	}
 
 	// Awareness info - controller host and port for service callbacks
-	// Default to localhost:4000 (standard controller port)
 	awarenessObj := map[string]interface{}{
 		"host": "127.0.0.1",
 		"port": 4000,
 	}
 
-	// Build interConnect array if service has interConnect configured
-	if soajsCtx.Controller != nil && soajsCtx.Controller.ServiceParams != nil && reg != nil && aw != nil {
-		serviceName := soajsCtx.Controller.ServiceParams.URLInfo.ServiceName
-		serviceVersion := soajsCtx.Controller.ServiceParams.URLInfo.ServiceVersion
-
+	// Get controller port from registry if available
+	if reg != nil {
 		regData := reg.Get()
-		if regData != nil && regData.Services != nil {
-			if svc, ok := regData.Services[serviceName]; ok && svc.Versions != nil {
-				if vInfo, vok := svc.Versions[serviceVersion]; vok && vInfo != nil && len(vInfo.InterConnect) > 0 {
-					interConnectArr := make([]map[string]interface{}, 0)
+		if regData != nil && regData.ServiceConfig != nil {
+			if regData.ServiceConfig.Ports.Controller > 0 {
+				awarenessObj["port"] = regData.ServiceConfig.Ports.Controller
+			}
+		}
+	}
 
-					for _, ic := range vInfo.InterConnect {
-						if ic.Name == "" {
-							continue
-						}
-						// Check if service exists in registry
-						icSvc, icExists := regData.Services[ic.Name]
-						if !icExists || icSvc.Port == 0 {
-							soajsCtx.Log.Debug("interConnect service not found in registry",
-								zap.String("service", ic.Name))
-							continue
-						}
+	// Build interConnect array if service has interConnect configured
+	if serviceConfig != nil && len(serviceConfig.InterConnect) > 0 && reg != nil && aw != nil {
+		interConnectArr := make([]map[string]interface{}, 0)
+		regData := reg.Get()
 
-						// Get host from awareness
-						hostInfo, err := aw.GetHost(ic.Name, ic.Version)
-						if err != nil || hostInfo == nil {
-							soajsCtx.Log.Debug("interConnect failed to get host",
-								zap.String("service", ic.Name),
-								zap.String("version", ic.Version))
-							continue
-						}
+		for _, ic := range serviceConfig.InterConnect {
+			if ic.Name == "" {
+				continue
+			}
+			// Check if service exists in registry
+			icSvc, icExists := regData.Services[ic.Name]
+			if !icExists || icSvc.Port == 0 {
+				soajsCtx.Log.Debug("interConnect service not found in registry",
+					zap.String("service", ic.Name))
+				continue
+			}
 
-						// Get latest version
-						latestVersion := ""
-						if icSvc.Hosts != nil && icSvc.Hosts.Latest != "" {
-							latestVersion = icSvc.Hosts.Latest
-						} else if icSvc.Versions != nil {
-							for v := range icSvc.Versions {
-								if latestVersion == "" || v > latestVersion {
-									latestVersion = v
-								}
-							}
+			// Add service config for interConnect service if available
+			if soajsCtx.Key != nil && soajsCtx.Key.Config != nil {
+				if keyObj, ok := injectObj["key"].(map[string]interface{}); ok {
+					if keyConfig, ok := keyObj["config"].(map[string]interface{}); ok {
+						if icConfig, exists := soajsCtx.Key.Config[ic.Name]; exists {
+							keyConfig[ic.Name] = icConfig
 						}
-
-						icItem := map[string]interface{}{
-							"name":    ic.Name,
-							"version": hostInfo.Version,
-							"host":    hostInfo.Host,
-							"port":    icSvc.Port,
-							"latest":  latestVersion,
-						}
-						interConnectArr = append(interConnectArr, icItem)
-					}
-
-					if len(interConnectArr) > 0 {
-						awarenessObj["interConnect"] = interConnectArr
 					}
 				}
 			}
+
+			// Get host from awareness
+			icVersion := ic.Version
+			hostInfo, err := aw.GetHost(ic.Name, icVersion)
+			if err != nil || hostInfo == nil {
+				soajsCtx.Log.Debug("interConnect failed to get host",
+					zap.String("service", ic.Name),
+					zap.String("version", icVersion))
+				continue
+			}
+
+			// Get latest version
+			latestVersion := ""
+			if icSvc.Hosts != nil && icSvc.Hosts.Latest != "" {
+				latestVersion = icSvc.Hosts.Latest
+			} else if icSvc.Versions != nil {
+				for v := range icSvc.Versions {
+					if latestVersion == "" || v > latestVersion {
+						latestVersion = v
+					}
+				}
+			}
+
+			icItem := map[string]interface{}{
+				"name":    ic.Name,
+				"version": hostInfo.Version,
+				"host":    hostInfo.Host,
+				"port":    icSvc.Port,
+				"latest":  latestVersion,
+			}
+			interConnectArr = append(interConnectArr, icItem)
+		}
+
+		if len(interConnectArr) > 0 {
+			awarenessObj["interConnect"] = interConnectArr
 		}
 	}
 
@@ -551,14 +665,42 @@ func injectSOAJSHeaders(req *http.Request, soajsCtx *SOAJSContext, reg registry.
 	jsonBytes, err := json.Marshal(injectObj)
 	if err != nil {
 		soajsCtx.Log.Error("failed to serialize soajsinjectobj")
-		return
+		return fmt.Errorf("failed to serialize soajsinjectobj: %w", err)
 	}
 
-	// Log the soajsinjectobj content (INFO level for debugging)
-	soajsCtx.Log.Info("soajsinjectobj header", zap.String("content", string(jsonBytes)))
+	// Security: Validate and limit soajsinjectobj header size (Node.js line ~318)
+	maxHeaderSize := 65536 // 64KB default
+	if len(jsonBytes) > maxHeaderSize {
+		soajsCtx.Log.Error("soajsinjectobj header exceeds maximum size",
+			zap.Int("size", len(jsonBytes)),
+			zap.Int("maxSize", maxHeaderSize))
+		return fmt.Errorf("soajsinjectobj header exceeds maximum size: %d > %d", len(jsonBytes), maxHeaderSize)
+	}
+
+	// Log the soajsinjectobj content (DEBUG level)
+	soajsCtx.Log.Debug("soajsinjectobj header",
+		zap.Int("size", len(jsonBytes)),
+		zap.String("content", string(jsonBytes)))
 
 	// Set the header
 	req.Header.Set("soajsinjectobj", string(jsonBytes))
+	return nil
+}
+
+// encodeHeaderValue encodes a string value for safe HTTP header inclusion
+func encodeHeaderValue(val string) string {
+	// URL encode the value to handle special characters
+	return url.QueryEscape(val)
+}
+
+// getString safely extracts a string from a map
+func getString(m map[string]interface{}, key string) string {
+	if v, ok := m[key]; ok {
+		if s, ok := v.(string); ok {
+			return s
+		}
+	}
+	return ""
 }
 
 // stripPrefix removes a prefix from the path

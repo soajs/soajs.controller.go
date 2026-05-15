@@ -11,6 +11,7 @@ import (
 
 	"github.com/soajs/soajs.controller.go/internal/awareness"
 	"github.com/soajs/soajs.controller.go/internal/registry"
+	"go.mongodb.org/mongo-driver/bson"
 	"go.uber.org/zap"
 )
 
@@ -45,22 +46,30 @@ func LastSeen(reg registry.Registry, aw awareness.Awareness) Middleware {
 				return
 			}
 
-			// Check for URAC driver (user must be authenticated)
+			// Check for authenticated user (UserInfo is set by OAuth middleware when token is valid)
 			if soajsCtx.Controller == nil || soajsCtx.Controller.ServiceParams == nil {
 				return
 			}
-			if soajsCtx.Controller.ServiceParams.UracDriver == nil {
+			// UserInfo indicates an authenticated user - check this instead of UracDriver
+			// because UracDriver is only set when OAuth is required by ACL
+			if soajsCtx.Controller.ServiceParams.UserInfo == nil {
 				return
 			}
 
 			// Get lastSeen config from custom registry
 			regData := reg.Get()
 			if regData == nil {
+				soajsCtx.Log.Debug("lastSeen skipped - no registry data")
 				return
 			}
 
 			lastSeenConfig := getLastSeenConfig(regData.CustomRegistry)
-			if lastSeenConfig == nil || !lastSeenConfig.Active {
+			if lastSeenConfig == nil {
+				soajsCtx.Log.Debug("lastSeen skipped - no config")
+				return
+			}
+			if !lastSeenConfig.Active {
+				soajsCtx.Log.Debug("lastSeen skipped - not active")
 				return
 			}
 
@@ -76,11 +85,12 @@ func LastSeen(reg registry.Registry, aw awareness.Awareness) Middleware {
 			method := r.Method
 
 			// Check include filter
-			if !shouldTriggerLastSeenCheck(lastSeenConfig.Include, serviceName, apiPath, method) {
-				soajsCtx.Log.Debug("lastSeen skipped",
+			if !shouldTriggerLastSeenCheck(lastSeenConfig.Include, serviceName, apiPath, method, soajsCtx.Log) {
+				soajsCtx.Log.Debug("lastSeen skipped - include filter not matched",
 					zap.String("service", serviceName),
 					zap.String("method", method),
-					zap.String("api", apiPath))
+					zap.String("api", apiPath),
+					zap.Any("includeFilter", lastSeenConfig.Include))
 				return
 			}
 
@@ -114,11 +124,18 @@ func getLastSeenConfig(customRegistry map[string]interface{}) *LastSeenConfig {
 		return nil
 	}
 
-	var gatewayValue interface{}
+	// Handle both map[string]interface{} and bson.M
+	var gatewayValue map[string]interface{}
 	switch v := gatewayEntry.(type) {
 	case map[string]interface{}:
 		if val, exists := v["value"]; exists {
-			gatewayValue = val
+			gatewayValue = toMap(val)
+		} else {
+			gatewayValue = v
+		}
+	case bson.M:
+		if val, exists := v["value"]; exists {
+			gatewayValue = toMap(val)
 		} else {
 			gatewayValue = v
 		}
@@ -126,18 +143,17 @@ func getLastSeenConfig(customRegistry map[string]interface{}) *LastSeenConfig {
 		return nil
 	}
 
-	gatewayMap, ok := gatewayValue.(map[string]interface{})
-	if !ok {
+	if gatewayValue == nil {
 		return nil
 	}
 
-	lastSeenData, ok := gatewayMap["lastSeen"]
-	if !ok {
+	lastSeenData := gatewayValue["lastSeen"]
+	if lastSeenData == nil {
 		return nil
 	}
 
-	lastSeenMap, ok := lastSeenData.(map[string]interface{})
-	if !ok {
+	lastSeenMap := toMap(lastSeenData)
+	if lastSeenMap == nil {
 		return nil
 	}
 
@@ -162,7 +178,7 @@ func getLastSeenConfig(customRegistry map[string]interface{}) *LastSeenConfig {
 	if network, ok := lastSeenMap["network"].(string); ok {
 		config.Network = network
 	}
-	if include, ok := lastSeenMap["include"].(map[string]interface{}); ok {
+	if include := toMap(lastSeenMap["include"]); include != nil {
 		config.Include = include
 	}
 
@@ -170,9 +186,9 @@ func getLastSeenConfig(customRegistry map[string]interface{}) *LastSeenConfig {
 }
 
 // shouldTriggerLastSeenCheck checks if lastSeen should be triggered
-func shouldTriggerLastSeenCheck(include map[string]interface{}, serviceName, apiPath, method string) bool {
+func shouldTriggerLastSeenCheck(include map[string]interface{}, serviceName, apiPath, method string, log *zap.Logger) bool {
 	// No include filter = trigger for all (backward compatible)
-	if include == nil {
+	if include == nil || len(include) == 0 {
 		return true
 	}
 
@@ -187,9 +203,9 @@ func shouldTriggerLastSeenCheck(include map[string]interface{}, serviceName, api
 		return true
 	}
 
-	// API-level match
-	serviceMap, ok := serviceConfig.(map[string]interface{})
-	if !ok {
+	// API-level match - handle both map[string]interface{} and bson.M
+	serviceMap := toMap(serviceConfig)
+	if serviceMap == nil {
 		return false
 	}
 
@@ -198,8 +214,8 @@ func shouldTriggerLastSeenCheck(include map[string]interface{}, serviceName, api
 		return false
 	}
 
-	apis, ok := apisConfig.(map[string]interface{})
-	if !ok {
+	apis := toMap(apisConfig)
+	if apis == nil {
 		return false
 	}
 
@@ -238,8 +254,9 @@ func isLastSeenMethodMatch(methodConfig interface{}, method string) bool {
 		return true
 	}
 
-	// Array of methods
-	if methods, ok := methodConfig.([]interface{}); ok {
+	// Array of methods - handle both []interface{} and bson.A
+	methods := toSlice(methodConfig)
+	if methods != nil {
 		lowerMethod := strings.ToLower(method)
 		for _, m := range methods {
 			if mStr, ok := m.(string); ok && strings.ToLower(mStr) == lowerMethod {

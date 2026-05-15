@@ -4,6 +4,8 @@ package config
 const (
 	ErrCodeInvalidRoute      = 130
 	ErrCodeKeyRequired       = 132
+	ErrCodeServiceNotAvail   = 133
+	ErrCodeHeaderTooLarge    = 135
 	ErrCodeInvalidKey        = 150
 	ErrCodeInvalidTenant     = 151
 	ErrCodeInvalidProduct    = 152
@@ -21,6 +23,8 @@ const (
 var DefaultErrors = map[int]string{
 	ErrCodeInvalidRoute:      "Invalid route",
 	ErrCodeKeyRequired:       "A valid key is needed to access any API.",
+	ErrCodeServiceNotAvail:   "Service not available",
+	ErrCodeHeaderTooLarge:    "soajsinjectobj header exceeds maximum size",
 	ErrCodeInvalidKey:        "Invalid API key",
 	ErrCodeInvalidTenant:     "Invalid tenant",
 	ErrCodeInvalidProduct:    "Invalid product",

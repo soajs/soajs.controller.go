@@ -162,7 +162,7 @@ func TestShouldTriggerLastSeenCheck(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := shouldTriggerLastSeenCheck(tt.include, tt.serviceName, tt.apiPath, tt.method)
+			got := shouldTriggerLastSeenCheck(tt.include, tt.serviceName, tt.apiPath, tt.method, nil)
 			if got != tt.want {
 				t.Errorf("shouldTriggerLastSeenCheck() = %v, want %v", got, tt.want)
 			}

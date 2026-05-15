@@ -586,10 +586,17 @@ func (r *MongoRegistry) marketplaceToServiceConfig(item *types.MarketplaceItem) 
 	latestVersion := ""
 	for _, v := range item.Versions {
 		vInfo := &types.VersionInfo{
-			ExtKeyRequired: v.ExtKeyRequired,
-			OAuth:          v.OAuth,
-			APIs:           v.APIs,
-			InterConnect:   v.InterConnect,
+			ExtKeyRequired:  v.ExtKeyRequired,
+			OAuth:           v.OAuth,
+			Urac:            v.Urac,
+			UracProfile:     v.UracProfile,
+			UracACL:         v.UracACL,
+			UracConfig:      v.UracConfig,
+			UracGroupConfig: v.UracGroupConfig,
+			TenantProfile:   v.TenantProfile,
+			ProvisionACL:    v.ProvisionACL,
+			APIs:            v.APIs,
+			InterConnect:    v.InterConnect,
 		}
 		svc.Versions[v.Version] = vInfo
 
