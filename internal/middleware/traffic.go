@@ -10,6 +10,7 @@ import (
 	"github.com/soajs/soajs.controller.go/internal/registry"
 	"github.com/soajs/soajs.controller.go/pkg/mongo"
 	"github.com/soajs/soajs.controller.go/pkg/types"
+	"go.mongodb.org/mongo-driver/bson"
 	"go.uber.org/zap"
 )
 
@@ -244,35 +245,74 @@ func getThrottlingConfig(customRegistry map[string]interface{}, serviceName, api
 		return nil
 	}
 
-	var gatewayValue map[string]interface{}
+	// Handle both map[string]interface{} and bson.M
+	var gatewayMap map[string]interface{}
 	switch v := gateway.(type) {
 	case map[string]interface{}:
-		if val, exists := v["value"]; exists {
-			gatewayValue, _ = val.(map[string]interface{})
-		} else {
-			gatewayValue = v
-		}
+		gatewayMap = v
+	case bson.M:
+		gatewayMap = v
 	default:
 		return nil
 	}
 
-	traffic, ok := gatewayValue["traffic"].(map[string]interface{})
-	if !ok {
+	// Get gateway value (could be nested under "value" key)
+	var gatewayValue map[string]interface{}
+	if val, exists := gatewayMap["value"]; exists {
+		switch v := val.(type) {
+		case map[string]interface{}:
+			gatewayValue = v
+		case bson.M:
+			gatewayValue = v
+		default:
+			gatewayValue = gatewayMap
+		}
+	} else {
+		gatewayValue = gatewayMap
+	}
+
+	// Get traffic config
+	var traffic map[string]interface{}
+	switch v := gatewayValue["traffic"].(type) {
+	case map[string]interface{}:
+		traffic = v
+	case bson.M:
+		traffic = v
+	default:
 		return nil
 	}
 
-	throttling, ok := traffic["throttling"].(map[string]interface{})
-	if !ok {
+	// Get throttling config
+	var throttling map[string]interface{}
+	switch v := traffic["throttling"].(type) {
+	case map[string]interface{}:
+		throttling = v
+	case bson.M:
+		throttling = v
+	default:
 		return nil
 	}
 
-	svcThrottling, ok := throttling[serviceName].(map[string]interface{})
-	if !ok {
+	// Get service-specific throttling config
+	var svcThrottling map[string]interface{}
+	switch v := throttling[serviceName].(type) {
+	case map[string]interface{}:
+		svcThrottling = v
+	case bson.M:
+		svcThrottling = v
+	default:
 		return nil
 	}
 
-	// Check if API matches
-	if apis, ok := svcThrottling["apis"].([]interface{}); ok {
+	// Check if API matches - handle both []interface{} and bson.A
+	var apis []interface{}
+	if a, ok := svcThrottling["apis"].([]interface{}); ok {
+		apis = a
+	} else if a, ok := svcThrottling["apis"].(bson.A); ok {
+		apis = a
+	}
+
+	if apis != nil {
 		apiMatched := false
 		for _, api := range apis {
 			if apiStr, ok := api.(string); ok && apiStr == apiPath {
