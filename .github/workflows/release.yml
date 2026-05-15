@@ -71,7 +71,7 @@ jobs:
       - name: Extract version from version.json
         id: version
         run: |
-          PACKAGE_VERSION=$(jq -r '.version' version.json)
+          PACKAGE_VERSION=$(jq -r '.version' pkg/version/version.json)
           MAJOR_VERSION=$(echo ${PACKAGE_VERSION} | awk -F. '{ print $1 }')
           echo "PACKAGE_VERSION=${PACKAGE_VERSION}" >> $GITHUB_OUTPUT
           echo "MAJOR_VERSION=${MAJOR_VERSION}" >> $GITHUB_OUTPUT
@@ -145,7 +145,7 @@ jobs:
       - name: Extract version
         id: version
         run: |
-          PACKAGE_VERSION=$(jq -r '.version' version.json)
+          PACKAGE_VERSION=$(jq -r '.version' pkg/version/version.json)
           echo "PACKAGE_VERSION=${PACKAGE_VERSION}" >> $GITHUB_OUTPUT
 
       - name: Build binary

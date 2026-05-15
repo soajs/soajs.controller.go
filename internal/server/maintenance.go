@@ -8,6 +8,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/soajs/soajs.controller.go/pkg/types"
+	"github.com/soajs/soajs.controller.go/pkg/version"
 	"go.uber.org/zap"
 )
 
@@ -357,7 +358,7 @@ func (h *maintenanceHandler) respondWithRoute(w http.ResponseWriter, result bool
 		TS:     time.Now().UnixMilli(),
 		Service: ServiceInfo{
 			Name:    "soajs.controller",
-			Version: "4.3.4",
+			Version: version.Get(),
 			Type:    "rest",
 			Route:   route,
 		},
@@ -379,7 +380,7 @@ func (h *maintenanceHandler) respondError(w http.ResponseWriter, route string, e
 		TS:     time.Now().UnixMilli(),
 		Service: ServiceInfo{
 			Name:    "soajs.controller",
-			Version: "4.3.4",
+			Version: version.Get(),
 			Type:    "rest",
 			Route:   route,
 		},
