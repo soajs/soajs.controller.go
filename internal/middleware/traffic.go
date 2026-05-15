@@ -477,7 +477,24 @@ func checkThrottlingMongo(model *MongoThrottlingModel, key TrafficKey, strategy 
 	entry, windowExpired, err := model.GetOrCreateEntry(key, strategy.Window)
 	if err != nil {
 		// On error, allow the request (fail open for availability)
+		if model.logger != nil {
+			model.logger.Error("throttling MongoDB error",
+				zap.Error(err),
+				zap.String("key.L1", key.L1),
+				zap.String("key.L2", key.L2),
+			)
+		}
 		return true, buildRateLimitHeaders(strategy.Window, strategy.Limit, strategy.Limit)
+	}
+
+	if model.logger != nil {
+		model.logger.Debug("throttling MongoDB entry",
+			zap.String("key.L1", key.L1),
+			zap.String("key.L2", key.L2),
+			zap.Int("count", entry.Count),
+			zap.Bool("windowExpired", windowExpired),
+			zap.String("database", model.database.Name()),
+		)
 	}
 
 	// Calculate remaining time
