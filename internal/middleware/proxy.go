@@ -244,6 +244,17 @@ func proxyRequest(w http.ResponseWriter, r *http.Request, targetURL string, soaj
 			}
 			monitorBlacklisted = isServiceBlacklisted(serviceName, monitorConfig)
 
+			// Check if renewReqMonitorOff is enabled and this is a token renew request
+			if !monitorBlacklisted {
+				gotoServiceConfig := GetGotoServiceConfig(regData)
+				if gotoServiceConfig != nil && gotoServiceConfig.RenewReqMonitorOff {
+					// Skip monitoring for OAuth token renew/refresh requests
+					if isTokenRenewRequest(serviceName, soajsCtx.Controller.ServiceParams.URLInfo) {
+						monitorBlacklisted = true
+					}
+				}
+			}
+
 			if !monitorBlacklisted {
 				monitorDoc = &MonitorDocument{
 					Name:   serviceName,

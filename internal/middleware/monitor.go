@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -466,6 +467,37 @@ func isServiceBlacklisted(serviceName string, config *MonitorConfig) bool {
 			if s == serviceName {
 				return true
 			}
+		}
+	}
+
+	return false
+}
+
+// isTokenRenewRequest checks if the request is an OAuth token renew/refresh request
+// These requests are typically high-frequency and may be excluded from monitoring
+// when renewReqMonitorOff is enabled
+func isTokenRenewRequest(serviceName string, urlInfo *types.URLInfo) bool {
+	if urlInfo == nil {
+		return false
+	}
+
+	// Check if this is an OAuth-related service
+	if serviceName != "oauth" && serviceName != "authenticator" {
+		return false
+	}
+
+	// Check for token-related paths that indicate a renew/refresh request
+	path := urlInfo.ServicePath
+	renewPaths := []string{
+		"/token",
+		"/refresh/token",
+		"/access/token",
+		"/renew",
+	}
+
+	for _, renewPath := range renewPaths {
+		if path == renewPath || strings.HasPrefix(path, renewPath+"/") || strings.HasPrefix(path, renewPath+"?") {
+			return true
 		}
 	}
 
