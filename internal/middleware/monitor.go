@@ -1,9 +1,11 @@
 package middleware
 
 import (
+	"bufio"
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"net"
 	"net/http"
 	"strings"
 	"sync"
@@ -314,6 +316,21 @@ func (rw *monitorResponseWriter) Write(b []byte) (int, error) {
 		rw.body = append(rw.body, b...)
 	}
 	return rw.ResponseWriter.Write(b)
+}
+
+// Flush implements http.Flusher - required for streaming/chunked responses
+func (rw *monitorResponseWriter) Flush() {
+	if f, ok := rw.ResponseWriter.(http.Flusher); ok {
+		f.Flush()
+	}
+}
+
+// Hijack implements http.Hijacker - required for WebSocket upgrades
+func (rw *monitorResponseWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	if h, ok := rw.ResponseWriter.(http.Hijacker); ok {
+		return h.Hijack()
+	}
+	return nil, nil, fmt.Errorf("hijack not supported")
 }
 
 // toSlice converts interface{} to []interface{}, handling bson.A
