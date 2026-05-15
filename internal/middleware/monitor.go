@@ -12,6 +12,7 @@ import (
 	"github.com/soajs/soajs.controller.go/internal/awareness"
 	"github.com/soajs/soajs.controller.go/internal/registry"
 	"github.com/soajs/soajs.controller.go/pkg/types"
+	"go.mongodb.org/mongo-driver/bson"
 	"go.uber.org/zap"
 )
 
@@ -315,6 +316,18 @@ func (rw *monitorResponseWriter) Write(b []byte) (int, error) {
 	return rw.ResponseWriter.Write(b)
 }
 
+// toSlice converts interface{} to []interface{}, handling bson.A
+func toSlice(v interface{}) []interface{} {
+	switch s := v.(type) {
+	case []interface{}:
+		return s
+	case bson.A:
+		return s
+	default:
+		return nil
+	}
+}
+
 // getMonitorConfig extracts monitor config from registry
 func getMonitorConfig(regData *types.RegistryData) *MonitorConfig {
 	if regData == nil || regData.CustomRegistry == nil {
@@ -326,11 +339,18 @@ func getMonitorConfig(regData *types.RegistryData) *MonitorConfig {
 		return nil
 	}
 
-	var gatewayValue interface{}
+	// Handle both map[string]interface{} and bson.M
+	var gatewayValue map[string]interface{}
 	switch v := gateway.(type) {
 	case map[string]interface{}:
 		if val, exists := v["value"]; exists {
-			gatewayValue = val
+			gatewayValue = toMap(val)
+		} else {
+			gatewayValue = v
+		}
+	case bson.M:
+		if val, exists := v["value"]; exists {
+			gatewayValue = toMap(val)
 		} else {
 			gatewayValue = v
 		}
@@ -338,18 +358,17 @@ func getMonitorConfig(regData *types.RegistryData) *MonitorConfig {
 		return nil
 	}
 
-	gatewayMap, ok := gatewayValue.(map[string]interface{})
-	if !ok {
+	if gatewayValue == nil {
 		return nil
 	}
 
-	gotoService, ok := gatewayMap["gotoService"].(map[string]interface{})
-	if !ok {
+	gotoService := toMap(gatewayValue["gotoService"])
+	if gotoService == nil {
 		return nil
 	}
 
-	monitorData, ok := gotoService["monitor"].(map[string]interface{})
-	if !ok {
+	monitorData := toMap(gotoService["monitor"])
+	if monitorData == nil {
 		return nil
 	}
 
@@ -371,7 +390,7 @@ func getMonitorConfig(regData *types.RegistryData) *MonitorConfig {
 		config.ReqResponse = v
 	}
 
-	if bl, ok := monitorData["blacklist"].([]interface{}); ok {
+	if bl := toSlice(monitorData["blacklist"]); bl != nil {
 		for _, s := range bl {
 			if str, ok := s.(string); ok {
 				config.Blacklist = append(config.Blacklist, str)
@@ -379,7 +398,7 @@ func getMonitorConfig(regData *types.RegistryData) *MonitorConfig {
 		}
 	}
 
-	if wl, ok := monitorData["whitelist"].([]interface{}); ok {
+	if wl := toSlice(monitorData["whitelist"]); wl != nil {
 		for _, s := range wl {
 			if str, ok := s.(string); ok {
 				config.Whitelist = append(config.Whitelist, str)
@@ -387,7 +406,7 @@ func getMonitorConfig(regData *types.RegistryData) *MonitorConfig {
 		}
 	}
 
-	if buffer, ok := monitorData["buffer"].(map[string]interface{}); ok {
+	if buffer := toMap(monitorData["buffer"]); buffer != nil {
 		config.Buffer = &MonitorBufferConfig{}
 		if t, ok := buffer["time"].(float64); ok {
 			config.Buffer.Time = int(t)
