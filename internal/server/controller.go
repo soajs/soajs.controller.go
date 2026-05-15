@@ -417,9 +417,10 @@ func (c *Controller) initTrafficModel(regData *types.RegistryData) {
 	}
 
 	// Determine database name: prefix + name (e.g., "avdev" + "gateway" = "avdevgateway")
+	// But if Name already starts with Prefix, don't duplicate it
 	databaseName := ""
 	if gatewayConfig != nil && gatewayConfig.Name != "" {
-		if gatewayConfig.Prefix != "" {
+		if gatewayConfig.Prefix != "" && !strings.HasPrefix(gatewayConfig.Name, gatewayConfig.Prefix) {
 			databaseName = gatewayConfig.Prefix + gatewayConfig.Name
 		} else {
 			databaseName = gatewayConfig.Name
