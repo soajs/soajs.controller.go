@@ -210,7 +210,7 @@ func Traffic(reg registry.Registry) Middleware {
 			trafficKey := buildTrafficKeyStruct(soajsCtx.Tenant.ID, getClientIP(r), strategy.Type)
 
 			// Check throttling using appropriate model
-			result, headers := checkThrottlingWithModel(trafficKey, strategy, strategyName, 0)
+			result, headers := checkThrottlingWithModel(logger, trafficKey, strategy, strategyName, 0)
 
 			// Set rate limit headers
 			for k, v := range headers {
@@ -420,12 +420,21 @@ func buildTrafficKeyStruct(tenantID, clientIP string, keyType int) TrafficKey {
 }
 
 // checkThrottlingWithModel checks if request is within limits using the configured model
-func checkThrottlingWithModel(key TrafficKey, strategy *ThrottlingStrategy, strategyName string, retry int) (bool, map[string]string) {
+func checkThrottlingWithModel(logger *zap.Logger, key TrafficKey, strategy *ThrottlingStrategy, strategyName string, retry int) (bool, map[string]string) {
 	manager.mu.RLock()
 	currentModel := manager.currentModel
 	memModel := manager.memoryModel
 	mongoModel := manager.mongoModel
 	manager.mu.RUnlock()
+
+	if logger != nil {
+		logger.Debug("throttling model check",
+			zap.String("currentModel", currentModel),
+			zap.Bool("mongoModelNil", mongoModel == nil),
+			zap.String("key.L1", key.L1),
+			zap.String("key.L2", key.L2),
+		)
+	}
 
 	if currentModel == "mongo" && mongoModel != nil {
 		return checkThrottlingMongo(mongoModel, key, strategy, strategyName, retry)

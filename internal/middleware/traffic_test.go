@@ -161,7 +161,7 @@ func TestCheckThrottlingWithMemoryModel(t *testing.T) {
 	key := TrafficKey{L1: "test-tenant", L2: "10.0.0.1"}
 
 	// First request should pass
-	allowed1, headers1 := checkThrottlingWithModel(key, strategy, "testStrategy", 0)
+	allowed1, headers1 := checkThrottlingWithModel(nil, key, strategy, "testStrategy", 0)
 	if !allowed1 {
 		t.Error("First request should be allowed")
 	}
@@ -170,7 +170,7 @@ func TestCheckThrottlingWithMemoryModel(t *testing.T) {
 	}
 
 	// Second request should pass
-	allowed2, headers2 := checkThrottlingWithModel(key, strategy, "testStrategy", 0)
+	allowed2, headers2 := checkThrottlingWithModel(nil, key, strategy, "testStrategy", 0)
 	if !allowed2 {
 		t.Error("Second request should be allowed")
 	}
@@ -179,14 +179,14 @@ func TestCheckThrottlingWithMemoryModel(t *testing.T) {
 	}
 
 	// Third request should be rate limited
-	allowed3, _ := checkThrottlingWithModel(key, strategy, "testStrategy", 0)
+	allowed3, _ := checkThrottlingWithModel(nil, key, strategy, "testStrategy", 0)
 	if allowed3 {
 		t.Error("Third request should be rate limited")
 	}
 
 	// Different key should be allowed
 	key2 := TrafficKey{L1: "test-tenant-2", L2: "10.0.0.2"}
-	allowed4, _ := checkThrottlingWithModel(key2, strategy, "testStrategy", 0)
+	allowed4, _ := checkThrottlingWithModel(nil, key2, strategy, "testStrategy", 0)
 	if !allowed4 {
 		t.Error("Different key should be allowed")
 	}
