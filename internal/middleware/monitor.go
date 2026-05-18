@@ -54,6 +54,7 @@ type MonitorDocument struct {
 
 // MonitorTime holds timing information
 type MonitorTime struct {
+	Total        int64 `json:"total,omitempty"`
 	ReqStart     int64 `json:"req_start,omitempty"`
 	ReqBodyStart int64 `json:"req_body_start,omitempty"`
 	ReqBodyEnd   int64 `json:"req_body_end,omitempty"`
@@ -256,17 +257,25 @@ func Monitor(reg registry.Registry, aw awareness.Awareness) Middleware {
 			doc := MonitorDocument{
 				Name:   serviceName,
 				Method: r.Method,
+				API:    r.URL.Path, // Always set API from request path
 				Time: MonitorTime{
 					ReqStart: time.Now().UnixMilli(),
 				},
 			}
 
+			// Extract version from URLInfo or use default
 			if soajsCtx.Controller != nil && soajsCtx.Controller.ServiceParams != nil {
 				if soajsCtx.Controller.ServiceParams.URLInfo != nil {
-					// Use full path (e.g., /connectspaces/me) to match Node.js behavior
-					doc.API = r.URL.Path
 					doc.Version = soajsCtx.Controller.ServiceParams.URLInfo.ServiceVersion
 				}
+				// Fallback to service version from ServiceParams if available
+				if doc.Version == "" && soajsCtx.Controller.ServiceParams.ServiceVersion != "" {
+					doc.Version = soajsCtx.Controller.ServiceParams.ServiceVersion
+				}
+			}
+			// Default version if still empty
+			if doc.Version == "" {
+				doc.Version = "1"
 			}
 
 			if monitorConfig.ReqInfo {
@@ -290,11 +299,25 @@ func Monitor(reg registry.Registry, aw awareness.Awareness) Middleware {
 
 			next.ServeHTTP(rw, r)
 
-			// Record response timing
+			// Record response timing and calculate total
 			doc.Time.ResEnd = time.Now().UnixMilli()
+			if doc.Time.ReqStart > 0 && doc.Time.ResEnd > 0 {
+				doc.Time.Total = doc.Time.ResEnd - doc.Time.ReqStart
+			}
 
 			if monitorConfig.ReqResponse && len(rw.body) > 0 {
 				doc.Response = string(rw.body)
+			}
+
+			// Validate required fields before adding to buffer
+			if doc.Name == "" || doc.Version == "" || doc.API == "" || doc.Method == "" || doc.Time.Total == 0 {
+				soajsCtx.Log.Debug("monitor skipped - missing required fields",
+					zap.String("name", doc.Name),
+					zap.String("version", doc.Version),
+					zap.String("api", doc.API),
+					zap.String("method", doc.Method),
+					zap.Int64("time.total", doc.Time.Total))
+				return
 			}
 
 			// Add to buffer
