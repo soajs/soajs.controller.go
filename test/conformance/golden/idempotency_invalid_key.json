@@ -1,0 +1,7 @@
+{
+  "status": 400,
+  "headers": {
+    "Content-Type": "application/json"
+  },
+  "body": "{\"result\":false,\"errors\":{\"codes\":[180],\"details\":[{\"code\":180,\"message\":\"Invalid Idempotency-Key format. Expected UUID v4.\"}]}}"
+}

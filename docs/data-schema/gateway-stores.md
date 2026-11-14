@@ -44,7 +44,7 @@ Locks and recorded answers for `Idempotency-Key`. Node.js: mw/idempotency/model/
 | Field | Type | Required | Values | Meaning |
 |---|---|---|---|---|
 | `l1` | string | yes | | Tenant id. |
-| `l2` | string | yes | UUID v4 | The `Idempotency-Key`. |
+| `l2` | string | yes | UUID v4, either case | The `Idempotency-Key`, as sent. |
 | `status` | string | yes | `in_flight` \| `completed` | In flight answers 409; completed replays the response. |
 | `lockId` | string \| null | | | |
 | `lockedAt` | date | | | |

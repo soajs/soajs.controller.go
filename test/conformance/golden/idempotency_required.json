@@ -1,0 +1,7 @@
+{
+  "status": 428,
+  "headers": {
+    "Content-Type": "application/json"
+  },
+  "body": "{\"result\":false,\"errors\":{\"codes\":[182],\"details\":[{\"code\":182,\"message\":\"Idempotency-Key header is required for this API.\"}]}}"
+}

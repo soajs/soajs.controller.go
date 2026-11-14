@@ -142,6 +142,7 @@ func (c *Controller) Setup(r *chi.Mux) error {
 
 	// Initialize traffic model based on registry config
 	trafficModels := c.trafficModels(regData)
+	idempotencyModels := c.idempotencyModels(regData)
 
 	// Setup base middleware (chi built-in)
 	r.Use(chimw.RequestID)
@@ -167,6 +168,7 @@ func (c *Controller) Setup(r *chi.Mux) error {
 	r.Use(middleware.Urac(c.users, c.provision, c.registry, c.cfg.Environment))
 	r.Use(middleware.MTACL(c.registry))
 	r.Use(middleware.InjectObj(c.registry, c.awareness)) // the soajsinjectobj of key APIs, at the end of mt
+	r.Use(middleware.Idempotency(c.registry, idempotencyModels, c.logger))
 	r.Use(middleware.Traffic(c.registry, trafficModels, c.logger))
 	r.Use(middleware.LastSeen(c.registry, c.awareness))
 
@@ -218,6 +220,20 @@ func (c *Controller) ReloadProvision() error {
 // ReloadRegistry reloads the registry data
 func (c *Controller) ReloadRegistry() error {
 	return c.registry.Reload()
+}
+
+// idempotencyModels are the Idempotency-Key stores (mw/idempotency/model): memory, and mongo in
+// the environment's gateway database, else provision, both ready as in Node.js; the custom
+// registry gateway idempotency.model picks one.
+func (c *Controller) idempotencyModels(regData *types.RegistryData) map[string]middleware.IdempotencyModel {
+	models := map[string]middleware.IdempotencyModel{"memory": middleware.NewMemoryIdempotency(context.Background())}
+	client, err := c.coreClient(regData, "gateway")
+	if err != nil {
+		c.logger.Error("gateway database: idempotency with the mongo model is off", zap.Error(err))
+		return models
+	}
+	models["mongo"] = middleware.NewMongoIdempotency(client.Database(), c.logger)
+	return models
 }
 
 // trafficModels are the throttling stores (mw/traffic/model): memory, and mongo in the

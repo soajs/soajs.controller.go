@@ -259,6 +259,18 @@
               ]
             }
           }
+        },
+        "idempotency": {
+          "model": "memory",
+          "services": {
+            "conform": {
+              "enabled": true,
+              "enforce": true,
+              "apis": [
+                "PATCH /private/item/:id"
+              ]
+            }
+          }
         }
       }
     },
