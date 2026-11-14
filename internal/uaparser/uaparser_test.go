@@ -91,6 +91,71 @@ func TestTimeout(t *testing.T) {
 	}
 }
 
+// A timeout that fires as the parse finishes must not leave an interrupt pending on the VM:
+// the next parse on the same VM succeeds, whatever the previous one did.
+func TestTimeoutBoundary(t *testing.T) {
+	p := New(1, 0)
+	uas := []string{
+		"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+		"Mozilla/5.0 (iPhone; CPU iPhone OS 17_2 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2 Mobile/15E148 Safari/604.1",
+	}
+	p.timeout = Timeout * raceFactor
+	if _, err := p.Parse("curl/8.4.0"); err != nil { // creates and warms the VM
+		t.Fatal(err)
+	}
+	timeouts := 0
+	for i := 0; i < 300; i++ {
+		// sweeps 0 to 3 ms (stretched under -race), across the time one parse takes
+		p.timeout = time.Duration(i) * 10 * time.Microsecond * raceFactor
+		if _, err := p.Parse(uas[i%2]); err == ErrTimeout {
+			timeouts++
+		} else if err != nil {
+			t.Fatal(err)
+		}
+		p.timeout = Timeout * raceFactor
+		if ua, err := p.Parse("curl/8.4.0"); err != nil || ua.Family != "curl" {
+			t.Fatalf("parse %d: the next parse on the VM failed: %+v %v", i, ua, err)
+		}
+	}
+	if timeouts == 0 {
+		t.Fatal("no parse timed out: the sweep did not reach the boundary")
+	}
+}
+
+// Many goroutines share a pool of 2 VMs without a cache; every result matches the corpus.
+func TestConcurrentCorpus(t *testing.T) {
+	raw, err := os.ReadFile("testdata/corpus.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var corpus []struct {
+		UA     string `json:"ua"`
+		Parsed UA     `json:"parsed"`
+	}
+	if err := json.Unmarshal(raw, &corpus); err != nil {
+		t.Fatal(err)
+	}
+	p := New(2, 0)
+	p.timeout = Timeout * raceFactor
+	var wg sync.WaitGroup
+	for g := 0; g < 6; g++ {
+		wg.Add(1)
+		go func(g int) {
+			defer wg.Done()
+			for i := range corpus {
+				c := corpus[(i+g*7)%len(corpus)]
+				got, err := p.Parse(c.UA)
+				if err != nil {
+					t.Errorf("%.60s: %v", c.UA, err)
+				} else if got != c.Parsed {
+					t.Errorf("%.80s\n  got  %+v\n  want %+v", c.UA, got, c.Parsed)
+				}
+			}
+		}(g)
+	}
+	wg.Wait()
+}
+
 func TestConcurrentParses(t *testing.T) {
 	p := New(2, 8)
 	p.timeout = Timeout * raceFactor

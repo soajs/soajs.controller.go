@@ -132,25 +132,43 @@ func (p *Parser) Parse(ua string) (UA, error) {
 	if err != nil {
 		return UA{}, err
 	}
-	timer := time.AfterFunc(p.timeout, func() { rt.vm.Interrupt(ErrTimeout) })
-	v, err := rt.parse(goja.Undefined(), rt.vm.ToValue(ua))
-	timer.Stop()
-	rt.vm.ClearInterrupt()
-	p.put(rt)
+	parts, err := p.run(rt, ua)
 	if err != nil {
-		var interrupted *goja.InterruptedError
-		if errors.As(err, &interrupted) {
-			return UA{}, ErrTimeout
-		}
 		return UA{}, err
-	}
-	var parts []string
-	if err := rt.vm.ExportTo(v, &parts); err != nil || len(parts) != 4 {
-		return UA{}, errors.New("unexpected ua-parser-js result")
 	}
 	result := mapResult(ua, parts[0], parts[1], parts[2], parts[3])
 	p.store(ua, result)
 	return result, nil
+}
+
+// run parses ua on rt and returns rt to the pool last, once nothing touches it any more: a goja
+// runtime is not safe for concurrent use.
+func (p *Parser) run(rt *runtime, ua string) ([]string, error) {
+	defer p.put(rt)
+	fired := make(chan struct{})
+	timer := time.AfterFunc(p.timeout, func() {
+		rt.vm.Interrupt(ErrTimeout)
+		close(fired)
+	})
+	v, err := rt.parse(goja.Undefined(), rt.vm.ToValue(ua))
+	if !timer.Stop() {
+		// The timer fired, maybe as the parse finished: wait for its Interrupt, so that
+		// ClearInterrupt below clears it and the next parse on this VM is not interrupted
+		<-fired
+	}
+	rt.vm.ClearInterrupt()
+	if err != nil {
+		var interrupted *goja.InterruptedError
+		if errors.As(err, &interrupted) {
+			return nil, ErrTimeout
+		}
+		return nil, err
+	}
+	var parts []string
+	if err := rt.vm.ExportTo(v, &parts); err != nil || len(parts) != 4 {
+		return nil, errors.New("unexpected ua-parser-js result")
+	}
+	return parts, nil
 }
 
 func (p *Parser) get() (*runtime, error) {
