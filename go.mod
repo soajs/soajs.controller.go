@@ -3,6 +3,7 @@ module github.com/soajs/soajs.controller.go
 go 1.25.0
 
 require (
+	github.com/dlclark/regexp2/v2 v2.5.2
 	github.com/dop251/goja v0.0.0-20260911104922-fabc3b8078ad
 	github.com/go-chi/chi/v5 v5.0.12
 	github.com/google/uuid v1.6.0
@@ -17,7 +18,6 @@ require (
 
 require (
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
-	github.com/dlclark/regexp2/v2 v2.5.2 // indirect
 	github.com/emicklei/go-restful/v3 v3.11.0 // indirect
 	github.com/fsnotify/fsnotify v1.7.0 // indirect
 	github.com/go-logr/logr v1.3.0 // indirect

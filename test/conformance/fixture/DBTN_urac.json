@@ -20,6 +20,114 @@
       "config": {},
       "profile": {},
       "ts": 1794666000000
+    },
+    {
+      "_id": {
+        "$oid": "6a0e000000000000000000b1"
+      },
+      "username": "console_paused",
+      "email": "paused@conformance.invalid",
+      "firstName": "console_paused",
+      "lastName": "Conformance",
+      "status": "inactive",
+      "tenant": {
+        "id": "6a0e00000000000000000002",
+        "code": "DBTN"
+      },
+      "groups": [
+        "owner"
+      ],
+      "config": {},
+      "profile": {},
+      "ts": 1794666000000
+    },
+    {
+      "_id": {
+        "$oid": "6a0e000000000000000000b2"
+      },
+      "username": "console_pending",
+      "email": "pending@conformance.invalid",
+      "firstName": "console_pending",
+      "lastName": "Conformance",
+      "status": "pendingNew",
+      "tenant": {
+        "id": "6a0e00000000000000000002",
+        "code": "DBTN"
+      },
+      "groups": [
+        "owner"
+      ],
+      "config": {},
+      "profile": {},
+      "ts": 1794666000000
+    },
+    {
+      "_id": {
+        "$oid": "6a0e000000000000000000b4"
+      },
+      "username": "outsider",
+      "email": "outsider@conformance.invalid",
+      "firstName": "outsider",
+      "lastName": "Conformance",
+      "status": "active",
+      "tenant": {
+        "id": "6a0e00000000000000000001",
+        "code": "CONF"
+      },
+      "groups": [],
+      "config": {},
+      "profile": {},
+      "ts": 1794666000000
+    },
+    {
+      "_id": {
+        "$oid": "6a0e000000000000000000b5"
+      },
+      "username": "invited_admin",
+      "email": "invited@conformance.invalid",
+      "firstName": "invited_admin",
+      "lastName": "Conformance",
+      "status": "active",
+      "tenant": {
+        "id": "6a0e00000000000000000001",
+        "code": "CONF"
+      },
+      "groups": [],
+      "config": {
+        "allowedTenants": [
+          {
+            "tenant": {
+              "id": "6a0e00000000000000000002",
+              "code": "DBTN"
+            },
+            "groups": [
+              "admin"
+            ]
+          }
+        ]
+      },
+      "profile": {},
+      "ts": 1794666000000
+    },
+    {
+      "_id": {
+        "$oid": "6a0e000000000000000000b6"
+      },
+      "username": "console_moved",
+      "email": "after@conformance.invalid",
+      "firstName": "console_moved",
+      "lastName": "Conformance",
+      "status": "active",
+      "tenant": {
+        "id": "6a0e00000000000000000002",
+        "code": "DBTN"
+      },
+      "groups": [
+        "owner"
+      ],
+      "config": {},
+      "profile": {},
+      "ts": 1794666000000
     }
   ],
   "groups": [
@@ -38,6 +146,25 @@
         "allowedPackages": {
           "DSBRD": [
             "DSBRD_OWNER"
+          ]
+        }
+      }
+    },
+    {
+      "_id": {
+        "$oid": "6a0e000000000000000000ae"
+      },
+      "code": "admin",
+      "name": "Admin",
+      "description": "Invited admins",
+      "tenant": {
+        "id": "6a0e00000000000000000002",
+        "code": "DBTN"
+      },
+      "config": {
+        "allowedPackages": {
+          "DSBRD": [
+            "DSBRD_ADMIN"
           ]
         }
       }

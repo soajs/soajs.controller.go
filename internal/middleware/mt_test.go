@@ -35,7 +35,7 @@ func TestMT_SkipsWhenNoKey(t *testing.T) {
 	reg := &mockRegistryMT{}
 
 	contextMW := Context(logger, "test")
-	mtMW := MT(prov, reg, nil, "test")
+	mtMW := MT(prov, reg, "test")
 
 	called := false
 	handler := contextMW(mtMW(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -79,7 +79,7 @@ func runMT(t *testing.T, prov *mockProvision, extKey string) (*httptest.Response
 	t.Helper()
 	reg := mtRegistry()
 	var captured *SOAJSContext
-	handler := Context(zap.NewNop(), "test")(URL(nil)(Key(prov, reg, "test")(KeyACL()(MT(prov, reg, nil, "test")(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := Context(zap.NewNop(), "test")(URL(nil)(Key(prov, reg, "test")(KeyACL()(MT(prov, reg, "test")(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		captured = GetSOAJSContext(r.Context())
 		w.WriteHeader(http.StatusOK)
 	}))))))
@@ -176,49 +176,6 @@ func TestGeoAllowed(t *testing.T) {
 }
 
 // =============================================================================
-// UserACL Middleware Tests
-// =============================================================================
-
-func TestUserACL_SkipsWhenNoContext(t *testing.T) {
-	userACLMW := UserACL()
-
-	called := false
-	handler := userACLMW(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		called = true
-		w.WriteHeader(http.StatusOK)
-	}))
-
-	req := httptest.NewRequest("GET", "/test", nil)
-	rec := httptest.NewRecorder()
-	handler.ServeHTTP(rec, req)
-
-	if !called {
-		t.Error("Handler should be called when no context")
-	}
-}
-
-func TestUserACL_SkipsWhenNoUserInfo(t *testing.T) {
-	logger, _ := zap.NewDevelopment()
-
-	contextMW := Context(logger, "test")
-	userACLMW := UserACL()
-
-	called := false
-	handler := contextMW(userACLMW(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		called = true
-		w.WriteHeader(http.StatusOK)
-	})))
-
-	req := httptest.NewRequest("GET", "/test", nil)
-	rec := httptest.NewRecorder()
-	handler.ServeHTTP(rec, req)
-
-	if !called {
-		t.Error("Handler should be called when no user info")
-	}
-}
-
-// =============================================================================
 // MT Whitelist Tests
 // =============================================================================
 
@@ -251,7 +208,7 @@ func TestMTACL_ServiceNotInPackage(t *testing.T) {
 		packages: map[string]*types.Package{"PROD_PKG": {Code: "PROD_PKG", ACL: map[string]interface{}{}}},
 	}
 	final := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) })
-	handler := Context(zap.NewNop(), "test")(URL(nil)(Key(prov, reg, "test")(KeyACL()(MT(prov, reg, nil, "test")(MTACL(reg)(final))))))
+	handler := Context(zap.NewNop(), "test")(URL(nil)(Key(prov, reg, "test")(KeyACL()(MT(prov, reg, "test")(MTACL(reg)(final))))))
 	req := httptest.NewRequest("GET", "/svc/v1/test", nil)
 	req.Header.Set(config.HeaderSOAJSKey, "k")
 	rec := httptest.NewRecorder()

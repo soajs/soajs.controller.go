@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Runs the conformance cases against one gateway on the fixture.
+# Runs the conformance cases against the gateways of one implementation on the fixture: one for
+# the dev environment, one for the dashboard environment.
 #
 #   test/conformance/run.sh go              run the cases against the Go gateway
 #   test/conformance/run.sh node            run the cases against the Node.js gateway
@@ -21,8 +22,11 @@ ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 MONGO_URI="${MONGO_URI:-mongodb://127.0.0.1:27017}"
 GATEWAY_PORT=24000
 MAINTENANCE_PORT=25000
+DASHBOARD_PORT=26000
+DASHBOARD_MAINTENANCE_PORT=27000
 WORK="$(mktemp -d)"
 GATEWAY_PID=""
+DASHBOARD_PID=""
 MOCK_PID=""
 
 stop() {
@@ -37,13 +41,14 @@ stop() {
 
 cleanup() {
 	stop "$GATEWAY_PID"
+	stop "$DASHBOARD_PID"
 	stop "$MOCK_PID"
 	rm -rf "$WORK"
 }
 trap cleanup EXIT
 
 cd "$ROOT"
-for port in $GATEWAY_PORT $MAINTENANCE_PORT 24100 25100; do
+for port in $GATEWAY_PORT $MAINTENANCE_PORT $DASHBOARD_PORT $DASHBOARD_MAINTENANCE_PORT 24100 25100; do
 	if curl -s -o /dev/null "http://127.0.0.1:$port/"; then
 		echo "port $port is already in use" >&2
 		exit 1
@@ -72,33 +77,47 @@ module.exports = {
 };
 EOF
 
-if [ "$IMPL" = "node" ]; then
-	: "${NODE_CONTROLLER_DIR:?set NODE_CONTROLLER_DIR to a soajs.controller checkout}"
-	(cd "$NODE_CONTROLLER_DIR" && \
-		SOAJS_ENV=dev SOAJS_PROFILE="$WORK/profile.js" SOAJS_SRVIP=127.0.0.1 SOAJS_DEPLOY_MANUAL=1 \
-		NODE_ENV=production exec node index.js) > "$WORK/gateway.log" 2>&1 &
-	GATEWAY_PID=$!
-else
-	go build -o "$WORK/controller" ./cmd/controller
-	SOAJS_ENV=dev SOAJS_PROFILE="$WORK/profile.js" \
-		SOAJS_SERVICE_PORT=$GATEWAY_PORT SOAJS_MAINTENANCE_PORT_INCREMENT=1000 SOAJS_LOG_LEVEL=error \
-		"$WORK/controller" > "$WORK/gateway.log" 2>&1 &
-	GATEWAY_PID=$!
-fi
+# start ENV PORT LOG: starts a gateway of the environment, its PID in STARTED
+start() {
+	if [ "$IMPL" = "node" ]; then
+		: "${NODE_CONTROLLER_DIR:?set NODE_CONTROLLER_DIR to a soajs.controller checkout}"
+		(cd "$NODE_CONTROLLER_DIR" && \
+			SOAJS_ENV=$1 SOAJS_PROFILE="$WORK/profile.js" SOAJS_SRVIP=127.0.0.1 SOAJS_DEPLOY_MANUAL=1 \
+			NODE_ENV=production exec node index.js) > "$3" 2>&1 &
+	else
+		[ -x "$WORK/controller" ] || go build -o "$WORK/controller" ./cmd/controller
+		SOAJS_ENV=$1 SOAJS_PROFILE="$WORK/profile.js" \
+			SOAJS_SERVICE_PORT=$2 SOAJS_MAINTENANCE_PORT_INCREMENT=1000 SOAJS_LOG_LEVEL=error \
+			"$WORK/controller" > "$3" 2>&1 &
+	fi
+	STARTED=$!
+}
 
-for i in $(seq 1 60); do
-	if curl -sf "http://127.0.0.1:$MAINTENANCE_PORT/heartbeat" > /dev/null 2>&1; then
-		break
-	fi
-	if ! kill -0 "$GATEWAY_PID" 2>/dev/null || [ "$i" = 60 ]; then
-		echo "the $IMPL gateway did not start:" >&2
-		cat "$WORK/gateway.log" >&2
-		exit 1
-	fi
-	sleep 1
-done
+# wait_for PID MAINTENANCE_PORT LOG
+wait_for() {
+	for i in $(seq 1 60); do
+		if curl -sf "http://127.0.0.1:$2/heartbeat" > /dev/null 2>&1; then
+			return 0
+		fi
+		if ! kill -0 "$1" 2>/dev/null || [ "$i" = 60 ]; then
+			echo "the $IMPL gateway did not start:" >&2
+			cat "$3" >&2
+			exit 1
+		fi
+		sleep 1
+	done
+}
+
+start dev $GATEWAY_PORT "$WORK/gateway.log"
+GATEWAY_PID=$STARTED
+start dashboard $DASHBOARD_PORT "$WORK/dashboard.log"
+DASHBOARD_PID=$STARTED
+wait_for "$GATEWAY_PID" $MAINTENANCE_PORT "$WORK/gateway.log"
+wait_for "$DASHBOARD_PID" $DASHBOARD_MAINTENANCE_PORT "$WORK/dashboard.log"
 
 CONFORMANCE_IMPL="$IMPL" \
 CONFORMANCE_GATEWAY="http://127.0.0.1:$GATEWAY_PORT" \
 CONFORMANCE_MAINTENANCE="http://127.0.0.1:$MAINTENANCE_PORT" \
+CONFORMANCE_DASHBOARD_GATEWAY="http://127.0.0.1:$DASHBOARD_PORT" \
+CONFORMANCE_DASHBOARD_MAINTENANCE="http://127.0.0.1:$DASHBOARD_MAINTENANCE_PORT" \
 	go test -count=1 -v ./test/conformance/ -run TestConformance -args "$@"

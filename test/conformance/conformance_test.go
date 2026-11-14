@@ -8,6 +8,8 @@
 //	CONFORMANCE_IMPL=go|node       which gateway is running
 //	CONFORMANCE_GATEWAY=<url>      its gateway port, e.g. http://127.0.0.1:24000
 //	CONFORMANCE_MAINTENANCE=<url>  its maintenance port, e.g. http://127.0.0.1:25000
+//	CONFORMANCE_DASHBOARD_GATEWAY=<url>      the gateway of the dashboard environment, for the
+//	CONFORMANCE_DASHBOARD_MAINTENANCE=<url>  cases with "env": "dashboard"
 //
 // go test ./test/conformance -record writes golden/ from the running gateway, which must be Node.js.
 package conformance
@@ -41,6 +43,20 @@ var vars = map[string]string{
 	"KEY_NOSVC":          "5bbf311a30f4acaec52b7472be854cc95259156275114822ad91615d02d2760947f606f0000f7253607e4e33904ca3b83f6f77de03e310b91c80560ba80dd8dd623e129efcf0892b36ab66f32795fd06ab9121ca5d2674be1494591a2ae3f4f3",
 	"TOKEN_VALID":        "c0f0000000000000000000000000000000000001",
 	"TOKEN_EXPIRED":      "c0f0000000000000000000000000000000000002",
+	// the console key and urac tokens of the dashboard environment
+	"KEY_CONSOLE":      "5bbf311a30f4acaec52b7472be854cc92a688050ab8b4c65b32000cbc9699d1d3a106575479749cdb84c50721a91114c6b37466822a73afe81da0776a62d7660f95628343b1423d438eef3b40607777da2c6028b062e623f33ce704ed2d6c2fabfc8ce466e1a8887e8f9c16a566ca64c",
+	"TOKEN_U_OWNER":    "d0a0000000000000000000000000000000000001",
+	"TOKEN_U_PAUSED":   "d0a0000000000000000000000000000000000002",
+	"TOKEN_U_PENDING":  "d0a0000000000000000000000000000000000003",
+	"TOKEN_U_GHOST":    "d0a0000000000000000000000000000000000004",
+	"TOKEN_U_OUTSIDER": "d0a0000000000000000000000000000000000005",
+	"TOKEN_U_INVITED":  "d0a0000000000000000000000000000000000006",
+	"TOKEN_U_MOVED":    "d0a0000000000000000000000000000000000007",
+	// dashboard tokens in the dev token database: roaming
+	"TOKEN_R_ROAMING": "d0a0000000000000000000000000000000000008",
+	"TOKEN_R_GONE":    "d0a0000000000000000000000000000000000009",
+	// a urac token of the dev environment, which has no urac masterDB
+	"TOKEN_U_DEV": "d0a000000000000000000000000000000000000a",
 }
 
 // Case is one request.
@@ -48,6 +64,7 @@ type Case struct {
 	Name   string            `json:"name"`
 	About  string            `json:"about,omitempty"`
 	Target string            `json:"target,omitempty"` // "gateway" (default) or "maintenance"
+	Env    string            `json:"env,omitempty"`    // "dev" (default) or "dashboard"
 	Method string            `json:"method"`
 	Path   string            `json:"path"`
 	Header map[string]string `json:"headers,omitempty"`
@@ -72,6 +89,8 @@ func TestConformance(t *testing.T) {
 	impl := os.Getenv("CONFORMANCE_IMPL")
 	gateway := os.Getenv("CONFORMANCE_GATEWAY")
 	maintenance := os.Getenv("CONFORMANCE_MAINTENANCE")
+	dashboardGateway := os.Getenv("CONFORMANCE_DASHBOARD_GATEWAY")
+	dashboardMaintenance := os.Getenv("CONFORMANCE_DASHBOARD_MAINTENANCE")
 	if impl == "" || gateway == "" || maintenance == "" {
 		t.Skip("set CONFORMANCE_IMPL, CONFORMANCE_GATEWAY and CONFORMANCE_MAINTENANCE, or use run.sh")
 	}
@@ -110,6 +129,15 @@ func TestConformance(t *testing.T) {
 			base := gateway
 			if c.Target == "maintenance" {
 				base = maintenance
+			}
+			if c.Env == "dashboard" {
+				if dashboardGateway == "" || dashboardMaintenance == "" {
+					t.Fatal("set CONFORMANCE_DASHBOARD_GATEWAY and CONFORMANCE_DASHBOARD_MAINTENANCE, or use run.sh")
+				}
+				base = dashboardGateway
+				if c.Target == "maintenance" {
+					base = dashboardMaintenance
+				}
 			}
 			got, err := send(client, base, c)
 			if err != nil {

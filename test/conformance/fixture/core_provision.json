@@ -556,6 +556,17 @@
       "hostname": "conformance",
       "version": "1",
       "port": 24100
+    },
+    {
+      "_id": {
+        "$oid": "6a0e000000000000000000cc"
+      },
+      "env": "dashboard",
+      "name": "conform",
+      "ip": "127.0.0.1",
+      "hostname": "conformance",
+      "version": "1",
+      "port": 24100
     }
   ],
   "products": [
@@ -672,6 +683,113 @@
           },
           "acl": {
             "dev": {}
+          }
+        }
+      ]
+    },
+    {
+      "_id": {
+        "$oid": "6a0e000000000000000000a5"
+      },
+      "code": "DSBRD",
+      "name": "Console",
+      "description": "Conformance console product",
+      "console": true,
+      "scope": {
+        "acl": {}
+      },
+      "packages": [
+        {
+          "code": "DSBRD_DEFAULT",
+          "name": "DSBRD_DEFAULT",
+          "description": "The console key's package",
+          "_TTL": 21600000,
+          "aclTypeByEnv": {
+            "dashboard": "granular"
+          },
+          "acl": {
+            "dashboard": {
+              "conform": {
+                "1": {
+                  "access": true,
+                  "apisPermission": "restricted",
+                  "get": {
+                    "apis": {
+                      "/public/hello": {
+                        "access": false,
+                        "group": "Hello"
+                      },
+                      "/private/hello": {
+                        "access": true,
+                        "group": "Hello"
+                      },
+                      "/private/admin": {
+                        "access": true,
+                        "group": "Hello"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "code": "DSBRD_OWNER",
+          "name": "DSBRD_OWNER",
+          "description": "Owners: hello, not admin",
+          "_TTL": 21600000,
+          "aclTypeByEnv": {
+            "dashboard": "granular"
+          },
+          "acl": {
+            "dashboard": {
+              "conform": {
+                "1": {
+                  "access": true,
+                  "apisPermission": "restricted",
+                  "get": {
+                    "apis": {
+                      "/public/hello": {
+                        "access": false,
+                        "group": "Hello"
+                      },
+                      "/private/hello": {
+                        "access": true,
+                        "group": "Hello"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "code": "DSBRD_ADMIN",
+          "name": "DSBRD_ADMIN",
+          "description": "Invited admins: admin, not hello",
+          "_TTL": 21600000,
+          "aclTypeByEnv": {
+            "dashboard": "granular"
+          },
+          "acl": {
+            "dashboard": {
+              "conform": {
+                "1": {
+                  "access": true,
+                  "apisPermission": "restricted",
+                  "get": {
+                    "apis": {
+                      "/private/admin": {
+                        "access": true,
+                        "group": "Hello"
+                      }
+                    }
+                  }
+                }
+              }
+            }
           }
         }
       ]
@@ -835,7 +953,240 @@
         ],
         "redirectURI": ""
       },
-      "applications": []
+      "applications": [
+        {
+          "appId": {
+            "$oid": "6a0e000000000000000000a6"
+          },
+          "product": "DSBRD",
+          "package": "DSBRD_DEFAULT",
+          "description": "Console application",
+          "_TTL": 21600000,
+          "keys": [
+            {
+              "key": "2d1e2f3a4b5c6d7e8f90a1b2c3d4e5f6",
+              "config": {
+                "dashboard": {
+                  "conform": {},
+                  "gateway": {
+                    "validateTokenAccount": {
+                      "email": true
+                    }
+                  }
+                }
+              },
+              "extKeys": [
+                {
+                  "extKey": "5bbf311a30f4acaec52b7472be854cc92a688050ab8b4c65b32000cbc9699d1d3a106575479749cdb84c50721a91114c6b37466822a73afe81da0776a62d7660f95628343b1423d438eef3b40607777da2c6028b062e623f33ce704ed2d6c2fabfc8ce466e1a8887e8f9c16a566ca64c",
+                  "env": "DASHBOARD",
+                  "label": "conformance console",
+                  "device": null,
+                  "geo": null,
+                  "expDate": null
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "oauth_token": [
+    {
+      "_id": {
+        "$oid": "6a0e000000000000000000f0"
+      },
+      "type": "accessToken",
+      "token": "d0a0000000000000000000000000000000000001",
+      "expires": {
+        "$date": "2099-01-01T00:00:00Z"
+      },
+      "clientId": "6a0e00000000000000000002",
+      "env": "dashboard",
+      "user": {
+        "_id": {
+          "$oid": "6a0e000000000000000000ac"
+        },
+        "id": "6a0e000000000000000000ac",
+        "loginMode": "urac",
+        "deviceId": null,
+        "agent": null,
+        "username": "console_owner",
+        "email": "owner@conformance.invalid",
+        "groups": [],
+        "tenant": {
+          "id": "6a0e00000000000000000002",
+          "code": "DBTN"
+        }
+      }
+    },
+    {
+      "_id": {
+        "$oid": "6a0e000000000000000000f1"
+      },
+      "type": "accessToken",
+      "token": "d0a0000000000000000000000000000000000002",
+      "expires": {
+        "$date": "2099-01-01T00:00:00Z"
+      },
+      "clientId": "6a0e00000000000000000002",
+      "env": "dashboard",
+      "user": {
+        "_id": {
+          "$oid": "6a0e000000000000000000b1"
+        },
+        "id": "6a0e000000000000000000b1",
+        "loginMode": "urac",
+        "deviceId": null,
+        "agent": null,
+        "username": "console_paused",
+        "email": "paused@conformance.invalid",
+        "groups": [],
+        "tenant": {
+          "id": "6a0e00000000000000000002",
+          "code": "DBTN"
+        }
+      }
+    },
+    {
+      "_id": {
+        "$oid": "6a0e000000000000000000f2"
+      },
+      "type": "accessToken",
+      "token": "d0a0000000000000000000000000000000000003",
+      "expires": {
+        "$date": "2099-01-01T00:00:00Z"
+      },
+      "clientId": "6a0e00000000000000000002",
+      "env": "dashboard",
+      "user": {
+        "_id": {
+          "$oid": "6a0e000000000000000000b2"
+        },
+        "id": "6a0e000000000000000000b2",
+        "loginMode": "urac",
+        "deviceId": null,
+        "agent": null,
+        "username": "console_pending",
+        "email": "pending@conformance.invalid",
+        "groups": [],
+        "tenant": {
+          "id": "6a0e00000000000000000002",
+          "code": "DBTN"
+        }
+      }
+    },
+    {
+      "_id": {
+        "$oid": "6a0e000000000000000000f3"
+      },
+      "type": "accessToken",
+      "token": "d0a0000000000000000000000000000000000004",
+      "expires": {
+        "$date": "2099-01-01T00:00:00Z"
+      },
+      "clientId": "6a0e00000000000000000002",
+      "env": "dashboard",
+      "user": {
+        "_id": {
+          "$oid": "6a0e000000000000000000b3"
+        },
+        "id": "6a0e000000000000000000b3",
+        "loginMode": "urac",
+        "deviceId": null,
+        "agent": null,
+        "username": "console_ghost",
+        "email": "ghost@conformance.invalid",
+        "groups": [],
+        "tenant": {
+          "id": "6a0e00000000000000000002",
+          "code": "DBTN"
+        }
+      }
+    },
+    {
+      "_id": {
+        "$oid": "6a0e000000000000000000f4"
+      },
+      "type": "accessToken",
+      "token": "d0a0000000000000000000000000000000000005",
+      "expires": {
+        "$date": "2099-01-01T00:00:00Z"
+      },
+      "clientId": "6a0e00000000000000000002",
+      "env": "dashboard",
+      "user": {
+        "_id": {
+          "$oid": "6a0e000000000000000000b4"
+        },
+        "id": "6a0e000000000000000000b4",
+        "loginMode": "urac",
+        "deviceId": null,
+        "agent": null,
+        "username": "outsider",
+        "email": "outsider@conformance.invalid",
+        "groups": [],
+        "tenant": {
+          "id": "6a0e00000000000000000001",
+          "code": "CONF"
+        }
+      }
+    },
+    {
+      "_id": {
+        "$oid": "6a0e000000000000000000f5"
+      },
+      "type": "accessToken",
+      "token": "d0a0000000000000000000000000000000000006",
+      "expires": {
+        "$date": "2099-01-01T00:00:00Z"
+      },
+      "clientId": "6a0e00000000000000000002",
+      "env": "dashboard",
+      "user": {
+        "_id": {
+          "$oid": "6a0e000000000000000000b5"
+        },
+        "id": "6a0e000000000000000000b5",
+        "loginMode": "urac",
+        "deviceId": null,
+        "agent": null,
+        "username": "invited_admin",
+        "email": "invited@conformance.invalid",
+        "groups": [],
+        "tenant": {
+          "id": "6a0e00000000000000000001",
+          "code": "CONF"
+        }
+      }
+    },
+    {
+      "_id": {
+        "$oid": "6a0e000000000000000000f6"
+      },
+      "type": "accessToken",
+      "token": "d0a0000000000000000000000000000000000007",
+      "expires": {
+        "$date": "2099-01-01T00:00:00Z"
+      },
+      "clientId": "6a0e00000000000000000002",
+      "env": "dashboard",
+      "user": {
+        "_id": {
+          "$oid": "6a0e000000000000000000b6"
+        },
+        "id": "6a0e000000000000000000b6",
+        "loginMode": "urac",
+        "deviceId": null,
+        "agent": null,
+        "username": "console_moved",
+        "email": "before@conformance.invalid",
+        "groups": [],
+        "tenant": {
+          "id": "6a0e00000000000000000002",
+          "code": "DBTN"
+        }
+      }
     }
   ]
 }

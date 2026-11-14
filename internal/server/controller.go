@@ -15,9 +15,11 @@ import (
 	"github.com/soajs/soajs.controller.go/internal/middleware"
 	"github.com/soajs/soajs.controller.go/internal/provision"
 	"github.com/soajs/soajs.controller.go/internal/registry"
+	uracuser "github.com/soajs/soajs.controller.go/internal/urac"
 	"github.com/soajs/soajs.controller.go/pkg/mongo"
 	"github.com/soajs/soajs.controller.go/pkg/types"
 	"github.com/soajs/soajs.controller.go/pkg/urac"
+	drv "go.mongodb.org/mongo-driver/mongo"
 	"go.uber.org/zap"
 )
 
@@ -29,7 +31,9 @@ type Controller struct {
 	provision provision.Provision
 	awareness awareness.Awareness
 	urac      *urac.Driver
-	mongo     *mongo.Client // the provision database, from the profile
+	// users reads the logged-in user from coreDB[masterDB] on key APIs
+	users *uracuser.Driver
+	mongo *mongo.Client // the provision database, from the profile
 
 	clientsMu sync.Mutex
 	clients   map[string]*mongo.Client // one connection per cluster, by connection string
@@ -84,6 +88,14 @@ func NewController(cfg *config.Config, logger *zap.Logger) (*Controller, error) 
 		HashIterations: 12,
 		Environment:    cfg.Environment,
 	})
+
+	ctrl.users = uracuser.NewDriver(func(db *dbconfig.DB) (*drv.Database, error) {
+		client, err := ctrl.clientFor(db)
+		if err != nil {
+			return nil, err
+		}
+		return client.Database(), nil
+	}, logger)
 
 	return ctrl, nil
 }
@@ -169,12 +181,12 @@ func (c *Controller) Setup(r *chi.Mux) error {
 	r.Use(middleware.Key(c.provision, c.registry, c.cfg.Environment))
 	r.Use(middleware.KeyACL())
 	r.Use(middleware.GotoService(c.provision, c.registry, c.awareness))
-	r.Use(middleware.MT(c.provision, c.registry, c.urac, c.cfg.Environment))
+	r.Use(middleware.MT(c.provision, c.registry, c.cfg.Environment))
 	r.Use(middleware.SoajsRoutesSetup(c.urac)) // Setup /soajs/* routes to require OAuth
 	r.Use(middleware.OAuth(c.provision, c.registry))
-	r.Use(middleware.UserACL())
+	r.Use(middleware.Urac(c.users, c.provision, c.registry, c.cfg.Environment))
 	r.Use(middleware.MTACL(c.registry))
-	r.Use(middleware.SoajsRoutes(c.provision)) // Handle /soajs/* routes after OAuth/UserACL populate context
+	r.Use(middleware.SoajsRoutes(c.provision)) // Handle /soajs/* routes after OAuth and Urac populate context
 	r.Use(middleware.Traffic(c.registry))
 	r.Use(middleware.LastSeen(c.registry, c.awareness))
 	r.Use(middleware.Monitor(c.registry, c.awareness))

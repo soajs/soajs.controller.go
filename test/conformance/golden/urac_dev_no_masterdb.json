@@ -1,0 +1,7 @@
+{
+  "status": 401,
+  "headers": {
+    "Content-Type": "application/json"
+  },
+  "body": "{\"result\":false,\"errors\":{\"codes\":[146],\"details\":[{\"code\":146,\"message\":\"Unauthorized to access.\"}]}}"
+}

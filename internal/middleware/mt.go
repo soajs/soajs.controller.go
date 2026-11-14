@@ -2,12 +2,10 @@ package middleware
 
 import (
 	"net/http"
-	"strings"
 
 	"github.com/soajs/soajs.controller.go/internal/provision"
 	"github.com/soajs/soajs.controller.go/internal/registry"
 	"github.com/soajs/soajs.controller.go/pkg/types"
-	"github.com/soajs/soajs.controller.go/pkg/urac"
 )
 
 // MT is the multi-tenant middleware before OAuth, as in Node.js (mw/mt/index.js and the first
@@ -19,7 +17,7 @@ import (
 //   - for a version with oauth, OAuth is required unless the API is public (oauthCheck).
 //
 // Without extKeyRequired the API is public and OAuth runs when the version has oauth.
-func MT(prov provision.Provision, reg registry.Registry, uracDriver *urac.Driver, env string) Middleware {
+func MT(prov provision.Provision, reg registry.Registry, env string) Middleware {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			soajsCtx := GetSOAJSContext(r.Context())
@@ -34,7 +32,6 @@ func MT(prov provision.Provision, reg registry.Registry, uracDriver *urac.Driver
 			params.Environment = env
 			params.ServiceName = serviceName
 			params.ServiceVersion = params.URLInfo.ServiceVersion
-			params.UracDriver = uracDriver
 
 			if serviceName == "soajs" || !version.ExtKeyRequired {
 				params.IsAPIPublic = true
@@ -104,7 +101,9 @@ func MTACL(reg registry.Registry) Middleware {
 				WriteCode(w, 154)
 				return
 			}
-			if code := apiCheck(params, params.UserInfo != nil); code != 0 {
+			// logged in: the user's profile (Node.js _urac.getUser)
+			loggedIn := soajsCtx.Urac != nil && soajsCtx.Urac.Profile(false) != nil
+			if code := apiCheck(params, loggedIn); code != 0 {
 				WriteCode(w, code)
 				return
 			}
@@ -220,61 +219,4 @@ func versionFlags(reg registry.Registry, service, version string) types.VersionI
 		return types.VersionInfo{}
 	}
 	return *svc.Versions[version]
-}
-
-// UserACL loads the token's user from urac after OAuth. The user's ACL override (Node.js
-// aclUrackCheck) and the urac checks (uracCheck) come with the urac rebuild; the Go-only refusals
-// that were here answered with codes Node.js does not use.
-func UserACL() Middleware {
-	return func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			// Skip /soajs/* routes - they're handled by SoajsRoutes middleware
-			path := r.URL.Path
-			if strings.HasPrefix(path, "/soajs/") {
-				next.ServeHTTP(w, r)
-				return
-			}
-
-			ctx := r.Context()
-			soajsCtx := GetSOAJSContext(ctx)
-
-			// Skip if no user info or no URAC driver
-			if soajsCtx == nil || soajsCtx.Controller == nil ||
-				soajsCtx.Controller.ServiceParams == nil ||
-				soajsCtx.Controller.ServiceParams.UserInfo == nil ||
-				soajsCtx.Controller.ServiceParams.UracDriver == nil {
-				next.ServeHTTP(w, r)
-				return
-			}
-
-			params := soajsCtx.Controller.ServiceParams
-
-			// Get user ID from OAuth token
-			userID, ok := params.UserInfo["_id"].(string)
-			if !ok || userID == "" {
-				next.ServeHTTP(w, r)
-				return
-			}
-
-			// Get tenant info first
-			tenantID := soajsCtx.Tenant.ID
-			tenantCode := soajsCtx.Tenant.Code
-
-			// Get user from URAC (with groupsConfig populated from groups for the current tenant)
-			uracDriver := params.UracDriver.(*urac.Driver)
-			user, err := uracDriver.GetUserWithGroupsConfigForTenant(ctx, userID, tenantID)
-			if err != nil {
-				soajsCtx.Log.Debug("Failed to get user from URAC")
-				next.ServeHTTP(w, r)
-				return
-			}
-			access := uracDriver.CheckTenantAccess(user, tenantID, tenantCode, "", nil)
-
-			// Store user and access info
-			params.User = user
-			params.TenantAccess = access
-
-			next.ServeHTTP(w, r)
-		})
-	}
 }
