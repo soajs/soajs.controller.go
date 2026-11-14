@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "throttling_error",
+  "x-soajs": {
+    "collection": "throttling_error",
+    "database": "gateway"
+  },
+  "type": "object",
+  "properties": {
+    "_id": {
+      "type": "object",
+      "properties": {
+        "$oid": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{24}$"
+        }
+      },
+      "required": [
+        "$oid"
+      ],
+      "additionalProperties": false
+    },
+    "staregy": {
+      "type": "string"
+    },
+    "l1": {
+      "type": "string",
+      "minLength": 1
+    },
+    "l2": {
+      "type": "string",
+      "minLength": 1
+    },
+    "ts": {
+      "type": "object",
+      "properties": {
+        "$date": {}
+      },
+      "required": [
+        "$date"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "_id",
+    "l1",
+    "l2",
+    "ts"
+  ]
+}

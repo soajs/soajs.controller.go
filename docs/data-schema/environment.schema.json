@@ -1,0 +1,507 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "environment",
+  "x-soajs": {
+    "collection": "environment",
+    "database": "provision"
+  },
+  "type": "object",
+  "properties": {
+    "_id": {
+      "type": "object",
+      "properties": {
+        "$oid": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{24}$"
+        }
+      },
+      "required": [
+        "$oid"
+      ],
+      "additionalProperties": false
+    },
+    "code": {
+      "type": "string",
+      "pattern": "^[A-Z0-9]+$"
+    },
+    "description": {
+      "type": "string"
+    },
+    "locked": {
+      "type": "boolean"
+    },
+    "domain": {
+      "type": "string"
+    },
+    "apiPrefix": {
+      "type": "string"
+    },
+    "sitePrefix": {
+      "type": "string"
+    },
+    "port": {
+      "type": "integer"
+    },
+    "protocol": {
+      "enum": [
+        "http",
+        "https"
+      ]
+    },
+    "deployer": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "container"
+            },
+            "selected": {
+              "const": "container.kubernetes"
+            },
+            "container": {
+              "type": "object",
+              "properties": {
+                "kubernetes": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "pattern": "^[0-9a-f]{24}$"
+                    },
+                    "namespace": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  },
+                  "additionalProperties": false,
+                  "required": [
+                    "id",
+                    "namespace"
+                  ]
+                }
+              },
+              "additionalProperties": false,
+              "required": [
+                "kubernetes"
+              ]
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "selected",
+            "container"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "manual"
+            },
+            "selected": {
+              "const": "manual"
+            },
+            "manual": {
+              "type": "object",
+              "properties": {
+                "nodes": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "selected"
+          ]
+        }
+      ]
+    },
+    "dbs": {
+      "type": "object",
+      "properties": {
+        "config": {
+          "type": "object",
+          "properties": {
+            "prefix": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "prefix"
+          ]
+        },
+        "databases": {
+          "type": "object",
+          "propertyNames": {
+            "pattern": "^[A-Za-z0-9_]+$"
+          },
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "cluster": {
+                "type": "string",
+                "minLength": 1
+              },
+              "tenantSpecific": {
+                "type": "boolean"
+              },
+              "prefix": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "required": [
+              "cluster",
+              "tenantSpecific"
+            ]
+          }
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "config",
+        "databases"
+      ]
+    },
+    "services": {
+      "type": "object",
+      "properties": {
+        "controller": {
+          "type": "object",
+          "properties": {
+            "authorization": {
+              "type": "boolean"
+            },
+            "requestTimeout": {
+              "type": "integer"
+            },
+            "requestTimeoutRenewal": {
+              "type": "integer"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "authorization",
+            "requestTimeout",
+            "requestTimeoutRenewal"
+          ]
+        },
+        "config": {
+          "type": "object",
+          "properties": {
+            "awareness": {
+              "type": "object",
+              "properties": {
+                "autoRegisterService": {
+                  "type": "boolean"
+                },
+                "autoRelaodRegistry": {
+                  "type": "integer"
+                },
+                "cacheTTL": {
+                  "type": "integer"
+                },
+                "healthCheckInterval": {
+                  "type": "integer"
+                },
+                "maxLogCount": {
+                  "type": "integer"
+                }
+              },
+              "additionalProperties": false,
+              "required": [
+                "autoRegisterService",
+                "autoRelaodRegistry",
+                "cacheTTL",
+                "healthCheckInterval",
+                "maxLogCount"
+              ]
+            },
+            "key": {
+              "type": "object",
+              "properties": {
+                "algorithm": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "password": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "additionalProperties": false,
+              "required": [
+                "algorithm",
+                "password"
+              ]
+            },
+            "logger": {
+              "type": "object",
+              "properties": {
+                "level": {
+                  "enum": [
+                    "trace",
+                    "debug",
+                    "info",
+                    "warn",
+                    "error",
+                    "fatal"
+                  ]
+                },
+                "src": {
+                  "type": "boolean"
+                },
+                "gke": {
+                  "type": "boolean"
+                },
+                "force": {
+                  "type": "boolean"
+                },
+                "formatter": {
+                  "type": "object",
+                  "properties": {
+                    "levelInString": {
+                      "type": "boolean"
+                    },
+                    "outputMode": {
+                      "type": "string"
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              },
+              "additionalProperties": false,
+              "required": [
+                "level",
+                "src"
+              ]
+            },
+            "cors": {
+              "type": "object",
+              "properties": {
+                "enabled": {
+                  "type": "boolean"
+                },
+                "origin": {
+                  "type": "string"
+                },
+                "credentials": {
+                  "type": "boolean"
+                },
+                "methods": {
+                  "type": "string"
+                },
+                "headers": {
+                  "type": "string"
+                },
+                "maxage": {
+                  "type": "integer"
+                }
+              },
+              "additionalProperties": false,
+              "required": [
+                "enabled",
+                "origin",
+                "credentials",
+                "methods",
+                "headers",
+                "maxage"
+              ]
+            },
+            "oauth": {
+              "type": "object",
+              "properties": {
+                "grants": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "debug": {
+                  "type": "boolean"
+                },
+                "getUserFromToken": {
+                  "type": "boolean"
+                },
+                "accessTokenLifetime": {
+                  "type": "integer"
+                },
+                "refreshTokenLifetime": {
+                  "type": "integer"
+                }
+              },
+              "additionalProperties": false,
+              "required": [
+                "grants",
+                "debug",
+                "getUserFromToken",
+                "accessTokenLifetime",
+                "refreshTokenLifetime"
+              ]
+            },
+            "ports": {
+              "type": "object",
+              "properties": {
+                "controller": {
+                  "type": "integer"
+                },
+                "maintenanceInc": {
+                  "type": "integer"
+                },
+                "randomInc": {
+                  "type": "integer"
+                }
+              },
+              "additionalProperties": false,
+              "required": [
+                "controller",
+                "maintenanceInc",
+                "randomInc"
+              ]
+            },
+            "cookie": {
+              "type": "object",
+              "properties": {
+                "secret": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "additionalProperties": false,
+              "required": [
+                "secret"
+              ]
+            },
+            "session": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "secret": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "resave": {
+                  "type": "boolean"
+                },
+                "rolling": {
+                  "type": "boolean"
+                },
+                "saveUninitialized": {
+                  "type": "boolean"
+                },
+                "unset": {
+                  "type": "string"
+                },
+                "cookie": {
+                  "type": "object",
+                  "properties": {
+                    "httpOnly": {
+                      "type": "boolean"
+                    },
+                    "maxAge": {
+                      "type": [
+                        "integer",
+                        "null"
+                      ]
+                    },
+                    "path": {
+                      "type": "string"
+                    },
+                    "secure": {
+                      "type": "boolean"
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              },
+              "additionalProperties": false,
+              "required": [
+                "name",
+                "secret"
+              ]
+            },
+            "throttling": {
+              "type": "object",
+              "properties": {
+                "publicAPIStrategy": {
+                  "type": "string"
+                },
+                "privateAPIStrategy": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "enum": [
+                      0,
+                      1
+                    ]
+                  },
+                  "window": {
+                    "type": "integer"
+                  },
+                  "limit": {
+                    "type": "integer"
+                  },
+                  "retries": {
+                    "type": "integer"
+                  },
+                  "delay": {
+                    "type": "integer"
+                  }
+                },
+                "additionalProperties": false,
+                "required": [
+                  "type",
+                  "window",
+                  "limit",
+                  "retries",
+                  "delay"
+                ]
+              }
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "awareness",
+            "key",
+            "logger",
+            "cors",
+            "oauth",
+            "ports",
+            "cookie",
+            "session"
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "controller",
+        "config"
+      ]
+    },
+    "settings": {}
+  },
+  "additionalProperties": false,
+  "required": [
+    "_id",
+    "code",
+    "deployer",
+    "dbs",
+    "services",
+    "domain",
+    "protocol",
+    "port"
+  ]
+}

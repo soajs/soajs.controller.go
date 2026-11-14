@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "controllers",
+  "x-soajs": {
+    "collection": "controllers",
+    "database": "provision"
+  },
+  "type": "object",
+  "properties": {
+    "_id": {
+      "type": "object",
+      "properties": {
+        "$oid": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{24}$"
+        }
+      },
+      "required": [
+        "$oid"
+      ],
+      "additionalProperties": false
+    },
+    "env": {
+      "type": "string",
+      "pattern": "^[a-z0-9]+$"
+    },
+    "ip": {
+      "type": "string",
+      "minLength": 1
+    },
+    "ts": {
+      "type": "number"
+    },
+    "data": {
+      "type": "object",
+      "properties": {
+        "services": {
+          "type": "object"
+        },
+        "daemons": {
+          "type": "object"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "services",
+        "daemons"
+      ]
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "_id",
+    "env",
+    "ip",
+    "ts",
+    "data"
+  ]
+}
