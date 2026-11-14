@@ -8,14 +8,20 @@ package dataschema
 import (
 	"encoding/json"
 	"fmt"
+	"io/fs"
 	"os"
+	"path"
 	"path/filepath"
 	"runtime"
 	"sort"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/santhosh-tekuri/jsonschema/v5"
 	"go.mongodb.org/mongo-driver/bson"
+
+	schemas "github.com/soajs/soajs.controller.go/docs/data-schema"
 )
 
 // Database kinds a collection lives in.
@@ -52,21 +58,48 @@ func DefaultDir() string {
 	return filepath.Join(filepath.Dir(file), "..", "..", "docs", "data-schema")
 }
 
+var (
+	embedded     map[string]*Collection
+	embeddedErr  error
+	embeddedOnce sync.Once
+)
+
+// Embedded returns the schemas built into the binary, by collection name.
+func Embedded() (map[string]*Collection, error) {
+	embeddedOnce.Do(func() {
+		var list []*Collection
+		list, embeddedErr = LoadFS(schemas.FS)
+		if embeddedErr != nil {
+			return
+		}
+		embedded = map[string]*Collection{}
+		for _, c := range list {
+			embedded[c.Name] = c
+		}
+	})
+	return embedded, embeddedErr
+}
+
 // Load compiles every *.schema.json in dir.
 func Load(dir string) ([]*Collection, error) {
-	files, err := filepath.Glob(filepath.Join(dir, "*.schema.json"))
+	return LoadFS(os.DirFS(dir))
+}
+
+// LoadFS compiles every *.schema.json in fsys.
+func LoadFS(fsys fs.FS) ([]*Collection, error) {
+	files, err := fs.Glob(fsys, "*.schema.json")
 	if err != nil {
 		return nil, err
 	}
 	if len(files) == 0 {
-		return nil, fmt.Errorf("no *.schema.json in %s", dir)
+		return nil, fmt.Errorf("no *.schema.json found")
 	}
 	sort.Strings(files)
 	compiler := jsonschema.NewCompiler()
 	compiler.Draft = jsonschema.Draft2020
 	var collections []*Collection
 	for _, f := range files {
-		raw, err := os.ReadFile(f)
+		raw, err := fs.ReadFile(fsys, f)
 		if err != nil {
 			return nil, err
 		}
@@ -77,7 +110,7 @@ func Load(dir string) ([]*Collection, error) {
 		if m.XSoajs.Collection == "" || m.XSoajs.Database == "" {
 			return nil, fmt.Errorf("%s: x-soajs.collection and x-soajs.database are required", filepath.Base(f))
 		}
-		url := "file://" + filepath.ToSlash(f)
+		url := "mem:///" + path.Base(f)
 		if err := compiler.AddResource(url, strings.NewReader(string(raw))); err != nil {
 			return nil, fmt.Errorf("%s: %w", filepath.Base(f), err)
 		}
@@ -118,6 +151,64 @@ func (c *Collection) ValidateJSON(doc []byte) ([]Problem, error) {
 	if err := json.Unmarshal(doc, &v); err != nil {
 		return nil, err
 	}
+	return c.validate(v)
+}
+
+// Decode validates a raw BSON document and, when it matches, decodes it into out through JSON:
+// an ObjectId becomes its hex string and a date the form JSON.stringify writes. A document that
+// does not match returns its problems and leaves out untouched.
+func (c *Collection) Decode(raw bson.Raw, out interface{}) ([]Problem, error) {
+	ext, err := bson.MarshalExtJSON(raw, false, false)
+	if err != nil {
+		return nil, err
+	}
+	var v interface{}
+	if err := json.Unmarshal(ext, &v); err != nil {
+		return nil, err
+	}
+	problems, err := c.validate(v)
+	if err != nil || problems != nil {
+		return problems, err
+	}
+	plain, err := json.Marshal(Plain(v))
+	if err != nil {
+		return nil, err
+	}
+	return nil, json.Unmarshal(plain, out)
+}
+
+// Plain turns relaxed extended JSON into plain JSON values: {"$oid": h} becomes h and
+// {"$date": d} the UTC time with milliseconds, as JSON.stringify writes a Date.
+func Plain(v interface{}) interface{} {
+	switch t := v.(type) {
+	case map[string]interface{}:
+		if len(t) == 1 {
+			if oid, ok := t["$oid"].(string); ok {
+				return oid
+			}
+			if d, ok := t["$date"]; ok {
+				if s, ok := d.(string); ok {
+					if tm, err := time.Parse(time.RFC3339Nano, s); err == nil {
+						return tm.UTC().Format("2006-01-02T15:04:05.000Z")
+					}
+				}
+				return d
+			}
+		}
+		for k, e := range t {
+			t[k] = Plain(e)
+		}
+		return t
+	case []interface{}:
+		for i, e := range t {
+			t[i] = Plain(e)
+		}
+		return t
+	}
+	return v
+}
+
+func (c *Collection) validate(v interface{}) ([]Problem, error) {
 	err := c.schema.Validate(v)
 	if err == nil {
 		return nil, nil

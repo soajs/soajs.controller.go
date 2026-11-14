@@ -60,9 +60,7 @@ MONGO_HOSTPORT="${MONGO_HOSTPORT%%/*}"
 MONGO_HOST="${MONGO_HOSTPORT%%:*}"
 MONGO_PORT="${MONGO_HOSTPORT##*:}"
 
-if [ "$IMPL" = "node" ]; then
-	: "${NODE_CONTROLLER_DIR:?set NODE_CONTROLLER_DIR to a soajs.controller checkout}"
-	cat > "$WORK/profile.js" <<EOF
+cat > "$WORK/profile.js" <<EOF
 module.exports = {
 	"name": "core_provision",
 	"prefix": "conformance_",
@@ -73,13 +71,16 @@ module.exports = {
 	"URLParam": {}
 };
 EOF
+
+if [ "$IMPL" = "node" ]; then
+	: "${NODE_CONTROLLER_DIR:?set NODE_CONTROLLER_DIR to a soajs.controller checkout}"
 	(cd "$NODE_CONTROLLER_DIR" && \
 		SOAJS_ENV=dev SOAJS_PROFILE="$WORK/profile.js" SOAJS_SRVIP=127.0.0.1 SOAJS_DEPLOY_MANUAL=1 \
 		NODE_ENV=production exec node index.js) > "$WORK/gateway.log" 2>&1 &
 	GATEWAY_PID=$!
 else
 	go build -o "$WORK/controller" ./cmd/controller
-	SOAJS_ENV=dev SOAJS_MONGO_URI="$MONGO_URI" SOAJS_MONGO_DATABASE=conformance_core_provision \
+	SOAJS_ENV=dev SOAJS_PROFILE="$WORK/profile.js" \
 		SOAJS_SERVICE_PORT=$GATEWAY_PORT SOAJS_MAINTENANCE_PORT_INCREMENT=1000 SOAJS_LOG_LEVEL=error \
 		"$WORK/controller" > "$WORK/gateway.log" 2>&1 &
 	GATEWAY_PID=$!

@@ -1,0 +1,7 @@
+{
+  "status": 200,
+  "headers": {
+    "Content-Type": "application/json"
+  },
+  "body": "{\"data\":{\"method\":\"PATCH\",\"path\":\"/private/item/42\",\"query\":\"\"},\"result\":true}"
+}

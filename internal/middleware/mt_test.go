@@ -15,17 +15,14 @@ type mockRegistryMT struct {
 	data *types.RegistryData
 }
 
-func (m *mockRegistryMT) Load(env string) error                                        { return nil }
-func (m *mockRegistryMT) Reload() error                                                { return nil }
-func (m *mockRegistryMT) Get() *types.RegistryData                                     { return m.data }
-func (m *mockRegistryMT) GetService(name string) (*types.ServiceConfig, error)         { return nil, nil }
-func (m *mockRegistryMT) GetCustomRegistry(name string) (interface{}, error)           { return nil, nil }
-func (m *mockRegistryMT) GetResource(resourceType, name string) (*types.Resource, error) { return nil, nil }
-func (m *mockRegistryMT) RegisterHost(info types.HostInfo) error                       { return nil }
-func (m *mockRegistryMT) GetHost(serviceName, version string) (*types.HostInfo, error) { return nil, nil }
-func (m *mockRegistryMT) AddUpdateEnvControllers(data types.ControllerUpdate) error    { return nil }
-func (m *mockRegistryMT) IsMaintenanceMode() bool                                      { return false }
-func (m *mockRegistryMT) GetEnvironment() string                                       { return "test" }
+func (m *mockRegistryMT) Load(env string) error                    { return nil }
+func (m *mockRegistryMT) Reload() error                            { return nil }
+func (m *mockRegistryMT) Get() *types.RegistryData                 { return m.data }
+func (m *mockRegistryMT) RegisterHost(info types.HostRecord) error { return nil }
+func (m *mockRegistryMT) GetHost(serviceName, version string) (*types.HostInfo, error) {
+	return nil, nil
+}
+func (m *mockRegistryMT) GetEnvironment() string { return "test" }
 
 // =============================================================================
 // MT Middleware Tests
@@ -645,3 +642,9 @@ func TestCheckMTWhitelist_NoWhitelistConfig(t *testing.T) {
 		t.Error("No whitelist config should not skip anything")
 	}
 }
+
+func (m *mockRegistryMT) LoadByEnv(env string, reload bool) (*types.RegistryData, error) {
+	return m.Get(), nil
+}
+
+func (m *mockRegistryMT) Close() {}

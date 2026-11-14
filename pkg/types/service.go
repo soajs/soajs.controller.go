@@ -1,116 +1,119 @@
 package types
 
-import "encoding/json"
+import (
+	"encoding/json"
+	"sort"
+)
 
-// ServiceConfig represents a service configuration
+// ServiceConfig is a registry service entry (registry.services.<name>). The controller entry
+// also carries Name, Version and Authorization.
 type ServiceConfig struct {
-	ID                    string                  `json:"_id" bson:"_id"`
-	Name                  string                  `json:"name" bson:"name"`
-	Group                 string                  `json:"group" bson:"group"`
-	Version               string                  `json:"version" bson:"version"`
-	Port                  int                     `json:"port" bson:"port"`
-	Host                  string                  `json:"host" bson:"host"`
-	RequestTimeout        int                     `json:"requestTimeout" bson:"requestTimeout"`
-	RequestTimeoutRenewal int                     `json:"requestTimeoutRenewal" bson:"requestTimeoutRenewal"`
-	Maintenance           *MaintenanceInfo        `json:"maintenance" bson:"maintenance"`
-	Versions              map[string]*VersionInfo `json:"versions" bson:"versions"`
-	// Hosts stores host IPs by version (like Node.js registry.services[name].hosts)
-	Hosts *ServiceHosts `json:"hosts,omitempty"`
+	Name                  string                  `json:"name,omitempty"`
+	Group                 string                  `json:"group"`
+	Version               string                  `json:"version,omitempty"`
+	Authorization         *bool                   `json:"authorization,omitempty"`
+	Port                  int                     `json:"port"`
+	OPort                 int                     `json:"oport,omitempty"`
+	RequestTimeoutRenewal int                     `json:"requestTimeoutRenewal"`
+	RequestTimeout        int                     `json:"requestTimeout"`
+	Versions              map[string]*VersionInfo `json:"versions,omitempty"`
+	Maintenance           *RootMaintenance        `json:"maintenance,omitempty"`
+	Hosts                 *ServiceHosts           `json:"hosts,omitempty"`
 }
 
-// ServiceHosts stores hosts for a service, organized by version
+// DaemonConfig is a registry mdaemon entry (registry.daemons.<name>).
+type DaemonConfig struct {
+	Group       string                        `json:"group"`
+	Port        int                           `json:"port"`
+	OPort       int                           `json:"oport,omitempty"`
+	Versions    map[string]*DaemonVersionInfo `json:"versions,omitempty"`
+	Maintenance *RootMaintenance              `json:"maintenance,omitempty"`
+	Hosts       *ServiceHosts                 `json:"hosts,omitempty"`
+}
+
+// DaemonVersionInfo is one version of an mdaemon.
+type DaemonVersionInfo struct {
+	Maintenance *MaintenanceInfo `json:"maintenance"`
+}
+
+// ServiceHosts holds a service's host IPs by version, and the latest version.
 type ServiceHosts struct {
-	// Latest holds the latest version string
-	Latest string `json:"latest,omitempty"`
-	// ByVersion maps version string to list of host IPs
-	ByVersion map[string][]string `json:"-"`
+	Latest    string
+	ByVersion map[string][]string
 }
 
-// MarshalJSON implements custom JSON marshaling for ServiceHosts
-// Output format matches Node.js: {"latest": "1", "1": ["127.0.0.1"]}
+// MarshalJSON writes {"latest": "1", "1": ["10.0.0.1"]}, as the Node.js registry holds it.
 func (h ServiceHosts) MarshalJSON() ([]byte, error) {
-	// Create a map to hold all fields
-	result := make(map[string]interface{})
-
-	if h.Latest != "" {
-		result["latest"] = h.Latest
+	result := make(map[string]interface{}, len(h.ByVersion)+1)
+	result["latest"] = h.Latest
+	versions := make([]string, 0, len(h.ByVersion))
+	for v := range h.ByVersion {
+		versions = append(versions, v)
 	}
-
-	// Add version entries
-	for version, ips := range h.ByVersion {
-		result[version] = ips
+	sort.Strings(versions)
+	for _, v := range versions {
+		result[v] = h.ByVersion[v]
 	}
-
 	return json.Marshal(result)
 }
 
-// MaintenanceInfo holds maintenance configuration
+// RootMaintenance is the service-level copy of the first version's maintenance.
+type RootMaintenance struct {
+	Readiness string   `json:"readiness"`
+	Port      PortInfo `json:"port"`
+}
+
+// MaintenanceInfo is a version's maintenance declaration.
 type MaintenanceInfo struct {
-	Readiness string   `json:"readiness" bson:"readiness"`
-	Port      PortInfo `json:"port" bson:"port"`
-	Commands  []Command `json:"commands" bson:"commands"`
+	Readiness string    `json:"readiness"`
+	Port      PortInfo  `json:"port"`
+	Commands  []Command `json:"commands,omitempty"`
 }
 
-// PortInfo holds port configuration
+// PortInfo says which port answers maintenance: "maintenance" (port + maintenanceInc) or
+// "inherit" (the service port).
 type PortInfo struct {
-	Type string `json:"type" bson:"type"`
+	Type string `json:"type"`
 }
 
-// Command represents a maintenance command
+// Command is a maintenance command.
 type Command struct {
-	Label string `json:"label" bson:"label"`
-	Path  string `json:"path" bson:"path"`
-	Icon  string `json:"icon" bson:"icon"`
+	Label string `json:"label"`
+	Path  string `json:"path"`
+	Icon  string `json:"icon,omitempty"`
 }
 
-// VersionInfo holds version-specific configuration
+// VersionInfo is one version of a service.
 type VersionInfo struct {
-	APIs           []APIInfo          `json:"apis" bson:"apis"`
-	ExtKeyRequired bool               `json:"extKeyRequired" bson:"extKeyRequired"`
-	OAuth          bool               `json:"oauth" bson:"oauth"`
-	InterConnect   []InterConnectItem `json:"interConnect" bson:"interConnect"`
-	// Service parameter flags - determine what data to include in soajsinjectobj
-	Urac            bool `json:"urac" bson:"urac"`
-	UracProfile     bool `json:"urac_Profile" bson:"urac_Profile"`
-	UracACL         bool `json:"urac_ACL" bson:"urac_ACL"`
-	UracConfig      bool `json:"urac_Config" bson:"urac_Config"`
-	UracGroupConfig bool `json:"urac_GroupConfig" bson:"urac_GroupConfig"`
-	TenantProfile   bool `json:"tenant_Profile" bson:"tenant_Profile"`
-	ProvisionACL    bool `json:"provision_ACL" bson:"provision_ACL"`
+	ExtKeyRequired  bool               `json:"extKeyRequired"`
+	Urac            bool               `json:"urac"`
+	UracProfile     bool               `json:"urac_Profile"`
+	UracACL         bool               `json:"urac_ACL"`
+	UracConfig      bool               `json:"urac_Config"`
+	UracGroupConfig bool               `json:"urac_GroupConfig"`
+	TenantProfile   bool               `json:"tenant_Profile"`
+	ProvisionACL    bool               `json:"provision_ACL"`
+	OAuth           bool               `json:"oauth"`
+	InterConnect    []InterConnectItem `json:"interConnect"`
+	Maintenance     *MaintenanceInfo   `json:"maintenance"`
 }
 
-// InterConnectItem defines a service that this service can connect to
+// InterConnectItem is a peer a service calls directly. An empty Version means the peer's latest.
 type InterConnectItem struct {
-	Name    string `json:"name" bson:"name"`
-	Version string `json:"version" bson:"version"`
+	Name    string `json:"name"`
+	Version string `json:"version,omitempty"`
 }
 
-// APIInfo holds API endpoint information
-type APIInfo struct {
-	Route  string `json:"l" bson:"l"`
-	Method string `json:"m" bson:"m"`
-	Group  string `json:"group" bson:"group"`
-}
-
-// DaemonConfig represents a daemon configuration
-type DaemonConfig struct {
-	ID      string `json:"_id" bson:"_id"`
-	Name    string `json:"name" bson:"name"`
-	Group   string `json:"group" bson:"group"`
-	Version string `json:"version" bson:"version"`
-	Port    int    `json:"port" bson:"port"`
-}
-
-// ServiceInfo holds service registration info
-type ServiceInfo struct {
+// HostInfo holds host information
+type HostInfo struct {
 	Name    string `json:"name"`
 	Version string `json:"version"`
 	Host    string `json:"host"`
 	Port    int    `json:"port"`
 }
 
-// HostInfo holds host information
-type HostInfo struct {
+// ServiceInfo holds service registration info
+type ServiceInfo struct {
 	Name    string `json:"name"`
 	Version string `json:"version"`
 	Host    string `json:"host"`
