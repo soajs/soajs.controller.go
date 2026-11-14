@@ -1,7 +1,9 @@
 {
   "environment": [
     {
-      "_id": {"$oid": "6a0e000000000000000000e1"},
+      "_id": {
+        "$oid": "6a0e000000000000000000e1"
+      },
       "code": "DEV",
       "description": "Conformance environment",
       "domain": "localhost",
@@ -10,20 +12,25 @@
       "port": 24000,
       "protocol": "http",
       "deployer": {
-        "type": "container",
-        "selected": "container.kubernetes",
-        "container": {
-          "kubernetes": {
-            "id": "6a0e000000000000000000f1",
-            "namespace": "conformance"
-          }
+        "type": "manual",
+        "selected": "manual",
+        "manual": {
+          "nodes": "127.0.0.1"
         }
       },
       "dbs": {
-        "config": {"prefix": "conformance_"},
+        "config": {
+          "prefix": "conformance_"
+        },
         "databases": {
-          "oauth": {"cluster": "conformance_cluster", "tenantSpecific": false},
-          "urac": {"cluster": "conformance_cluster", "tenantSpecific": true}
+          "oauth": {
+            "cluster": "conformance_cluster",
+            "tenantSpecific": false
+          },
+          "urac": {
+            "cluster": "conformance_cluster",
+            "tenantSpecific": true
+          }
         }
       },
       "services": {
@@ -40,7 +47,9 @@
             "healthCheckInterval": 5000,
             "maxLogCount": 5
           },
-          "cookie": {"secret": "conformance cookie secret"},
+          "cookie": {
+            "secret": "conformance cookie secret"
+          },
           "cors": {
             "credentials": true,
             "enabled": true,
@@ -53,13 +62,20 @@
             "algorithm": "aes256",
             "password": "conformance fixture key"
           },
-          "logger": {"gke": false, "level": "error", "src": false},
+          "logger": {
+            "gke": false,
+            "level": "error",
+            "src": false
+          },
           "oauth": {
             "accessTokenLifetime": 7200,
             "refreshTokenLifetime": 1209600,
             "debug": false,
             "getUserFromToken": false,
-            "grants": ["password", "refresh_token"]
+            "grants": [
+              "password",
+              "refresh_token"
+            ]
           },
           "ports": {
             "controller": 24000,
@@ -67,7 +83,107 @@
             "randomInc": 100
           },
           "session": {
-            "cookie": {"httpOnly": true, "maxAge": null, "path": "/", "secure": false},
+            "cookie": {
+              "httpOnly": true,
+              "maxAge": null,
+              "path": "/",
+              "secure": false
+            },
+            "name": "soajsID",
+            "resave": false,
+            "rolling": false,
+            "saveUninitialized": false,
+            "secret": "conformance session secret",
+            "unset": "keep"
+          }
+        }
+      }
+    },
+    {
+      "_id": {
+        "$oid": "6a0e000000000000000000e2"
+      },
+      "code": "DASHBOARD",
+      "description": "Conformance console environment, DASHBOARD target configuration",
+      "domain": "localhost",
+      "apiPrefix": "api",
+      "sitePrefix": "site",
+      "port": 24000,
+      "protocol": "http",
+      "deployer": {
+        "type": "manual",
+        "selected": "manual",
+        "manual": {
+          "nodes": "127.0.0.1"
+        }
+      },
+      "dbs": {
+        "config": {
+          "prefix": "conformance_"
+        },
+        "databases": {
+          "DBTN_urac": {
+            "cluster": "conformance_cluster",
+            "tenantSpecific": false
+          }
+        }
+      },
+      "services": {
+        "controller": {
+          "authorization": true,
+          "requestTimeout": 30,
+          "requestTimeoutRenewal": 0
+        },
+        "config": {
+          "awareness": {
+            "autoRegisterService": false,
+            "autoRelaodRegistry": 3600000,
+            "cacheTTL": 3600000,
+            "healthCheckInterval": 5000,
+            "maxLogCount": 5
+          },
+          "cookie": {
+            "secret": "conformance cookie secret"
+          },
+          "cors": {
+            "credentials": true,
+            "enabled": true,
+            "headers": "key,soajsauth,device-id,Content-Type",
+            "maxage": 1728000,
+            "methods": "GET,HEAD,PUT,PATCH,POST,DELETE",
+            "origin": "*"
+          },
+          "key": {
+            "algorithm": "aes256",
+            "password": "conformance fixture key"
+          },
+          "logger": {
+            "gke": false,
+            "level": "error",
+            "src": false
+          },
+          "oauth": {
+            "accessTokenLifetime": 7200,
+            "refreshTokenLifetime": 1209600,
+            "debug": false,
+            "getUserFromToken": false,
+            "grants": [
+              "password",
+              "refresh_token"
+            ]
+          },
+          "ports": {
+            "controller": 26000,
+            "maintenanceInc": 1000,
+            "randomInc": 100
+          },
+          "session": {
+            "cookie": {
+              "httpOnly": true,
+              "maxAge": null,
+              "path": "/",
+              "secure": false
+            },
             "name": "soajsID",
             "resave": false,
             "rolling": false,
@@ -79,35 +195,41 @@
       }
     }
   ],
-  "infra": [
-    {
-      "_id": {"$oid": "6a0e000000000000000000f1"},
-      "label": "conformance",
-      "configuration": {"type": "kubernetes", "url": "", "port": 6443}
-    }
-  ],
   "resources": [
     {
-      "_id": {"$oid": "6a0e000000000000000000c1"},
+      "_id": {
+        "$oid": "6a0e000000000000000000c1"
+      },
       "name": "conformance_cluster",
       "type": "cluster",
       "category": "mongo",
       "created": "DEV",
       "author": "conformance",
       "plugged": true,
-      "shared": false,
-      "sharedEnvs": {},
+      "shared": true,
+      "sharedEnvs": {
+        "DASHBOARD": true
+      },
       "config": {
         "protocol": "mongodb://",
-        "servers": [{"host": "127.0.0.1", "port": 27017}],
-        "URLParam": {"maxPoolSize": 5},
+        "servers": [
+          {
+            "host": "127.0.0.1",
+            "port": 27017
+          }
+        ],
+        "URLParam": {
+          "maxPoolSize": 5
+        },
         "streaming": {}
       }
     }
   ],
   "custom_registry": [
     {
-      "_id": {"$oid": "6a0e000000000000000000d1"},
+      "_id": {
+        "$oid": "6a0e000000000000000000d1"
+      },
       "name": "gateway",
       "created": "DEV",
       "author": "conformance",
@@ -117,20 +239,46 @@
       "value": {
         "traffic": {
           "model": "memory",
-          "ip2ban": ["10.255.0.1"],
+          "ip2ban": [
+            "10.255.0.1"
+          ],
           "throttling": {}
         }
+      }
+    },
+    {
+      "_id": {
+        "$oid": "6a0e000000000000000000d2"
+      },
+      "name": "urac",
+      "created": "DASHBOARD",
+      "author": "conformance",
+      "plugged": true,
+      "shared": false,
+      "sharedEnvs": {},
+      "value": {
+        "masterDB": "DBTN_urac"
       }
     }
   ],
   "marketplace": [
     {
-      "_id": {"$oid": "6a0e000000000000000000b1"},
+      "_id": {
+        "$oid": "6a0e000000000000000000b1"
+      },
       "type": "service",
       "name": "controller",
       "description": "SOAJS gateway",
-      "configuration": {"group": "Gateway", "port": 24000, "subType": "soajs"},
-      "metadata": {"program": ["soajs"]},
+      "configuration": {
+        "group": "Gateway",
+        "port": 24000,
+        "subType": "soajs"
+      },
+      "metadata": {
+        "program": [
+          "soajs"
+        ]
+      },
       "versions": [
         {
           "version": "1",
@@ -146,20 +294,37 @@
           "apis": [],
           "maintenance": {
             "commands": [],
-            "port": {"type": "maintenance"},
+            "port": {
+              "type": "maintenance"
+            },
             "readiness": "/heartbeat"
           }
         }
       ]
     },
     {
-      "_id": {"$oid": "6a0e000000000000000000b2"},
+      "_id": {
+        "$oid": "6a0e000000000000000000b2"
+      },
       "type": "service",
       "name": "conform",
       "description": "Conformance service, answered by cmd/mockservice",
-      "configuration": {"group": "Conformance", "port": 24100, "requestTimeout": 30, "requestTimeoutRenewal": 5},
-      "src": {"provider": "github", "owner": "soajs", "repo": "soajs.conform"},
-      "metadata": {"program": ["soajs"]},
+      "configuration": {
+        "group": "Conformance",
+        "port": 24100,
+        "requestTimeout": 30,
+        "requestTimeoutRenewal": 5
+      },
+      "src": {
+        "provider": "github",
+        "owner": "soajs",
+        "repo": "soajs.conform"
+      },
+      "metadata": {
+        "program": [
+          "soajs"
+        ]
+      },
       "versions": [
         {
           "version": "1",
@@ -174,27 +339,64 @@
           "provision_ACL": false,
           "interConnect": [],
           "apis": [
-            {"l": "Public hello", "v": "/public/hello", "m": "get", "group": "Hello"},
-            {"l": "Private hello", "v": "/private/hello", "m": "get", "group": "Hello"},
-            {"l": "Update item", "v": "/private/item/:id", "m": "put", "group": "Item"},
-            {"l": "Not provisioned", "v": "/restricted/api", "m": "get", "group": "Hello"}
+            {
+              "l": "Public hello",
+              "v": "/public/hello",
+              "m": "get",
+              "group": "Hello"
+            },
+            {
+              "l": "Private hello",
+              "v": "/private/hello",
+              "m": "get",
+              "group": "Hello"
+            },
+            {
+              "l": "Update item",
+              "v": "/private/item/:id",
+              "m": "put",
+              "group": "Item"
+            },
+            {
+              "l": "Not provisioned",
+              "v": "/restricted/api",
+              "m": "get",
+              "group": "Hello"
+            }
           ],
           "maintenance": {
             "commands": [],
-            "port": {"type": "maintenance"},
+            "port": {
+              "type": "maintenance"
+            },
             "readiness": "/heartbeat"
           }
         }
       ]
     },
     {
-      "_id": {"$oid": "6a0e000000000000000000b3"},
+      "_id": {
+        "$oid": "6a0e000000000000000000b3"
+      },
       "type": "service",
       "name": "other",
       "description": "Service no fixture package grants",
-      "configuration": {"group": "Conformance", "port": 24200, "requestTimeout": 30, "requestTimeoutRenewal": 5},
-      "src": {"provider": "github", "owner": "soajs", "repo": "soajs.other"},
-      "metadata": {"program": ["soajs"]},
+      "configuration": {
+        "group": "Conformance",
+        "port": 24200,
+        "requestTimeout": 30,
+        "requestTimeoutRenewal": 5
+      },
+      "src": {
+        "provider": "github",
+        "owner": "soajs",
+        "repo": "soajs.other"
+      },
+      "metadata": {
+        "program": [
+          "soajs"
+        ]
+      },
       "versions": [
         {
           "version": "1",
@@ -207,13 +409,20 @@
           "urac_GroupConfig": false,
           "tenant_Profile": false,
           "provision_ACL": false,
-          "interConnect": null,
+          "interConnect": [],
           "apis": [
-            {"l": "Hello", "v": "/hello", "m": "get", "group": "Hello"}
+            {
+              "l": "Hello",
+              "v": "/hello",
+              "m": "get",
+              "group": "Hello"
+            }
           ],
           "maintenance": {
             "commands": [],
-            "port": {"type": "maintenance"},
+            "port": {
+              "type": "maintenance"
+            },
             "readiness": "/heartbeat"
           }
         }
@@ -222,7 +431,9 @@
   ],
   "hosts": [
     {
-      "_id": {"$oid": "6a0e000000000000000000c9"},
+      "_id": {
+        "$oid": "6a0e000000000000000000c9"
+      },
       "env": "dev",
       "name": "conform",
       "ip": "127.0.0.1",
@@ -231,7 +442,9 @@
       "port": 24100
     },
     {
-      "_id": {"$oid": "6a0e000000000000000000ca"},
+      "_id": {
+        "$oid": "6a0e000000000000000000ca"
+      },
       "env": "dev",
       "name": "other",
       "ip": "127.0.0.1",
@@ -242,19 +455,25 @@
   ],
   "products": [
     {
-      "_id": {"$oid": "6a0e000000000000000000a1"},
+      "_id": {
+        "$oid": "6a0e000000000000000000a1"
+      },
       "code": "CONF",
       "name": "Conformance",
       "description": "Conformance product",
       "console": false,
-      "scope": {"acl": {}},
+      "scope": {
+        "acl": {}
+      },
       "packages": [
         {
           "code": "CONF_DEFAULT",
           "name": "Default",
           "description": "Grants conform v1",
           "_TTL": 21600000,
-          "aclTypeByEnv": {"dev": "granular"},
+          "aclTypeByEnv": {
+            "dev": "granular"
+          },
           "acl": {
             "dev": {
               "conform": {
@@ -263,13 +482,22 @@
                   "apisPermission": "restricted",
                   "get": {
                     "apis": {
-                      "/public/hello": {"access": false, "group": "Hello"},
-                      "/private/hello": {"access": true, "group": "Hello"}
+                      "/public/hello": {
+                        "access": false,
+                        "group": "Hello"
+                      },
+                      "/private/hello": {
+                        "access": true,
+                        "group": "Hello"
+                      }
                     }
                   },
                   "put": {
                     "apis": {
-                      "/private/item/:id": {"access": true, "group": "Item"}
+                      "/private/item/:id": {
+                        "access": true,
+                        "group": "Item"
+                      }
                     }
                   }
                 }
@@ -282,15 +510,21 @@
           "name": "No services",
           "description": "Grants nothing in dev",
           "_TTL": 21600000,
-          "aclTypeByEnv": {"dev": "granular"},
-          "acl": {"dev": {}}
+          "aclTypeByEnv": {
+            "dev": "granular"
+          },
+          "acl": {
+            "dev": {}
+          }
         }
       ]
     }
   ],
   "tenants": [
     {
-      "_id": {"$oid": "6a0e00000000000000000001"},
+      "_id": {
+        "$oid": "6a0e00000000000000000001"
+      },
       "code": "CONF",
       "name": "Conformance tenant",
       "description": "Conformance tenant",
@@ -302,12 +536,17 @@
         "type": 2,
         "loginMode": "urac",
         "disabled": 0,
-        "grants": ["password", "refresh_token"],
+        "grants": [
+          "password",
+          "refresh_token"
+        ],
         "redirectURI": ""
       },
       "applications": [
         {
-          "appId": {"$oid": "6a0e000000000000000000a2"},
+          "appId": {
+            "$oid": "6a0e000000000000000000a2"
+          },
           "product": "CONF",
           "package": "CONF_DEFAULT",
           "description": "Default application",
@@ -315,7 +554,11 @@
           "keys": [
             {
               "key": "0d1e2f3a4b5c6d7e8f90a1b2c3d4e5f6",
-              "config": {"dev": {"conform": {}}},
+              "config": {
+                "dev": {
+                  "conform": {}
+                }
+              },
               "extKeys": [
                 {
                   "extKey": "5bbf311a30f4acaec52b7472be854cc95259156275114822ad91615d02d27609ac1ebf7aecfdc2355849a594cc55d042d9906c2c0190a3b7d5f5935d8053a953ede02160a6f8429f1ba971b8d9d6fe6afe7c59af3462d188c4b1a08e9c07670e",
@@ -330,7 +573,9 @@
           ]
         },
         {
-          "appId": {"$oid": "6a0e000000000000000000a3"},
+          "appId": {
+            "$oid": "6a0e000000000000000000a3"
+          },
           "product": "CONF",
           "package": "CONF_NOSVC",
           "description": "Application whose package grants nothing",
@@ -353,6 +598,29 @@
           ]
         }
       ]
+    },
+    {
+      "_id": {
+        "$oid": "6a0e00000000000000000002"
+      },
+      "code": "DBTN",
+      "name": "Console tenant",
+      "description": "Conformance console tenant",
+      "type": "product",
+      "console": true,
+      "profile": {},
+      "oauth": {
+        "secret": "conformance console secret",
+        "type": 2,
+        "loginMode": "urac",
+        "disabled": 0,
+        "grants": [
+          "password",
+          "refresh_token"
+        ],
+        "redirectURI": ""
+      },
+      "applications": []
     }
   ]
 }

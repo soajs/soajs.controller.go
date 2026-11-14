@@ -1,0 +1,46 @@
+{
+  "users": [
+    {
+      "_id": {
+        "$oid": "6a0e000000000000000000ac"
+      },
+      "username": "console_owner",
+      "email": "owner@conformance.invalid",
+      "firstName": "Console",
+      "lastName": "Owner",
+      "password": "$2a$12$conformanceconformanceconformanceconformanceconformance",
+      "status": "active",
+      "tenant": {
+        "id": "6a0e00000000000000000002",
+        "code": "DBTN"
+      },
+      "groups": [
+        "owner"
+      ],
+      "config": {},
+      "profile": {},
+      "ts": 1794666000000
+    }
+  ],
+  "groups": [
+    {
+      "_id": {
+        "$oid": "6a0e000000000000000000ad"
+      },
+      "code": "owner",
+      "name": "Owner",
+      "description": "Console owners",
+      "tenant": {
+        "id": "6a0e00000000000000000002",
+        "code": "DBTN"
+      },
+      "config": {
+        "allowedPackages": {
+          "DSBRD": [
+            "DSBRD_OWNER"
+          ]
+        }
+      }
+    }
+  ]
+}

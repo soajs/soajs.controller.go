@@ -28,6 +28,7 @@ const Prefix = "conformance_"
 var files = map[string]string{
 	"core_provision.json": "core_provision",
 	"oauth.json":          "oauth",
+	"DBTN_urac.json":      "DBTN_urac",
 }
 
 // Load drops the fixture databases and loads them again.

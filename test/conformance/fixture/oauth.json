@@ -8,9 +8,11 @@
       "clientId": "6a0e00000000000000000001",
       "env": "dev",
       "user": {
-        "_id": "6a0e000000000000000000ab",
+        "_id": {"$oid": "6a0e000000000000000000ab"},
         "id": "6a0e000000000000000000ab",
         "loginMode": "oauth",
+        "deviceId": null,
+        "agent": null,
         "username": "conformance",
         "groups": ["owner"],
         "tenant": {"id": "6a0e00000000000000000001", "code": "CONF"}
@@ -24,9 +26,11 @@
       "clientId": "6a0e00000000000000000001",
       "env": "dev",
       "user": {
-        "_id": "6a0e000000000000000000ab",
+        "_id": {"$oid": "6a0e000000000000000000ab"},
         "id": "6a0e000000000000000000ab",
         "loginMode": "oauth",
+        "deviceId": null,
+        "agent": null,
         "username": "conformance",
         "groups": ["owner"],
         "tenant": {"id": "6a0e00000000000000000001", "code": "CONF"}
