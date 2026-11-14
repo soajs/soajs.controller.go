@@ -11,6 +11,9 @@ type ServiceParams struct {
 	ACL            *FinalACL    // the final ACL the keyACL middleware builds
 	TenantOauth    *TenantOauth // the tenant's oauth settings
 	IsAPIPublic    bool         // the API needs no logged-in user
+	KeyAPI         bool         // the API is called with a key (extKeyRequired): PIN rules apply
+	AccessToken    string       // access_token from the query string, else its header (Node.js req.query.access_token)
+	HasAccessToken bool         // AccessToken was given
 	UserInfo       map[string]interface{}
 	RequiresOAuth  bool
 	OAuthToken     *AccessToken

@@ -33,6 +33,16 @@ func URL(reg registry.Registry) Middleware {
 					return
 				}
 			}
+			// Node.js req.query.access_token: the query string's, else the access_token header
+			params := soajsCtx.Controller.ServiceParams
+			if values, ok := r.URL.Query()["access_token"]; ok {
+				params.AccessToken, params.HasAccessToken = values[0], true
+			}
+			if params.AccessToken == "" {
+				if h := r.Header.Get("access_token"); h != "" {
+					params.AccessToken, params.HasAccessToken = h, true
+				}
+			}
 			if r.Header.Get("key") == "" {
 				if key := r.URL.Query().Get("key"); key != "" {
 					r.Header.Set("key", key)

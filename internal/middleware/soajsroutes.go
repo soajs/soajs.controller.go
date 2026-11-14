@@ -37,8 +37,8 @@ func SoajsRoutesSetup(uracDriver interface{}) Middleware {
 					soajsCtx.Controller.ServiceParams.UracDriver = uracDriver
 					// Set environment for ACL resolution
 					soajsCtx.Controller.ServiceParams.Environment = soajsCtx.Environment
-					// Note: RequiresOAuth is not set - OAuth middleware will optionally
-					// process tokens if present without requiring them
+					// /soajs/acl needs a logged-in user, as in Node.js
+					soajsCtx.Controller.ServiceParams.RequiresOAuth = true
 				}
 			}
 

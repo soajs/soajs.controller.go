@@ -171,7 +171,7 @@ func (c *Controller) Setup(r *chi.Mux) error {
 	r.Use(middleware.GotoService(c.provision, c.registry, c.awareness))
 	r.Use(middleware.MT(c.provision, c.registry, c.urac, c.cfg.Environment))
 	r.Use(middleware.SoajsRoutesSetup(c.urac)) // Setup /soajs/* routes to require OAuth
-	r.Use(middleware.OAuth(c.provision))
+	r.Use(middleware.OAuth(c.provision, c.registry))
 	r.Use(middleware.UserACL())
 	r.Use(middleware.MTACL(c.registry))
 	r.Use(middleware.SoajsRoutes(c.provision)) // Handle /soajs/* routes after OAuth/UserACL populate context
