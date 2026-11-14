@@ -1,360 +1,240 @@
 package middleware
 
 import (
-	"crypto/hmac"
-	"crypto/sha256"
-	"encoding/base64"
-	"encoding/json"
 	"net/http"
+	"regexp"
 	"strings"
 	"time"
 
-	"github.com/soajs/soajs.controller.go/internal/config"
+	"github.com/soajs/soajs.controller.go/internal/lib"
 	"github.com/soajs/soajs.controller.go/internal/provision"
 	"github.com/soajs/soajs.controller.go/internal/registry"
-	"go.mongodb.org/mongo-driver/bson"
-	"go.mongodb.org/mongo-driver/bson/primitive"
+	"github.com/soajs/soajs.controller.go/pkg/types"
 )
 
-// OAuthConfig holds OAuth middleware configuration
-type OAuthConfig struct {
-	Enabled       bool
-	TokenEndpoint string
-}
+// oauthService is the oauth service and its PIN API, as the Node.js oauth middleware defaults them.
+const (
+	oauthServiceName = "oauth"
+	oauthPinAPI      = "/pin"
+)
 
-// JWTClaims represents decoded JWT claims
-type JWTClaims struct {
-	Sub      string                 `json:"sub"`
-	Aud      string                 `json:"aud"`
-	Exp      int64                  `json:"exp"`
-	Iat      int64                  `json:"iat"`
-	Iss      string                 `json:"iss"`
-	UserData map[string]interface{} `json:"-"`
-}
+var bearerRe = regexp.MustCompile(`Bearer\s(\S+)`)
 
-// OAuth middleware validates OAuth tokens (supports both OAuth2 and JWT)
-func OAuth(prov provision.Provision) Middleware {
-	return OAuthWithRegistry(prov, nil)
-}
-
-// OAuthWithRegistry middleware validates OAuth tokens with registry access
-func OAuthWithRegistry(prov provision.Provision, reg registry.Registry) Middleware {
+// OAuth authorises the request when mt requires it, as the Node.js oauth middleware does with
+// oauth2-server 2.4.1 (authorise): exactly one of the Authorization header and the access_token
+// (query string, else header) must carry the token; the token must exist for this environment and
+// not be expired. Then the token's deviceId must match the device-id header (156), its
+// restrictedTo the request (147), and, on a key's API, the user's PIN state allow the API (145).
+//
+// oauth2-server errors answer their own code as the HTTP status and SOAJS code, with its texts.
+func OAuth(prov provision.Provision, reg registry.Registry) Middleware {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			ctx := r.Context()
-			soajsCtx := GetSOAJSContext(ctx)
-
-			if soajsCtx == nil || soajsCtx.Controller == nil ||
-				soajsCtx.Controller.ServiceParams == nil {
+			soajsCtx := GetSOAJSContext(r.Context())
+			if soajsCtx == nil || soajsCtx.Controller == nil || soajsCtx.Controller.ServiceParams == nil ||
+				!soajsCtx.Controller.ServiceParams.RequiresOAuth {
 				next.ServeHTTP(w, r)
 				return
 			}
+			params := soajsCtx.Controller.ServiceParams
 
-			requiresOAuth := soajsCtx.Controller.ServiceParams.RequiresOAuth
-
-			// Extract token
-			token := extractToken(r)
-			if token == "" {
-				// No token: if OAuth is required, return 401; otherwise continue
-				if requiresOAuth {
-					WriteError(w, http.StatusUnauthorized,
-						config.ErrCodeUnauthorized,
-						config.DefaultErrors[config.ErrCodeUnauthorized])
+			// getBearerToken
+			headerValues, hasHeader := r.Header["Authorization"]
+			queryToken, hasQuery := params.AccessToken, params.HasAccessToken
+			if hasHeader && hasQuery {
+				WriteError(w, 400, 400, "Only one method may be used to authenticate at a time (Auth header,  GET or POST).")
+				return
+			}
+			if !hasHeader && !hasQuery {
+				WriteError(w, 400, 400, "The access token was not found")
+				return
+			}
+			// An empty Authorization header counts as a method but is not parsed: its token is
+			// empty, and the model does not find it (401)
+			token := queryToken
+			if header := strings.Join(headerValues, ", "); header != "" {
+				m := bearerRe.FindStringSubmatch(header)
+				if m == nil {
+					WriteError(w, 400, 400, "Malformed auth header")
 					return
 				}
-				next.ServeHTTP(w, r)
+				token = m[1]
+			}
+
+			// checkToken
+			record, err := prov.OAuthModel().GetAccessToken(token)
+			if err != nil {
+				WriteError(w, 503, 503, err.Error())
+				return
+			}
+			if record == nil {
+				WriteError(w, 401, 401, "The access token provided is invalid.")
+				return
+			}
+			if record.Expires.Before(time.Now()) {
+				WriteError(w, 401, 401, "The access token provided has expired.")
 				return
 			}
 
-			// Token found - always process it (even if OAuth not required)
-			// This allows optional OAuth for endpoints like /soajs/acl
-
-			// Determine OAuth type (0=JWT, 2=OAuth2)
-			oauthType := 2
-			var jwtSecret string
-			var jwtAlgorithms []string
-			var jwtAudience string
-
-			// Check tenant OAuth config first
-			if soajsCtx.Tenant != nil {
-				// Get tenant OAuth settings from ServicesConfig if available
-				if soajsCtx.ServicesConfig != nil {
-					if tenantOAuth, ok := soajsCtx.ServicesConfig["oauth"].(map[string]interface{}); ok {
-						if typ, ok := tenantOAuth["type"].(float64); ok {
-							oauthType = int(typ)
-						}
-						if secret, ok := tenantOAuth["secret"].(string); ok {
-							jwtSecret = secret
-						}
-					}
-				}
+			if !deviceIDMatch(reg, record, r.Header.Get("device-id")) {
+				WriteCode(w, 156)
+				return
 			}
-
-			// Fall back to registry config
-			if reg != nil {
-				regData := reg.Get()
-				if regData != nil && regData.ServiceConfig != nil && regData.ServiceConfig.OAuth.Grants != nil {
-					// Check OAuth type from registry
-					// Note: OAuth config in registry doesn't have a type field in the current types
-					// Use the tenant override or default to type 2
-				}
+			if !restrictedToMatch(record, soajsCtx, reg.GetEnvironment(), r.Header.Get("User-Agent")) {
+				WriteCode(w, 147)
+				return
 			}
-
-			if oauthType == 0 {
-				// JWT validation (Type 0)
-				if jwtAlgorithms == nil {
-					jwtAlgorithms = []string{"HS256"}
-				}
-
-				claims, err := validateJWT(token, jwtSecret, jwtAlgorithms, jwtAudience)
-				if err != nil {
-					soajsCtx.Log.Debug("JWT validation failed")
-					WriteError(w, http.StatusUnauthorized,
-						config.ErrCodeUnauthorized,
-						"Invalid or expired token")
+			params.OAuthToken = record
+			params.UserInfo = record.User
+			if params.KeyAPI {
+				if code := pinCheck(reg, record, soajsCtx, r.Method); code != 0 {
+					WriteCode(w, code)
 					return
 				}
-
-				// Store user info from JWT claims
-				userInfo := make(map[string]interface{})
-				userInfo["_id"] = claims.Sub
-				if claims.UserData != nil {
-					for k, v := range claims.UserData {
-						userInfo[k] = v
-					}
-				}
-
-				soajsCtx.Controller.ServiceParams.UserInfo = userInfo
-			} else {
-				// OAuth2 validation (Type 2)
-				oauthModel := prov.OAuthModel()
-				accessToken, err := oauthModel.GetAccessToken(token)
-				if err != nil || accessToken == nil {
-					soajsCtx.Log.Debug("OAuth token lookup failed")
-					WriteError(w, http.StatusUnauthorized,
-						config.ErrCodeUnauthorized,
-						"Invalid or expired token")
-					return
-				}
-
-				// Check if token is expired
-				if !accessToken.Expires.IsZero() && accessToken.Expires.Before(time.Now()) {
-					soajsCtx.Log.Debug("OAuth token expired")
-					WriteError(w, http.StatusUnauthorized,
-						config.ErrCodeUnauthorized,
-						"Token has expired")
-					return
-				}
-
-				// Store user info in context
-				// The token's user object contains the full user profile with groupsConfig
-				// Convert from BSON types to native Go types for proper type assertions
-				userInfo := make(map[string]interface{})
-				if accessToken.User != nil {
-					userInfo = convertBSONMap(accessToken.User)
-				}
-
-				userInfo["clientId"] = accessToken.ClientID
-
-				soajsCtx.Controller.ServiceParams.UserInfo = userInfo
-				soajsCtx.Controller.ServiceParams.OAuthToken = accessToken
 			}
-
 			next.ServeHTTP(w, r)
 		})
 	}
 }
 
-// validateJWT validates a JWT token and returns claims
-func validateJWT(tokenStr, secret string, algorithms []string, expectedAudience string) (*JWTClaims, error) {
-	// Split the token into parts
-	parts := strings.Split(tokenStr, ".")
-	if len(parts) != 3 {
-		return nil, errInvalidJWT
-	}
-
-	// Decode header
-	headerBytes, err := base64URLDecode(parts[0])
-	if err != nil {
-		return nil, err
-	}
-
-	var header struct {
-		Alg string `json:"alg"`
-		Typ string `json:"typ"`
-	}
-	if err := json.Unmarshal(headerBytes, &header); err != nil {
-		return nil, err
-	}
-
-	// Verify algorithm is allowed
-	algAllowed := false
-	for _, alg := range algorithms {
-		if alg == header.Alg {
-			algAllowed = true
-			break
+// deviceIDMatch: a token with a deviceId only works with that device-id header, unless the
+// custom registry gateway oauth.deviceIdCheck is false.
+func deviceIDMatch(reg registry.Registry, record *types.AccessToken, deviceID string) bool {
+	if data := reg.Get(); data != nil {
+		gateway, _ := data.CustomRegistry["gateway"].(map[string]interface{})
+		value, _ := gateway["value"].(map[string]interface{})
+		oauth, _ := value["oauth"].(map[string]interface{})
+		if check, ok := oauth["deviceIdCheck"].(bool); ok && !check {
+			return true
 		}
 	}
-	if !algAllowed {
-		return nil, errInvalidJWT
+	tokenDevice, _ := record.User["deviceId"].(string)
+	if tokenDevice == "" {
+		return true
 	}
-
-	// Decode payload
-	payloadBytes, err := base64URLDecode(parts[1])
-	if err != nil {
-		return nil, err
-	}
-
-	var claims JWTClaims
-	if err := json.Unmarshal(payloadBytes, &claims); err != nil {
-		return nil, err
-	}
-
-	// Also capture any extra fields
-	var allClaims map[string]interface{}
-	if err := json.Unmarshal(payloadBytes, &allClaims); err == nil {
-		claims.UserData = allClaims
-	}
-
-	// Verify signature (HS256)
-	if header.Alg == "HS256" {
-		message := parts[0] + "." + parts[1]
-		signature, err := base64URLDecode(parts[2])
-		if err != nil {
-			return nil, err
-		}
-
-		h := hmac.New(sha256.New, []byte(secret))
-		h.Write([]byte(message))
-		expectedSig := h.Sum(nil)
-
-		if !hmac.Equal(signature, expectedSig) {
-			return nil, errInvalidJWT
-		}
-	}
-
-	// Check expiration
-	if claims.Exp > 0 && time.Now().Unix() > claims.Exp {
-		return nil, errTokenExpired
-	}
-
-	// Check audience if required
-	if expectedAudience != "" && claims.Aud != expectedAudience {
-		return nil, errInvalidJWT
-	}
-
-	return &claims, nil
+	return tokenDevice == deviceID
 }
 
-var errInvalidJWT = &jwtError{"invalid JWT"}
-var errTokenExpired = &jwtError{"token expired"}
-
-type jwtError struct {
-	msg string
+// restrictedToMatch checks each key of the token's restrictedTo against the request; a restricted
+// token on a request without a key never matches.
+func restrictedToMatch(record *types.AccessToken, soajsCtx *SOAJSContext, env, userAgent string) bool {
+	restrictedTo, _ := record.User["restrictedTo"].(map[string]interface{})
+	if restrictedTo == nil {
+		return true
+	}
+	key := soajsCtx.Key
+	if key == nil || soajsCtx.Tenant == nil {
+		return false
+	}
+	actual := []struct {
+		field, value string
+		ignoreCase   bool
+	}{
+		{"tenant", key.Tenant.ID, false},
+		{"product", key.Application.Product, false},
+		{"package", key.Application.Package, false},
+		{"key", key.ExtKey, false},
+		{"env", env, true},
+		{"agent", userAgent, false},
+	}
+	for _, a := range actual {
+		allowed, present := restrictedTo[a.field]
+		if !present || !truthy(allowed) {
+			continue
+		}
+		if !valueMatch(allowed, a.value, a.ignoreCase) {
+			return false
+		}
+	}
+	return true
 }
 
-func (e *jwtError) Error() string {
-	return e.msg
+// valueMatch: the request value must be the allowed string, or one of the allowed strings.
+func valueMatch(allowed interface{}, actual string, ignoreCase bool) bool {
+	if actual == "" {
+		return false
+	}
+	equal := func(s string) bool {
+		if ignoreCase {
+			return strings.EqualFold(s, actual)
+		}
+		return s == actual
+	}
+	switch a := allowed.(type) {
+	case string:
+		return equal(a)
+	case []interface{}:
+		for _, one := range a {
+			if s, ok := one.(string); ok && s != "" && equal(s) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
-// base64URLDecode decodes base64url encoded string
-func base64URLDecode(s string) ([]byte, error) {
-	// Add padding if needed
-	switch len(s) % 4 {
-	case 2:
-		s += "=="
-	case 3:
-		s += "="
+// pinCheck is the PIN part of the Node.js oauthCheck: a urac user whose PIN is locked, or who has
+// not logged in with the PIN under a product that requires it, may only call the oauth PIN API,
+// the gateway, the custom registry oauth pinWrapper API and pinWhitelist APIs (145).
+func pinCheck(reg registry.Registry, record *types.AccessToken, soajsCtx *SOAJSContext, method string) int {
+	user := record.User
+	if loginMode, _ := user["loginMode"].(string); loginMode != "urac" {
+		return 0
 	}
-	return base64.URLEncoding.DecodeString(s)
+	params := soajsCtx.Controller.ServiceParams
+	if truthy(user["pinLocked"]) {
+		return pinAllowedAPI(reg, params, method)
+	}
+	product := ""
+	if soajsCtx.Key != nil {
+		product = soajsCtx.Key.Application.Product
+	}
+	if product == "" || params.TenantOauth == nil {
+		return 0
+	}
+	if pin, ok := params.TenantOauth.Pin[product]; !ok || !pin.Enabled {
+		return 0
+	}
+	if truthy(user["pinLogin"]) {
+		return 0
+	}
+	return pinAllowedAPI(reg, params, method)
 }
 
-func extractToken(r *http.Request) string {
-	// Check Authorization header
-	auth := r.Header.Get(config.HeaderAuthorization)
-	if auth != "" {
-		// Bearer token
-		if strings.HasPrefix(auth, "Bearer ") {
-			return strings.TrimPrefix(auth, "Bearer ")
+func pinAllowedAPI(reg registry.Registry, params *types.ServiceParams, method string) int {
+	service := params.URLInfo.ServiceName
+	path := params.URLInfo.ServicePath
+	if (service == oauthServiceName && path == oauthPinAPI) || service == "controller" {
+		return 0
+	}
+	data := reg.Get()
+	if data == nil {
+		return 145
+	}
+	entry, _ := data.CustomRegistry["oauth"].(map[string]interface{})
+	value, _ := entry["value"].(map[string]interface{})
+	if wrapper, ok := value["pinWrapper"].(map[string]interface{}); ok {
+		if wrapper["servicename"] == service && wrapper["apiname"] == path {
+			return 0
 		}
-		return auth
 	}
-
-	// Check access_token header
-	if token := r.Header.Get(config.HeaderSOAJSAccessToken); token != "" {
-		return token
-	}
-
-	// Check query parameter
-	if token := r.URL.Query().Get("access_token"); token != "" {
-		return token
-	}
-
-	return ""
-}
-
-// convertBSONMap recursively converts BSON types to native Go map[string]interface{}
-// This ensures type assertions like map["key"].(map[string]interface{}) work correctly
-func convertBSONMap(m map[string]interface{}) map[string]interface{} {
-	if m == nil {
-		return nil
-	}
-	result := make(map[string]interface{})
-	for k, v := range m {
-		result[k] = convertBSONValue(v)
-	}
-	return result
-}
-
-// convertBSONValue recursively converts a BSON value to native Go types
-func convertBSONValue(v interface{}) interface{} {
-	if v == nil {
-		return nil
-	}
-	// Convert ObjectID to hex string
-	if oid, ok := v.(primitive.ObjectID); ok {
-		return oid.Hex()
-	}
-	// Convert bson.D (ordered document) to map
-	if d, ok := v.(bson.D); ok {
-		result := make(map[string]interface{})
-		for _, elem := range d {
-			result[elem.Key] = convertBSONValue(elem.Value)
+	whitelist, _ := value["pinWhitelist"].(map[string]interface{})
+	byService, _ := whitelist[service].(map[string]interface{})
+	rules, _ := byService[strings.ToLower(method)].(map[string]interface{})
+	if apis, ok := rules["apis"].([]interface{}); ok {
+		for _, a := range apis {
+			if a == path {
+				return 0
+			}
 		}
-		return result
 	}
-	// Convert bson.M to map (recursively convert values)
-	if m, ok := v.(bson.M); ok {
-		result := make(map[string]interface{})
-		for k, val := range m {
-			result[k] = convertBSONValue(val)
+	if patterns, ok := rules["regex"].([]interface{}); ok {
+		for _, p := range patterns {
+			s, _ := p.(string)
+			if re, err := lib.PathToRegexp(s); err == nil && re.MatchString(path) {
+				return 0
+			}
 		}
-		return result
 	}
-	// Convert map[string]interface{} (recursively convert values)
-	if m, ok := v.(map[string]interface{}); ok {
-		result := make(map[string]interface{})
-		for k, val := range m {
-			result[k] = convertBSONValue(val)
-		}
-		return result
-	}
-	// Convert bson.A (array) to slice
-	if a, ok := v.(bson.A); ok {
-		result := make([]interface{}, len(a))
-		for i, val := range a {
-			result[i] = convertBSONValue(val)
-		}
-		return result
-	}
-	// Convert []interface{} (recursively convert values)
-	if a, ok := v.([]interface{}); ok {
-		result := make([]interface{}, len(a))
-		for i, val := range a {
-			result[i] = convertBSONValue(val)
-		}
-		return result
-	}
-	// Return primitives as-is
-	return v
+	return 145
 }

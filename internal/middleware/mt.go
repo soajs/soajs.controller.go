@@ -53,6 +53,7 @@ func MT(prov provision.Provision, reg registry.Registry, uracDriver *urac.Driver
 				return
 			}
 			soajsCtx.Tenant = types.TenantFromKey(key)
+			params.KeyAPI = true
 			tenantOauth, _ := prov.GetTenantOauth(key.Tenant.ID)
 			params.TenantOauth = tenantOauth
 
@@ -167,10 +168,18 @@ func isAPIPublic(acl *types.FinalACL, path string, r *http.Request) bool {
 			public = true
 		}
 	}
-	if public && r.URL.Query().Get("access_token") != "" {
+	if public && hasAccessToken(r) {
 		public = false
 	}
 	return public
+}
+
+func hasAccessToken(r *http.Request) bool {
+	soajsCtx := GetSOAJSContext(r.Context())
+	if soajsCtx != nil && soajsCtx.Controller != nil && soajsCtx.Controller.ServiceParams != nil {
+		return soajsCtx.Controller.ServiceParams.AccessToken != ""
+	}
+	return r.URL.Query().Get("access_token") != ""
 }
 
 // geoAllowed applies the extKey's geo deny and allow lists (CIDR blocks or addresses) to the
