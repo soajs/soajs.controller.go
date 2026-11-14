@@ -18,6 +18,8 @@ type mockProvision struct {
 	keys     map[string]*types.Key
 	packages map[string]*types.Package
 	oauths   map[string]*types.TenantOauth
+	// tenantExtKeys are, by tenant code, the extKey of each environment
+	tenantExtKeys map[string]map[string]string
 }
 
 func (m *mockProvision) LoadProvision() error                    { return nil }
@@ -42,7 +44,14 @@ func (m *mockProvision) GetTenantOauth(id string) (*types.TenantOauth, error) {
 	return nil, context.DeadlineExceeded
 }
 func (m *mockProvision) GetTenantCode(id string) (string, error) { return "", nil }
-func (m *mockProvision) OAuthModel() provision.OAuthModel        { return nil }
+func (m *mockProvision) GetTenantEnvExtKey(code, env string) (string, bool, error) {
+	if m.tenantExtKeys == nil {
+		return "", false, nil
+	}
+	keys, ok := m.tenantExtKeys[code]
+	return keys[env], ok, nil
+}
+func (m *mockProvision) OAuthModel() provision.OAuthModel { return nil }
 
 func testKey(extKey, env, pkg string) *types.Key {
 	return &types.Key{

@@ -34,3 +34,31 @@ func TestRequestURLParity(t *testing.T) {
 		}
 	}
 }
+
+func TestParseAbsoluteURL(t *testing.T) {
+	cases := []struct {
+		in   string
+		want *AbsoluteURL
+	}{
+		{"http://127.0.0.1:24100/public/hello?x=1#f", &AbsoluteURL{"http", "127.0.0.1", "24100", "/public/hello"}},
+		{" HTTPS://User@Example.COM:443/a/./b/../c", &AbsoluteURL{"https", "example.com", "", "/a/c"}},
+		{"http://[::1]:80", &AbsoluteURL{"http", "[::1]", "", "/"}},
+		{"http:\\\\host\\a b", &AbsoluteURL{"http", "host", "", "/a%20b"}},
+		{"http://:::", nil},
+		{"/conform/v1/public/hello", nil},
+		{"ftp://host/x", nil},
+		{"http://host:99999/", nil},
+	}
+	for _, c := range cases {
+		got, err := ParseAbsoluteURL(c.in)
+		if c.want == nil {
+			if err == nil {
+				t.Errorf("%q: %+v, want an error", c.in, got)
+			}
+			continue
+		}
+		if err != nil || *got != *c.want {
+			t.Errorf("%q: %+v %v, want %+v", c.in, got, err, c.want)
+		}
+	}
+}

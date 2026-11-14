@@ -356,7 +356,67 @@
       "key": "$KEY_DEFAULT",
       "access_token": "$TOKEN_VALID"
     },
-    "compareJSON": true
+    "compareJSON": true,
+    "sortArrays": true
+  },
+  {
+    "name": "soajs_acl_versioned",
+    "about": "a version segment after soajs is dropped, as for a service",
+    "method": "GET",
+    "path": "/soajs/v1/acl",
+    "headers": {
+      "key": "$KEY_DEFAULT",
+      "access_token": "$TOKEN_VALID"
+    },
+    "compareJSON": true,
+    "sortArrays": true
+  },
+  {
+    "name": "soajs_acl_sub_path",
+    "about": "any path under /soajs/acl is the ACL route",
+    "method": "GET",
+    "path": "/soajs/acl/more",
+    "headers": {
+      "key": "$KEY_DEFAULT",
+      "access_token": "$TOKEN_VALID"
+    },
+    "compareJSON": true,
+    "sortArrays": true
+  },
+  {
+    "name": "soajs_proxy_bad_key",
+    "about": "a key that does not resolve",
+    "method": "GET",
+    "path": "/soajs/proxy?proxyRoute=http%3A%2F%2F127.0.0.1%3A24100%2Fpublic%2Fhello",
+    "headers": {
+      "key": "nosuchkey",
+      "access_token": "$TOKEN_VALID"
+    }
+  },
+  {
+    "name": "soajs_proxy_no_key",
+    "about": "without a key the proxy still needs a token",
+    "method": "GET",
+    "path": "/soajs/proxy?proxyRoute=http%3A%2F%2F127.0.0.1%3A24100%2Fpublic%2Fhello",
+    "headers": {
+      "access_token": "$TOKEN_VALID"
+    }
+  },
+  {
+    "name": "soajs_proxy_no_key_no_token",
+    "about": "without a key or a token",
+    "method": "GET",
+    "path": "/soajs/proxy?proxyRoute=http%3A%2F%2F127.0.0.1%3A24100%2Fpublic%2Fhello"
+  },
+  {
+    "name": "soajs_proxy_query",
+    "about": "the query is forwarded without proxyRoute, in its order",
+    "method": "GET",
+    "path": "/soajs/proxy?b=2&proxyRoute=http%3A%2F%2F127.0.0.1%3A24100%2Fpublic%2Fhello%3Fdropped%3D1&a=x+y&b=3",
+    "headers": {
+      "key": "$KEY_DEFAULT",
+      "access_token": "$TOKEN_VALID"
+    }
   },
   {
     "name": "soajs_proxy_no_route",

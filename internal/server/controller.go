@@ -18,7 +18,6 @@ import (
 	uracuser "github.com/soajs/soajs.controller.go/internal/urac"
 	"github.com/soajs/soajs.controller.go/pkg/mongo"
 	"github.com/soajs/soajs.controller.go/pkg/types"
-	"github.com/soajs/soajs.controller.go/pkg/urac"
 	drv "go.mongodb.org/mongo-driver/mongo"
 	"go.uber.org/zap"
 )
@@ -31,7 +30,6 @@ type Controller struct {
 	provision    provision.Provision
 	awareness    awareness.Awareness
 	awarenessEnv awareness.EnvAwareness
-	urac         *urac.Driver
 	// users reads the logged-in user from coreDB[masterDB] on key APIs
 	users *uracuser.Driver
 	mongo *mongo.Client // the provision database, from the profile
@@ -62,12 +60,6 @@ func NewController(cfg *config.Config, logger *zap.Logger) (*Controller, error) 
 	}
 
 	ctrl.registry = registry.NewMongoRegistry(ctrl.mongo.Database(), profile, logger)
-
-	// The urac database is set in Setup, from the registry's masterDB
-	ctrl.urac = urac.NewDriverWithConfig(ctrl.mongo, logger, urac.Config{
-		HashIterations: 12,
-		Environment:    cfg.Environment,
-	})
 
 	ctrl.users = uracuser.NewDriver(func(db *dbconfig.DB) (*drv.Database, error) {
 		client, err := ctrl.clientFor(db)
@@ -138,8 +130,6 @@ func (c *Controller) Setup(r *chi.Mux) error {
 	}
 	c.logger.Info("service provision loaded")
 
-	c.configureUrac(regData)
-
 	// Awareness of the environment's services and of the gateway in the other environments
 	c.awareness = awareness.New(c.registry, c.Gateway(), c.logger)
 	c.awarenessEnv = awareness.NewEnv(c.registry, c.Gateway(), c.logger)
@@ -170,14 +160,13 @@ func (c *Controller) Setup(r *chi.Mux) error {
 	r.Use(middleware.AwarenessEnv(c.awarenessEnv))
 	r.Use(middleware.Key(c.provision, c.registry, c.cfg.Environment))
 	r.Use(middleware.KeyACL())
-	r.Use(middleware.GotoService(c.registry, c.awareness, middleware.NewMonitor(c.registry.Get, c.awareness, c.logger)))
+	r.Use(middleware.GotoService(c.registry, c.awareness, middleware.NewMonitor(c.registry.Get, c.awareness, c.logger), c.provision,
+		middleware.GatewayService{Name: c.cfg.ServiceName, Version: c.cfg.ServiceVersion}))
 	r.Use(middleware.MT(c.provision, c.registry, c.cfg.Environment))
-	r.Use(middleware.SoajsRoutesSetup(c.urac)) // Setup /soajs/* routes to require OAuth
 	r.Use(middleware.OAuth(c.provision, c.registry))
 	r.Use(middleware.Urac(c.users, c.provision, c.registry, c.cfg.Environment))
 	r.Use(middleware.MTACL(c.registry))
 	r.Use(middleware.InjectObj(c.registry, c.awareness)) // the soajsinjectobj of key APIs, at the end of mt
-	r.Use(middleware.SoajsRoutes(c.provision))           // Handle /soajs/* routes after OAuth and Urac populate context
 	r.Use(middleware.Traffic(c.registry, trafficModels, c.logger))
 	r.Use(middleware.LastSeen(c.registry, c.awareness))
 
@@ -229,30 +218,6 @@ func (c *Controller) ReloadProvision() error {
 // ReloadRegistry reloads the registry data
 func (c *Controller) ReloadRegistry() error {
 	return c.registry.Reload()
-}
-
-// configureUrac points the urac driver at coreDB[masterDB], masterDB being the custom registry
-// urac value.masterDB (docs/data-schema/urac.md). Without it, urac lookups are not configured.
-func (c *Controller) configureUrac(regData *types.RegistryData) {
-	masterDB := ""
-	if entry, ok := regData.CustomRegistry["urac"].(map[string]interface{}); ok {
-		if value, ok := entry["value"].(map[string]interface{}); ok {
-			masterDB, _ = value["masterDB"].(string)
-		}
-	}
-	db, ok := regData.CoreDB[masterDB]
-	if masterDB == "" || !ok {
-		c.logger.Error("configuration error: the custom registry urac masterDB is missing or is not a core database of the environment",
-			zap.String("masterDB", masterDB))
-		return
-	}
-	client, err := c.clientFor(db)
-	if err != nil {
-		c.logger.Error("configuration error: unable to connect to the urac database", zap.String("masterDB", masterDB), zap.Error(err))
-		return
-	}
-	c.urac.SetMongoClient(client)
-	c.urac.SetDatabase(db.DatabaseName())
 }
 
 // trafficModels are the throttling stores (mw/traffic/model): memory, and mongo in the

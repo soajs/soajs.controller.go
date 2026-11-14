@@ -310,3 +310,58 @@ func encode(s string, in func(byte) bool) string {
 	}
 	return b.String()
 }
+
+// AbsoluteURL is an absolute URL as Node.js new URL(input) parses it, for the schemes a request
+// can be sent to.
+type AbsoluteURL struct {
+	Scheme   string // "http" or "https"
+	Host     string // the hostname, lowercase; an IPv6 address keeps its brackets
+	Port     string // empty for the scheme's default port
+	Pathname string
+}
+
+// ParseAbsoluteURL parses input as WHATWG new URL(input) without a base does, for http and https:
+// an input without a scheme, with another scheme, or with an invalid host is refused. The query
+// and the fragment are dropped.
+func ParseAbsoluteURL(input string) (*AbsoluteURL, error) {
+	s := strings.TrimFunc(input, func(r rune) bool { return r <= 0x20 })
+	s = strings.Map(func(r rune) rune {
+		if r == '\t' || r == '\n' || r == '\r' {
+			return -1
+		}
+		return r
+	}, s)
+	if i := strings.IndexAny(s, "?#"); i != -1 {
+		s = s[:i]
+	}
+	scheme, rest, ok := splitScheme(s)
+	if !ok || (scheme != "http" && scheme != "https") {
+		return nil, ErrInvalidURL
+	}
+	authority, path := splitAuthority(strings.TrimLeft(rest, "/\\"))
+	if err := validAuthority(authority); err != nil {
+		return nil, err
+	}
+	if i := strings.LastIndexByte(authority, '@'); i != -1 {
+		authority = authority[i+1:]
+	}
+	host, port := authority, ""
+	if strings.HasPrefix(host, "[") {
+		end := strings.IndexByte(host, ']')
+		host, port = strings.ToLower(host[:end+1]), strings.TrimPrefix(host[end+1:], ":")
+	} else {
+		if i := strings.LastIndexByte(host, ':'); i != -1 {
+			host, port = host[:i], host[i+1:]
+		}
+		decoded, _ := percentDecode(host)
+		host = strings.ToLower(decoded)
+	}
+	if port != "" {
+		n, _ := strconv.Atoi(port)
+		port = strconv.Itoa(n)
+		if (scheme == "http" && n == 80) || (scheme == "https" && n == 443) {
+			port = ""
+		}
+	}
+	return &AbsoluteURL{Scheme: scheme, Host: host, Port: port, Pathname: resolvePath(path)}, nil
+}

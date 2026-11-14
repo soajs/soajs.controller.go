@@ -5,8 +5,6 @@ import "time"
 // ServiceParams holds service-related request parameters
 type ServiceParams struct {
 	URLInfo        *URLInfo
-	KeyACL         map[string]interface{} // Flexible ACL structure
-	FinalACL       map[string]interface{} // Merged ACL (package + key)
 	Package        *Package
 	ACL            *FinalACL    // the final ACL the keyACL middleware builds
 	TenantOauth    *TenantOauth // the tenant's oauth settings
@@ -14,17 +12,18 @@ type ServiceParams struct {
 	KeyAPI         bool         // the API is called with a key (extKeyRequired): PIN rules apply
 	AccessToken    string       // access_token from the query string, else its header (Node.js req.query.access_token)
 	HasAccessToken bool         // AccessToken was given
-	UserInfo       map[string]interface{}
 	RequiresOAuth  bool
 	OAuthToken     *AccessToken
-	UracDriver     interface{} // URAC driver for user ACL lookup
-	Environment    string      // Current environment
-	ServiceName    string      // Target service name
-	ServiceVersion string      // Target service version
-	User           interface{} // URAC user (set after OAuth)
-	TenantAccess   interface{} // Tenant access info (set after OAuth)
-	SkipACL        bool        // Skip ACL checks (MT whitelist)
-	SkipOAuth      bool        // Skip OAuth checks (MT whitelist)
+	Environment    string // Current environment
+	ServiceName    string // Target service name
+	ServiceVersion string // Target service version
+	SkipACL        bool   // Skip ACL checks (MT whitelist)
+	SkipOAuth      bool   // Skip OAuth checks (MT whitelist)
+	// GatewayAPI is /soajs/acl, an API of the gateway itself (Node.js mimicGatewayApi): mt runs
+	// the key, OAuth and user checks only, and the answer is made from the caller's ACL.
+	GatewayAPI bool
+	// Proxy is /soajs/proxy: mt skips the ACL checks and always asks for a token.
+	Proxy bool
 }
 
 // URLInfo holds parsed URL information

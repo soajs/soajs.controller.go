@@ -79,6 +79,9 @@ type Case struct {
 	// DropFields are keys removed, at any depth, from both bodies before a JSON compare: values
 	// a gateway deliberately leaves out.
 	DropFields []string `json:"dropFields,omitempty"`
+	// SortArrays sorts the arrays of strings of both bodies before a JSON compare: lists whose
+	// order follows a map in Go and the document in Node.js.
+	SortArrays bool `json:"sortArrays,omitempty"`
 }
 
 // Answer is what a gateway answered.
@@ -213,7 +216,7 @@ func compare(c Case, want, got Answer) string {
 	wantBody, gotBody = serviceVersion.ReplaceAllString(wantBody, "${1}null"), serviceVersion.ReplaceAllString(gotBody, "${1}null")
 	if c.CompareJSON {
 		var w, g interface{}
-		if json.Unmarshal([]byte(wantBody), &w) == nil && json.Unmarshal([]byte(gotBody), &g) == nil && reflect.DeepEqual(drop(w, c.DropFields), drop(g, c.DropFields)) {
+		if json.Unmarshal([]byte(wantBody), &w) == nil && json.Unmarshal([]byte(gotBody), &g) == nil && reflect.DeepEqual(normalize(w, c), normalize(g, c)) {
 			gotBody = wantBody
 		}
 	}
@@ -230,6 +233,40 @@ func headerNames(c Case) []string {
 }
 
 // drop removes the keys, at any depth.
+// normalize applies a case's dropFields and sortArrays to a JSON body.
+func normalize(v interface{}, c Case) interface{} {
+	v = drop(v, c.DropFields)
+	if c.SortArrays {
+		v = sortStrings(v)
+	}
+	return v
+}
+
+// sortStrings sorts, at any depth, the arrays whose items are all strings.
+func sortStrings(v interface{}) interface{} {
+	switch t := v.(type) {
+	case map[string]interface{}:
+		for k, e := range t {
+			t[k] = sortStrings(e)
+		}
+	case []interface{}:
+		strs := make([]string, 0, len(t))
+		for i, e := range t {
+			t[i] = sortStrings(e)
+			if s, ok := e.(string); ok {
+				strs = append(strs, s)
+			}
+		}
+		if len(strs) == len(t) {
+			sort.Strings(strs)
+			for i, s := range strs {
+				t[i] = s
+			}
+		}
+	}
+	return v
+}
+
 func drop(v interface{}, keys []string) interface{} {
 	switch t := v.(type) {
 	case map[string]interface{}:
