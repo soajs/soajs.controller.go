@@ -3,5 +3,5 @@
   "headers": {
     "Content-Type": "application/json"
   },
-  "body": "{\"result\":false,\"ts\":1794689024298,\"service\":{\"service\":\"soajs.controller\",\"version\":\"4.3.28\",\"type\":\"rest\",\"route\":\"/cache/invalidate\"},\"error\":\"A JSON body with tenant and service is required.\"}"
+  "body": "{\"result\":false,\"ts\":1794693479006,\"service\":{\"service\":\"soajs.controller\",\"version\":\"4.3.29\",\"type\":\"rest\",\"route\":\"/cache/invalidate\"},\"error\":\"A JSON body with tenant and service is required.\"}"
 }

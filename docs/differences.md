@@ -1,6 +1,6 @@
 # Differences from the Node.js gateway
 
-The Go gateway answers as soajs.controller 4.3.28 does, and the [conformance harness](../test/conformance/README.md) checks it. This page lists where it deliberately does not, each one reviewed in the pull request given.
+The Go gateway answers as soajs.controller 4.3.29 does, and the [conformance harness](../test/conformance/README.md) checks it. This page lists where it deliberately does not, each one reviewed in the pull request given.
 
 ## Not ported
 
@@ -27,17 +27,13 @@ Go reads only the latest data schema ([data-schema](data-schema/README.md)). A d
 
 ## Awareness
 
-- **Round-robin:** at most one pass over the hosts.
-- **HA namespace:** read from `deployer.container.kubernetes.namespace` and appended as `.<namespace>`; awarenessEnv uses the target environment's. Without a namespace, there is no host.
-- **HA cache:** a failed or empty rebuild still schedules the next one.
-- **Stopping `controllers` document:** written with `daemons: {}` and the gateway's IP.
+- **HA namespace:** a deployer without a namespace gives no host; Node.js gives the host name without a namespace. (Go reads only the current deployer shape; see Not ported.)
+- **Stopping `controllers` document:** written with `daemons: {}`; Node.js leaves `daemons` out.
 
-## Proxy and soajsinjectobj
+## Proxy and interConnect
 
 - **Request timeout renewals:** each renewal counts once.
 - **interConnect:** when awareness has no gateway host, the awareness block and the interConnect peers are left out.
-- **soajsinjectobj:** a header the request came with is removed; a service only receives the one the gateway builds.
-- **Calls without a key:** forwarded to the service.
 
 ## urac
 
@@ -48,10 +44,7 @@ Go reads only the latest data schema ([data-schema](data-schema/README.md)). A d
 ## Gateway routes
 
 - **`/soajs/acl`:** the finalACL API lists are sorted.
-- **`/soajs/proxy`:**
-  - a `tCode` that matches no tenant answers 139;
-  - the timeout is an idle timeout, and answers 135 when it fires before the answer;
-  - an invalid `%` escape in `proxyRoute` answers 139.
+- **`/soajs/proxy`:** an invalid `%` escape in `proxyRoute` answers 139.
 - **`/soajs/mcp`:**
   - a tool call that fails on the network returns Go's error text;
   - an `operationId` that is not a string is not used in the tool name.

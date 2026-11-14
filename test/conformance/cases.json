@@ -468,6 +468,18 @@
     }
   },
   {
+    "name": "keyless_redirect",
+    "about": "a service version that needs no key: a call without a key is passed on (Node.js 4.3.29)",
+    "method": "GET",
+    "path": "/open/v1/hello"
+  },
+  {
+    "name": "keyless_redirect_query",
+    "about": "the same, with a query string",
+    "method": "GET",
+    "path": "/open/v1/hello?a=1&b=x+y"
+  },
+  {
     "name": "soajs_proxy_no_route",
     "about": "from integration SoajsProxy MissingProxyRoute",
     "method": "GET",
@@ -512,6 +524,16 @@
     "about": "from integration SoajsProxy ForbiddenEnv: an environment the key has no extKey for",
     "method": "GET",
     "path": "/soajs/proxy?proxyRoute=%2Fconform%2Fv1%2Fpublic%2Fhello&__env=dashboard",
+    "headers": {
+      "key": "$KEY_DEFAULT",
+      "access_token": "$TOKEN_VALID"
+    }
+  },
+  {
+    "name": "soajs_proxy_unknown_tenant",
+    "about": "a tCode that matches no tenant, with an environment: 139 (Node.js 4.3.29)",
+    "method": "GET",
+    "path": "/soajs/proxy?proxyRoute=%2Fconform%2Fv1%2Fpublic%2Fhello&__env=stg&tCode=NOSUCHTENANT",
     "headers": {
       "key": "$KEY_DEFAULT",
       "access_token": "$TOKEN_VALID"
