@@ -36,35 +36,13 @@ func MT(prov provision.Provision, reg registry.Registry, uracDriver *urac.Driver
 				}
 			}
 
-			// Resolve tenant from key
-			tenant, err := prov.GetTenant(soajsCtx.Key.TenantCode)
-			if err != nil {
-				WriteError(w, http.StatusForbidden,
-					config.ErrCodeInvalidTenant,
-					config.DefaultErrors[config.ErrCodeInvalidTenant])
-				return
+			// The tenant comes from the key; the package was loaded by the key middleware
+			soajsCtx.Tenant = types.TenantFromKey(soajsCtx.Key)
+			var pkg *types.Package
+			if soajsCtx.Controller != nil && soajsCtx.Controller.ServiceParams != nil {
+				pkg = soajsCtx.Controller.ServiceParams.Package
 			}
-			soajsCtx.Tenant = tenant
-
-			// Check tenant maintenance mode
-			if tenant.MaintenanceMode {
-				WriteError(w, http.StatusServiceUnavailable,
-					config.ErrCodeMaintenanceMode,
-					"Tenant is under maintenance")
-				return
-			}
-
-			// Get product and package info
-			product, err := prov.GetProduct(soajsCtx.Key.ProductCode)
-			if err != nil {
-				WriteError(w, http.StatusForbidden,
-					config.ErrCodeInvalidProduct,
-					config.DefaultErrors[config.ErrCodeInvalidProduct])
-				return
-			}
-
-			pkg, err := prov.GetPackage(soajsCtx.Key.ProductCode, soajsCtx.Key.PackageCode)
-			if err != nil {
+			if pkg == nil {
 				WriteError(w, http.StatusForbidden,
 					config.ErrCodeInvalidPackage,
 					config.DefaultErrors[config.ErrCodeInvalidPackage])
@@ -79,7 +57,7 @@ func MT(prov provision.Provision, reg registry.Registry, uracDriver *urac.Driver
 				servicePath := serviceParams.URLInfo.ServicePath
 
 				// Merge ACLs: package ACL + key ACL (env-aware)
-				finalACL := mergeACL(pkg.ACL, soajsCtx.Key.ACL, serviceName, env)
+				finalACL := mergeACL(pkg.ACL, nil, serviceName, env)
 
 				// If version was not explicitly requested in URL, get latest from ACL
 				// This matches Node.js behavior in mw/mt/utils.js line 233-243
@@ -123,12 +101,6 @@ func MT(prov provision.Provision, reg registry.Registry, uracDriver *urac.Driver
 					serviceParams.ServiceName = serviceName
 					serviceParams.ServiceVersion = serviceVersion
 				}
-			}
-
-			// Store product info (only if ServiceParams exists)
-			if soajsCtx.Controller != nil && soajsCtx.Controller.ServiceParams != nil {
-				soajsCtx.Controller.ServiceParams.Product = product
-				soajsCtx.Controller.ServiceParams.Package = pkg
 			}
 
 			next.ServeHTTP(w, r)

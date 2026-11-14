@@ -362,10 +362,6 @@ func injectSOAJSHeaders(req *http.Request, soajsCtx *SOAJSContext, reg registry.
 			"type":   soajsCtx.Tenant.Type,
 			"locked": soajsCtx.Tenant.Locked,
 		}
-		// Add roaming if present
-		if soajsCtx.Tenant.Roaming != nil {
-			tenantObj["roaming"] = soajsCtx.Tenant.Roaming
-		}
 		// Add main if present
 		if soajsCtx.Tenant.Main != nil {
 			tenantObj["main"] = soajsCtx.Tenant.Main
@@ -402,13 +398,13 @@ func injectSOAJSHeaders(req *http.Request, soajsCtx *SOAJSContext, reg registry.
 	// Application info - build with ACL initially (Node.js includes then deletes)
 	if soajsCtx.Key != nil {
 		appObj := map[string]interface{}{
-			"product": soajsCtx.Key.ProductCode,
-			"package": soajsCtx.Key.PackageCode,
-			"appId":   soajsCtx.Key.AppID,
+			"product": soajsCtx.Key.Application.Product,
+			"package": soajsCtx.Key.Application.Package,
+			"appId":   soajsCtx.Key.Application.AppID,
 		}
-		// Include ACL - will be removed below if not needed
-		appObj["acl"] = soajsCtx.Key.AppACL
-		appObj["acl_all_env"] = soajsCtx.Key.AppACLAllEnv
+		// The latest data schema has no application ACL
+		appObj["acl"] = nil
+		appObj["acl_all_env"] = nil
 		injectObj["application"] = appObj
 	}
 

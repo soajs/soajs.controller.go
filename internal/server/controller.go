@@ -167,7 +167,7 @@ func (c *Controller) Setup(r *chi.Mux) error {
 	r.Use(middleware.URL())
 	r.Use(middleware.Awareness(c.awareness))
 	r.Use(middleware.AwarenessEnv(c.awareness, c.registry, c.cfg.Environment))
-	r.Use(middleware.Key(c.provision))
+	r.Use(middleware.Key(c.provision, c.registry, c.cfg.Environment))
 	r.Use(middleware.KeyACL())
 	r.Use(middleware.GotoService(c.provision, c.registry, c.awareness))
 	r.Use(middleware.MT(c.provision, c.registry, c.urac, c.cfg.Environment))
