@@ -1,0 +1,408 @@
+[
+ {
+  "in": "/svc/a/b",
+  "pathname": "/svc/a/b",
+  "search": ""
+ },
+ {
+  "in": "/svc/a/../b",
+  "pathname": "/svc/b",
+  "search": ""
+ },
+ {
+  "in": "/svc/./a",
+  "pathname": "/svc/a",
+  "search": ""
+ },
+ {
+  "in": "/svc/a/./b/.",
+  "pathname": "/svc/a/b/",
+  "search": ""
+ },
+ {
+  "in": "/svc/a/..",
+  "pathname": "/svc/",
+  "search": ""
+ },
+ {
+  "in": "/svc/a/%2e%2e/b",
+  "pathname": "/svc/b",
+  "search": ""
+ },
+ {
+  "in": "/svc/a/%2E%2e/b",
+  "pathname": "/svc/b",
+  "search": ""
+ },
+ {
+  "in": "/svc/a/.%2e/b",
+  "pathname": "/svc/b",
+  "search": ""
+ },
+ {
+  "in": "/svc/a/%2e./b",
+  "pathname": "/svc/b",
+  "search": ""
+ },
+ {
+  "in": "/svc/a/%2e/b",
+  "pathname": "/svc/a/b",
+  "search": ""
+ },
+ {
+  "in": "/svc/a/%2E",
+  "pathname": "/svc/a/",
+  "search": ""
+ },
+ {
+  "in": "/svc/%2e%2e%2fx",
+  "pathname": "/svc/%2e%2e%2fx",
+  "search": ""
+ },
+ {
+  "in": "/svc/a%2Fb/c",
+  "pathname": "/svc/a%2Fb/c",
+  "search": ""
+ },
+ {
+  "in": "/svc/a b",
+  "pathname": "/svc/a%20b",
+  "search": ""
+ },
+ {
+  "in": "/svc/é/✓",
+  "pathname": "/svc/%C3%A9/%E2%9C%93",
+  "search": ""
+ },
+ {
+  "in": "/svc/a?b c",
+  "pathname": "/svc/a",
+  "search": "?b%20c"
+ },
+ {
+  "in": "/svc/a?b=é&c='x'",
+  "pathname": "/svc/a",
+  "search": "?b=%C3%A9&c=%27x%27"
+ },
+ {
+  "in": "/svc/a#frag",
+  "pathname": "/svc/a",
+  "search": ""
+ },
+ {
+  "in": "/svc/a?x=1#frag",
+  "pathname": "/svc/a",
+  "search": "?x=1"
+ },
+ {
+  "in": "/svc/a?",
+  "pathname": "/svc/a",
+  "search": ""
+ },
+ {
+  "in": "/svc/a?#",
+  "pathname": "/svc/a",
+  "search": ""
+ },
+ {
+  "in": "//evil/x",
+  "pathname": "/x",
+  "search": ""
+ },
+ {
+  "in": "//evil",
+  "pathname": "/",
+  "search": ""
+ },
+ {
+  "in": "///x/y",
+  "pathname": "/y",
+  "search": ""
+ },
+ {
+  "in": "/svc//a//b",
+  "pathname": "/svc//a//b",
+  "search": ""
+ },
+ {
+  "in": "/svc/a\\b",
+  "pathname": "/svc/a/b",
+  "search": ""
+ },
+ {
+  "in": "\\svc\\a",
+  "pathname": "/svc/a",
+  "search": ""
+ },
+ {
+  "in": "/svc/a\"b<c>d`e{f}g",
+  "pathname": "/svc/a%22b%3Cc%3Ed%60e%7Bf%7Dg",
+  "search": ""
+ },
+ {
+  "in": "/svc/%zz/%41",
+  "pathname": "/svc/%zz/%41",
+  "search": ""
+ },
+ {
+  "in": "/svc/a?q=%zz&r=%41",
+  "pathname": "/svc/a",
+  "search": "?q=%zz&r=%41"
+ },
+ {
+  "in": "/../svc/x",
+  "pathname": "/svc/x",
+  "search": ""
+ },
+ {
+  "in": "/svc/../../x",
+  "pathname": "/x",
+  "search": ""
+ },
+ {
+  "in": "/svc/a/../../..",
+  "pathname": "/",
+  "search": ""
+ },
+ {
+  "in": "/svc/a;b,c=d",
+  "pathname": "/svc/a;b,c=d",
+  "search": ""
+ },
+ {
+  "in": "/svc/a\tb\nc",
+  "pathname": "/svc/abc",
+  "search": ""
+ },
+ {
+  "in": " /svc/a ",
+  "pathname": "/svc/a",
+  "search": ""
+ },
+ {
+  "in": "/svc/a?b\"c<d>e`f{g}h|i^j",
+  "pathname": "/svc/a",
+  "search": "?b%22c%3Cd%3Ee`f{g}h|i^j"
+ },
+ {
+  "in": "/svc/~user/!$&'()*+,;=:@",
+  "pathname": "/svc/~user/!$&'()*+,;=:@",
+  "search": ""
+ },
+ {
+  "in": "/v1/svc/x",
+  "pathname": "/v1/svc/x",
+  "search": ""
+ },
+ {
+  "in": "/svc/v1/x/../y",
+  "pathname": "/svc/v1/y",
+  "search": ""
+ },
+ {
+  "in": "/svc:1/a/../b",
+  "pathname": "/svc:1/b",
+  "search": ""
+ },
+ {
+  "in": "/svc/a?x=../y",
+  "pathname": "/svc/a",
+  "search": "?x=../y"
+ },
+ {
+  "in": "/%2e%2e/svc",
+  "pathname": "/svc",
+  "search": ""
+ },
+ {
+  "in": "/svc/a%00b",
+  "pathname": "/svc/a%00b",
+  "search": ""
+ },
+ {
+  "in": "/svc/\u0001x",
+  "pathname": "/svc/%01x",
+  "search": ""
+ },
+ {
+  "in": "//[bad/x",
+  "error": true
+ },
+ {
+  "in": "//a b/x",
+  "error": true
+ },
+ {
+  "in": "/svc/a^b|c",
+  "pathname": "/svc/a%5Eb|c",
+  "search": ""
+ },
+ {
+  "in": "/svc/a?b#c?d",
+  "pathname": "/svc/a",
+  "search": "?b"
+ },
+ {
+  "in": "//evil:8080/x",
+  "pathname": "/x",
+  "search": ""
+ },
+ {
+  "in": "//user:pw@evil/x",
+  "pathname": "/x",
+  "search": ""
+ },
+ {
+  "in": "//evil:abc/x",
+  "error": true
+ },
+ {
+  "in": "//EVIL/x",
+  "pathname": "/x",
+  "search": ""
+ },
+ {
+  "in": "//evil:99999/x",
+  "error": true
+ },
+ {
+  "in": "//%41b/x",
+  "pathname": "/x",
+  "search": ""
+ },
+ {
+  "in": "//a%20b/x",
+  "error": true
+ },
+ {
+  "in": "//[::1]/x",
+  "pathname": "/x",
+  "search": ""
+ },
+ {
+  "in": "//[::1/x",
+  "error": true
+ },
+ {
+  "in": "\\\\evil\\x",
+  "pathname": "/x",
+  "search": ""
+ },
+ {
+  "in": "/\\evil/x",
+  "pathname": "/x",
+  "search": ""
+ },
+ {
+  "in": "//evil?x",
+  "pathname": "/",
+  "search": "?x"
+ },
+ {
+  "in": "//evil#x",
+  "pathname": "/",
+  "search": ""
+ },
+ {
+  "in": "//0x7f.1/x",
+  "pathname": "/x",
+  "search": ""
+ },
+ {
+  "in": "//ab%2/x",
+  "error": true
+ },
+ {
+  "in": "/svc/a?é#",
+  "pathname": "/svc/a",
+  "search": "?%C3%A9"
+ },
+ {
+  "in": "//a:/x",
+  "pathname": "/x",
+  "search": ""
+ },
+ {
+  "in": "//:80/x",
+  "error": true
+ },
+ {
+  "in": "//@evil/x",
+  "pathname": "/x",
+  "search": ""
+ },
+ {
+  "in": "//e^vil/x",
+  "error": true
+ },
+ {
+  "in": "//e|vil/x",
+  "error": true
+ },
+ {
+  "in": "//1.2.3.256/x",
+  "error": true
+ },
+ {
+  "in": "//1.2.3/x",
+  "pathname": "/x",
+  "search": ""
+ },
+ {
+  "in": "//256.1/x",
+  "error": true
+ },
+ {
+  "in": "//1.2.3.4.5/x",
+  "error": true
+ },
+ {
+  "in": "//09/x",
+  "error": true
+ },
+ {
+  "in": "//0x/x",
+  "pathname": "/x",
+  "search": ""
+ },
+ {
+  "in": "/svc/ab",
+  "pathname": "/svc/a%7Fb",
+  "search": ""
+ },
+ {
+  "in": "/svc/a?bc",
+  "pathname": "/svc/a",
+  "search": "?b%7Fc"
+ },
+ {
+  "in": "*",
+  "pathname": "/*",
+  "search": ""
+ },
+ {
+  "in": "http://evil/x?y",
+  "pathname": "/x",
+  "search": "?y"
+ },
+ {
+  "in": "HTTP://h/a/../b",
+  "pathname": "/b",
+  "search": ""
+ },
+ {
+  "in": "/svc/%2E%2E",
+  "pathname": "/",
+  "search": ""
+ },
+ {
+  "in": "/svc/..%2f",
+  "pathname": "/svc/..%2f",
+  "search": ""
+ },
+ {
+  "in": "/svc/a/%2e%2E/%2E%2e/b",
+  "pathname": "/b",
+  "search": ""
+ }
+]

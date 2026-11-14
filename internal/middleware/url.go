@@ -5,6 +5,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/soajs/soajs.controller.go/internal/lib"
 	"github.com/soajs/soajs.controller.go/internal/registry"
 	"github.com/soajs/soajs.controller.go/pkg/types"
 )
@@ -24,7 +25,14 @@ func URL(reg registry.Registry) Middleware {
 			if uri == "" {
 				uri = r.URL.RequestURI()
 			}
-			info := parseURL(uri)
+			info, err := parseURL(uri)
+			if err != nil {
+				// Node.js new URL() throws, and the error answers 500 with its code
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusInternalServerError)
+				_, _ = w.Write([]byte(`{"result":false,"errors":{"codes":["ERR_INVALID_URL"],"details":[{"code":"ERR_INVALID_URL","message":"Invalid URL"}]}}`))
+				return
+			}
 			soajsCtx.Controller.ServiceParams.URLInfo = info
 			if info.ServiceName == "" {
 				WriteCode(w, 136)
@@ -62,26 +70,33 @@ var (
 	versionSuffix  = regexp.MustCompile(`:[0-9]+(.[0-9]+)?`)
 )
 
-// parseURL splits a request URI (path and query) into service, version and path. The version is
-// a "/v<N>/" segment right after the service with more after it, or "<service>:<N>".
-func parseURL(uri string) *types.URLInfo {
-	path := uri
-	if i := strings.IndexByte(path, '?'); i != -1 {
-		path = path[:i]
+// parseURL splits a request target into service, version and path, as lib/parseURL.js does on
+// the URL Node.js parses (WHATWG new URL(target, "http://localhost")): the service is the first
+// segment of the parsed path; the version is a "/v<N>/" segment of the target right after the
+// service with more after it, the target then parsed again without it, or "<service>:<N>". Every
+// path and the URL the service is called with come from the parsed URL, so the API checked is the
+// API called.
+func parseURL(target string) (*types.URLInfo, error) {
+	pathname, search, err := lib.RequestURL(target)
+	if err != nil {
+		return nil, err
 	}
-	segments := strings.Split(path, "/")
-	info := &types.URLInfo{OriginalPath: path}
+	segments := strings.Split(pathname, "/")
+	info := &types.URLInfo{OriginalPath: pathname}
 	if len(segments) < 2 {
-		return info
+		return info, nil
 	}
 	serviceNV := segments[1]
 	info.ServiceName = serviceNV
 
-	if m := versionSegment.FindString(uri); m != "" {
+	if m := versionSegment.FindString(target); m != "" {
 		hit := strings.Trim(m, "/")
 		if len(segments) > 3 && segments[2] == hit {
 			info.ServiceVersion = strings.TrimPrefix(hit, "v")
-			uri = strings.Replace(uri, m, "/", 1)
+			if pathname, search, err = lib.RequestURL(strings.Replace(target, m, "/", 1)); err != nil {
+				return nil, err
+			}
+			info.OriginalPath = pathname
 		}
 	}
 	if info.ServiceVersion == "" {
@@ -94,17 +109,15 @@ func parseURL(uri string) *types.URLInfo {
 	}
 	info.VersionRequested = info.ServiceVersion != ""
 
-	// The service path: what follows "/<service>", without the query; with a query, a trailing
-	// slash is dropped too (extractBuildParameters)
+	// The service's URL: what follows "/<service>" in the parsed path and query; its path drops
+	// the query and, with a query, a trailing slash (extractBuildParameters)
+	full := pathname + search
 	rest := ""
-	if len(uri) > len(serviceNV)+1 {
-		rest = uri[len(serviceNV)+1:]
+	if len(full) > len(serviceNV)+1 {
+		rest = full[len(serviceNV)+1:]
 	}
 	info.URL = rest
-	info.FullPath = uri
-	if i := strings.IndexByte(info.FullPath, '?'); i != -1 {
-		info.FullPath = info.FullPath[:i]
-	}
+	info.FullPath = pathname
 	if i := strings.IndexByte(rest, '?'); i != -1 {
 		rest = rest[:i]
 		if j := strings.LastIndexByte(rest, '/'); j > 0 && j == len(rest)-1 {
@@ -112,5 +125,5 @@ func parseURL(uri string) *types.URLInfo {
 		}
 	}
 	info.ServicePath = rest
-	return info
+	return info, nil
 }
