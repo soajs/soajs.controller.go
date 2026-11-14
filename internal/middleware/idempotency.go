@@ -11,12 +11,10 @@ import (
 	"strings"
 	"sync"
 	"time"
-	"unicode/utf8"
 
 	"github.com/soajs/soajs.controller.go/internal/dataschema"
 	"github.com/soajs/soajs.controller.go/internal/registry"
 	"go.mongodb.org/mongo-driver/bson"
-	"go.mongodb.org/mongo-driver/bson/primitive"
 	drv "go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 	"go.uber.org/zap"
@@ -33,18 +31,11 @@ var uuidV4 = regexp.MustCompile(`(?i)^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab
 // idempotencyKey is what is locked: the tenant (l1) and the Idempotency-Key (l2).
 type idempotencyKey struct{ l1, l2 string }
 
-// IdempotencyResponse is a recorded answer of a service.
-type IdempotencyResponse struct {
-	StatusCode int                    `bson:"statusCode"`
-	Headers    map[string]interface{} `bson:"headers"`
-	Body       string                 `bson:"body"`
-}
-
 // idempotencyEntry is a lock or a recorded answer.
 type idempotencyEntry struct {
 	Status    string
 	LockID    string
-	Response  *IdempotencyResponse
+	Response  *RecordedResponse
 	ExpiresAt time.Time
 }
 
@@ -55,7 +46,7 @@ type IdempotencyModel interface {
 	// Lock puts the key in flight for ttl unless an entry that has not expired holds it.
 	Lock(k idempotencyKey, ttl time.Duration, lockID string) bool
 	// Complete records the answer for ttl.
-	Complete(k idempotencyKey, resp *IdempotencyResponse, ttl time.Duration)
+	Complete(k idempotencyKey, resp *RecordedResponse, ttl time.Duration)
 	// Unlock removes the key while it is still in flight under lockID.
 	Unlock(k idempotencyKey, lockID string)
 }
@@ -73,7 +64,7 @@ type IdempotencyContext struct {
 
 // finish completes the lock with an answer below 500, else releases it. A nil context does
 // nothing.
-func (c *IdempotencyContext) finish(resp *IdempotencyResponse) {
+func (c *IdempotencyContext) finish(resp *RecordedResponse) {
 	if c == nil {
 		return
 	}
@@ -195,7 +186,7 @@ func Idempotency(reg registry.Registry, models map[string]IdempotencyModel, logg
 					return
 				}
 				if existing.Status == idempotencyCompleted && existing.Response != nil {
-					replayIdempotent(w, existing.Response)
+					replayRecorded(w, existing.Response)
 					return
 				}
 			}
@@ -244,74 +235,6 @@ func matchesIdempotentAPI(method, path string, apis []interface{}) bool {
 		}
 	}
 	return false
-}
-
-// replayIdempotent writes a recorded answer. The hop-by-hop headers of the original answer are
-// not replayed.
-func replayIdempotent(w http.ResponseWriter, resp *IdempotencyResponse) {
-	for k, v := range resp.Headers {
-		switch strings.ToLower(k) {
-		case "transfer-encoding", "connection", "keep-alive":
-			continue
-		}
-		switch t := v.(type) {
-		case string:
-			w.Header().Set(k, t)
-		case []interface{}:
-			for _, e := range t {
-				w.Header().Add(k, fmt.Sprint(e))
-			}
-		case primitive.A:
-			for _, e := range t {
-				w.Header().Add(k, fmt.Sprint(e))
-			}
-		case []string:
-			for _, e := range t {
-				w.Header().Add(k, e)
-			}
-		default:
-			w.Header().Set(k, fmt.Sprint(t))
-		}
-	}
-	w.WriteHeader(resp.StatusCode)
-	_, _ = w.Write([]byte(resp.Body))
-}
-
-// idempotentHeaders are a service's answer headers as Node.js records them (IncomingMessage
-// headers): lowercase names, set-cookie as a list, others joined with ", ".
-func idempotentHeaders(h http.Header) map[string]interface{} {
-	out := make(map[string]interface{}, len(h))
-	for k, v := range h {
-		name := strings.ToLower(k)
-		if name == "set-cookie" {
-			list := make([]interface{}, len(v))
-			for i, e := range v {
-				list[i] = e
-			}
-			out[name] = list
-			continue
-		}
-		out[name] = strings.Join(v, ", ")
-	}
-	return out
-}
-
-// utf8Body is a body as Buffer.toString("utf8") gives it: each invalid byte is U+FFFD.
-func utf8Body(b []byte) string {
-	if utf8.Valid(b) {
-		return string(b)
-	}
-	var s strings.Builder
-	for len(b) > 0 {
-		r, size := utf8.DecodeRune(b)
-		if r == utf8.RuneError && size == 1 {
-			s.WriteRune(utf8.RuneError)
-		} else {
-			s.Write(b[:size])
-		}
-		b = b[size:]
-	}
-	return s.String()
 }
 
 // newUUIDv4 is a random UUID v4 (crypto.randomUUID).
@@ -401,7 +324,7 @@ func (m *MemoryIdempotency) Lock(k idempotencyKey, ttl time.Duration, lockID str
 	return true
 }
 
-func (m *MemoryIdempotency) Complete(k idempotencyKey, resp *IdempotencyResponse, ttl time.Duration) {
+func (m *MemoryIdempotency) Complete(k idempotencyKey, resp *RecordedResponse, ttl time.Duration) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	entries := m.tenants[k.l1]
@@ -468,10 +391,10 @@ func (m *MongoIdempotency) Get(k idempotencyKey) *idempotencyEntry {
 		}
 	}
 	var doc struct {
-		Status    string               `bson:"status"`
-		LockID    *string              `bson:"lockId"`
-		Response  *IdempotencyResponse `bson:"response"`
-		ExpiresAt time.Time            `bson:"expiresAt"`
+		Status    string            `bson:"status"`
+		LockID    *string           `bson:"lockId"`
+		Response  *RecordedResponse `bson:"response"`
+		ExpiresAt time.Time         `bson:"expiresAt"`
 	}
 	if err := bson.Unmarshal(raw, &doc); err != nil {
 		m.logger.Error("Idempotency get: " + err.Error())
@@ -505,7 +428,7 @@ func (m *MongoIdempotency) Lock(k idempotencyKey, ttl time.Duration, lockID stri
 	return true
 }
 
-func (m *MongoIdempotency) Complete(k idempotencyKey, resp *IdempotencyResponse, ttl time.Duration) {
+func (m *MongoIdempotency) Complete(k idempotencyKey, resp *RecordedResponse, ttl time.Duration) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	now := time.Now()

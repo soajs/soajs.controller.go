@@ -463,11 +463,15 @@ func redirect(w http.ResponseWriter, r *http.Request, soajsCtx *SOAJSContext, re
 		authorize(r, out, regData)
 	}
 
-	// from here the service's answer completes or releases the Idempotency-Key (redirect only)
+	// from here the service's answer completes or releases the Idempotency-Key and fills the
+	// cache (redirect only)
 	var idem *IdempotencyContext
-	if !simple && soajsCtx.Idempotency != nil {
-		idem = soajsCtx.Idempotency
-		idem.proxied = true
+	var cache *CacheContext
+	if !simple {
+		idem, cache = soajsCtx.Idempotency, soajsCtx.Cache
+		if idem != nil {
+			idem.proxied = true
+		}
 	}
 	resp, err := proxyTransport.RoundTrip(out)
 	if err != nil {
@@ -484,16 +488,25 @@ func redirect(w http.ResponseWriter, r *http.Request, soajsCtx *SOAJSContext, re
 		idem.release()
 		return
 	}
-	var answer *IdempotencyResponse
-	if idem != nil {
-		answer = &IdempotencyResponse{StatusCode: resp.StatusCode, Headers: idempotentHeaders(resp.Header)}
+	var answer *RecordedResponse
+	if idem != nil || cache != nil {
+		answer = &RecordedResponse{StatusCode: resp.StatusCode, Headers: recordedHeaders(resp.Header)}
+	}
+	// recorded keeps the service's full answer: completes the Idempotency-Key, fills the cache
+	recorded := func(body []byte) {
+		if answer == nil {
+			return
+		}
+		answer.Body = utf8Body(body)
+		idem.finish(answer)
+		cache.save(answer)
 	}
 	if rec.wantsResponse() {
 		rec.responseStart(resp.Header.Get("Content-Type"))
 	}
 	if r.Method == http.MethodHead {
 		m.end()
-		idem.finish(answer)
+		recorded(nil)
 		send()
 		return
 	}
@@ -501,10 +514,10 @@ func redirect(w http.ResponseWriter, r *http.Request, soajsCtx *SOAJSContext, re
 	if rec.wantsResponse() {
 		dst = capturingWriter{m, rec}
 	}
-	var iw *idempotencyWriter
-	if idem != nil {
-		iw = &idempotencyWriter{w: dst, m: m}
-		dst = iw
+	var rw *recordingWriter
+	if answer != nil {
+		rw = &recordingWriter{w: dst, m: m}
+		dst = rw
 	}
 	_, err = io.Copy(dst, resp.Body)
 	switch {
@@ -516,32 +529,31 @@ func redirect(w http.ResponseWriter, r *http.Request, soajsCtx *SOAJSContext, re
 		// the request was ended (request timeout): the service did not answer in full
 		idem.release()
 		m.end()
-	case iw != nil && iw.err != nil:
+	case rw != nil && rw.err != nil:
 		// the client is gone; the service answered in full, its answer is recorded
-		soajsCtx.Log.Error(iw.err.Error() + " with [" + name + "@" + version + "]")
+		soajsCtx.Log.Error(rw.err.Error() + " with [" + name + "@" + version + "]")
 		m.respond(135)
-		answer.Body = utf8Body(iw.body)
-		idem.finish(answer)
+		recorded(rw.body)
 	default:
 		m.end()
-		if iw != nil {
-			answer.Body = utf8Body(iw.body)
-			idem.finish(answer)
+		if rw != nil {
+			recorded(rw.body)
 		}
 	}
 	send()
 }
 
-// idempotencyWriter records the answer for the Idempotency-Key. When the client can no longer be
-// written to, it keeps reading the service's answer to record it, unless the request was ended.
-type idempotencyWriter struct {
+// recordingWriter records the service's answer for the Idempotency-Key and the cache. When the
+// client can no longer be written to, it keeps reading the answer to record it, unless the request
+// was ended.
+type recordingWriter struct {
 	w    io.Writer
 	m    *requestMonitor
 	body []byte
 	err  error
 }
 
-func (i *idempotencyWriter) Write(p []byte) (int, error) {
+func (i *recordingWriter) Write(p []byte) (int, error) {
 	i.body = append(i.body, p...)
 	if i.err != nil {
 		return len(p), nil

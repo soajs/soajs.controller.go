@@ -1,0 +1,7 @@
+{
+  "status": 400,
+  "headers": {
+    "Content-Type": "application/json"
+  },
+  "body": "{\"result\":false,\"ts\":1794689024299,\"service\":{\"service\":\"soajs.controller\",\"version\":\"4.3.28\",\"type\":\"rest\",\"route\":\"/cache/invalidate\"},\"error\":\"tenant and service are required.\"}"
+}

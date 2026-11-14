@@ -547,6 +547,44 @@
     }
   },
   {
+    "name": "cache_miss",
+    "about": "a cached API, first call: the service answers, X-Cache MISS",
+    "method": "GET",
+    "path": "/other/v1/hello?cache=1",
+    "headers": {
+      "key": "$KEY_DEFAULT",
+      "access_token": "$TOKEN_VALID"
+    },
+    "compareHeaders": [
+      "X-Cache"
+    ]
+  },
+  {
+    "name": "cache_hit",
+    "about": "the same API and query, the token in the query (not in the key): the answer of cache_miss, X-Cache HIT",
+    "method": "GET",
+    "path": "/other/v1/hello?cache=1&access_token=$TOKEN_VALID",
+    "headers": {
+      "key": "$KEY_DEFAULT"
+    },
+    "compareHeaders": [
+      "X-Cache"
+    ]
+  },
+  {
+    "name": "cache_other_query",
+    "about": "another query is another entry",
+    "method": "GET",
+    "path": "/other/v1/hello?cache=2",
+    "headers": {
+      "key": "$KEY_DEFAULT",
+      "access_token": "$TOKEN_VALID"
+    },
+    "compareHeaders": [
+      "X-Cache"
+    ]
+  },
+  {
     "name": "roaming_service_not_configured",
     "about": "from integration Roaming NotInRegistry",
     "method": "GET",
@@ -661,6 +699,80 @@
     "compareHeaders": [
       "X-RateLimit-Limit",
       "X-RateLimit-Remaining"
+    ]
+  },
+  {
+    "name": "maintenance_cache_invalidate_get",
+    "target": "maintenance",
+    "method": "GET",
+    "path": "/cache/invalidate",
+    "ignoreFields": [
+      "ts"
+    ],
+    "compareHeaders": [
+      "Content-Type"
+    ]
+  },
+  {
+    "name": "maintenance_cache_invalidate_bad_json",
+    "target": "maintenance",
+    "method": "POST",
+    "path": "/cache/invalidate",
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "body": "{",
+    "ignoreFields": [
+      "ts"
+    ]
+  },
+  {
+    "name": "maintenance_cache_invalidate_no_body",
+    "target": "maintenance",
+    "method": "POST",
+    "path": "/cache/invalidate",
+    "ignoreFields": [
+      "ts"
+    ]
+  },
+  {
+    "name": "maintenance_cache_invalidate_missing",
+    "target": "maintenance",
+    "method": "POST",
+    "path": "/cache/invalidate",
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "body": "{\"tenant\":\"6a0e00000000000000000001\"}",
+    "ignoreFields": [
+      "ts"
+    ]
+  },
+  {
+    "name": "maintenance_cache_invalidate_bad_api",
+    "target": "maintenance",
+    "method": "POST",
+    "path": "/cache/invalidate",
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "body": "{\"tenant\":\"t\",\"service\":\"other\",\"api\":\"POST /hello\"}",
+    "ignoreFields": [
+      "ts"
+    ]
+  },
+  {
+    "name": "maintenance_cache_invalidate_memory",
+    "about": "invalidation needs the mongo model",
+    "target": "maintenance",
+    "method": "POST",
+    "path": "/cache/invalidate",
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "body": "{\"tenant\":\"6a0e00000000000000000001\",\"service\":\"other\",\"api\":\"GET /hello\"}",
+    "ignoreFields": [
+      "ts"
     ]
   },
   {

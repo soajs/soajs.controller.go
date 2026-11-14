@@ -33,6 +33,8 @@ type Controller struct {
 	// users reads the logged-in user from coreDB[masterDB] on key APIs
 	users *uracuser.Driver
 	mongo *mongo.Client // the provision database, from the profile
+	// cacheStore is the mongo cache store, for /cache/invalidate
+	cacheStore *middleware.MongoCache
 
 	clientsMu sync.Mutex
 	clients   map[string]*mongo.Client // one connection per cluster, by connection string
@@ -143,6 +145,7 @@ func (c *Controller) Setup(r *chi.Mux) error {
 	// Initialize traffic model based on registry config
 	trafficModels := c.trafficModels(regData)
 	idempotencyModels := c.idempotencyModels(regData)
+	cacheModels := c.cacheModels(regData)
 
 	// Setup base middleware (chi built-in)
 	r.Use(chimw.RequestID)
@@ -170,6 +173,7 @@ func (c *Controller) Setup(r *chi.Mux) error {
 	r.Use(middleware.InjectObj(c.registry, c.awareness)) // the soajsinjectobj of key APIs, at the end of mt
 	r.Use(middleware.Idempotency(c.registry, idempotencyModels, c.logger))
 	r.Use(middleware.Traffic(c.registry, trafficModels, c.logger))
+	r.Use(middleware.Cache(c.registry, cacheModels, c.logger))
 	r.Use(middleware.LastSeen(c.registry, c.awareness))
 
 	// Final handler - proxy to service
@@ -221,6 +225,24 @@ func (c *Controller) ReloadProvision() error {
 func (c *Controller) ReloadRegistry() error {
 	return c.registry.Reload()
 }
+
+// cacheModels are the response cache stores (mw/cache/model): memory, and mongo in the
+// environment's gateway database, else provision, both ready as in Node.js; the custom registry
+// gateway cache.model picks one. The mongo store is kept for /cache/invalidate.
+func (c *Controller) cacheModels(regData *types.RegistryData) map[string]middleware.CacheModel {
+	models := map[string]middleware.CacheModel{"memory": middleware.NewMemoryCache(context.Background())}
+	client, err := c.coreClient(regData, "gateway")
+	if err != nil {
+		c.logger.Error("gateway database: caching with the mongo model is off", zap.Error(err))
+		return models
+	}
+	c.cacheStore = middleware.NewMongoCache(client.Database(), c.logger)
+	models["mongo"] = c.cacheStore
+	return models
+}
+
+// CacheStore is the mongo cache store, nil when the gateway database is not available.
+func (c *Controller) CacheStore() *middleware.MongoCache { return c.cacheStore }
 
 // idempotencyModels are the Idempotency-Key stores (mw/idempotency/model): memory, and mongo in
 // the environment's gateway database, else provision, both ready as in Node.js; the custom

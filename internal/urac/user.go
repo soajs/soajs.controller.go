@@ -197,6 +197,9 @@ func lastSeenNetwork(reg *types.RegistryData) string {
 	return network
 }
 
+// ID is the user id of the token (Node.js uracDriver.id), "" without one.
+func (u *User) ID() string { return u.id }
+
 // Record is the user record, nil before Init.
 func (u *User) Record() map[string]interface{} { return u.record }
 
