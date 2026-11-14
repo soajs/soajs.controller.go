@@ -1,0 +1,9 @@
+{
+  "status": 200,
+  "headers": {
+    "Access-Control-Allow-Credentials": "true",
+    "Access-Control-Allow-Origin": "*",
+    "Content-Type": "application/json"
+  },
+  "body": "{\"data\":{\"method\":\"GET\",\"path\":\"/public/hello\",\"query\":\"\"},\"result\":true}"
+}

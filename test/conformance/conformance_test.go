@@ -20,6 +20,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"reflect"
 	"regexp"
 	"sort"
 	"strings"
@@ -32,6 +33,8 @@ var record = flag.Bool("record", false, "write golden/ from the running gateway 
 // vars are the fixture values a case refers to as $NAME.
 var vars = map[string]string{
 	"KEY_DEFAULT":   "5bbf311a30f4acaec52b7472be854cc95259156275114822ad91615d02d27609ac1ebf7aecfdc2355849a594cc55d042d9906c2c0190a3b7d5f5935d8053a953ede02160a6f8429f1ba971b8d9d6fe6afe7c59af3462d188c4b1a08e9c07670e",
+	"KEY_EXPIRED":   "5bbf311a30f4acaec52b7472be854cc95259156275114822ad91615d02d2760944be5f2421ce4cd2c35aae1da35ac3b96a72d5942c01956d1a29a29cfee5fa6d1c1e0bffdd48b418fb8615150a38a5c35b6117a9a86bcfdcf6086c797ace797a",
+	"KEY_STG":       "5bbf311a30f4acaec52b7472be854cc95259156275114822ad91615d02d27609ae1f75a4f8cdf2c4d66a956a94354d315cb54fffd2da740b16b23321cc397e7aee083b3aea2b66b992166c72629cfcad4b36c5c5b989de68c54a7b31cb01812e",
 	"KEY_NOSVC":     "5bbf311a30f4acaec52b7472be854cc95259156275114822ad91615d02d2760947f606f0000f7253607e4e33904ca3b83f6f77de03e310b91c80560ba80dd8dd623e129efcf0892b36ab66f32795fd06ab9121ca5d2674be1494591a2ae3f4f3",
 	"TOKEN_VALID":   "c0f0000000000000000000000000000000000001",
 	"TOKEN_EXPIRED": "c0f0000000000000000000000000000000000002",
@@ -50,6 +53,9 @@ type Case struct {
 	CompareHeaders []string `json:"compareHeaders,omitempty"`
 	// IgnoreFields are JSON fields whose value changes on every call, such as a timestamp.
 	IgnoreFields []string `json:"ignoreFields,omitempty"`
+	// CompareJSON compares the bodies as JSON values instead of bytes, for answers whose key
+	// order follows a map, such as a registry.
+	CompareJSON bool `json:"compareJSON,omitempty"`
 }
 
 // Answer is what a gateway answered.
@@ -169,6 +175,12 @@ func compare(c Case, want, got Answer) string {
 		}
 	}
 	wantBody, gotBody := mask(want.Body, c.IgnoreFields), mask(got.Body, c.IgnoreFields)
+	if c.CompareJSON {
+		var w, g interface{}
+		if json.Unmarshal([]byte(wantBody), &w) == nil && json.Unmarshal([]byte(gotBody), &g) == nil && reflect.DeepEqual(w, g) {
+			gotBody = wantBody
+		}
+	}
 	if wantBody != gotBody {
 		diffs = append(diffs, fmt.Sprintf("body:\n  want %s\n  got  %s", wantBody, gotBody))
 	}

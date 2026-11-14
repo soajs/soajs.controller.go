@@ -1,0 +1,7 @@
+{
+  "status": 200,
+  "headers": {
+    "Content-Type": "application/json"
+  },
+  "body": "{\"data\":{\"method\":\"DELETE\",\"path\":\"/private/item/42\",\"query\":\"force=true\"},\"result\":true}"
+}

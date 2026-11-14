@@ -1,0 +1,7 @@
+{
+  "status": 401,
+  "headers": {
+    "Content-Type": "application/json"
+  },
+  "body": "{\"result\":false,\"errors\":{\"codes\":[144],\"details\":[{\"code\":144,\"message\":\"The provided key cannot be used with this environment\"}]}}"
+}

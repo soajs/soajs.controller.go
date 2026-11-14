@@ -9,7 +9,9 @@
     "name": "favicon",
     "method": "GET",
     "path": "/favicon.ico",
-    "compareHeaders": ["Content-Type"]
+    "compareHeaders": [
+      "Content-Type"
+    ]
   },
   {
     "name": "unknown_service",
@@ -31,95 +33,470 @@
     "name": "invalid_key",
     "method": "GET",
     "path": "/conform/v1/private/hello",
-    "headers": {"key": "00112233445566778899aabbccddeeff"}
+    "headers": {
+      "key": "00112233445566778899aabbccddeeff"
+    }
   },
   {
     "name": "service_not_in_package",
     "method": "GET",
     "path": "/other/v1/hello",
-    "headers": {"key": "$KEY_NOSVC", "access_token": "$TOKEN_VALID"}
+    "headers": {
+      "key": "$KEY_NOSVC",
+      "access_token": "$TOKEN_VALID"
+    }
   },
   {
     "name": "api_not_in_package",
     "method": "GET",
     "path": "/conform/v1/restricted/api",
-    "headers": {"key": "$KEY_DEFAULT", "access_token": "$TOKEN_VALID"}
+    "headers": {
+      "key": "$KEY_DEFAULT",
+      "access_token": "$TOKEN_VALID"
+    }
   },
   {
     "name": "private_no_token",
     "method": "GET",
     "path": "/conform/v1/private/hello",
-    "headers": {"key": "$KEY_DEFAULT"}
+    "headers": {
+      "key": "$KEY_DEFAULT"
+    }
   },
   {
     "name": "private_unknown_token",
     "method": "GET",
     "path": "/conform/v1/private/hello",
-    "headers": {"key": "$KEY_DEFAULT", "access_token": "c0f00000000000000000000000000000000000ff"}
+    "headers": {
+      "key": "$KEY_DEFAULT",
+      "access_token": "c0f00000000000000000000000000000000000ff"
+    }
   },
   {
     "name": "private_expired_token",
     "method": "GET",
     "path": "/conform/v1/private/hello",
-    "headers": {"key": "$KEY_DEFAULT", "access_token": "$TOKEN_EXPIRED"}
+    "headers": {
+      "key": "$KEY_DEFAULT",
+      "access_token": "$TOKEN_EXPIRED"
+    }
   },
   {
     "name": "private_token_twice",
     "about": "token in the query and in the header",
     "method": "GET",
     "path": "/conform/v1/private/hello?access_token=$TOKEN_VALID",
-    "headers": {"key": "$KEY_DEFAULT", "access_token": "$TOKEN_VALID"}
+    "headers": {
+      "key": "$KEY_DEFAULT",
+      "access_token": "$TOKEN_VALID"
+    }
   },
   {
     "name": "private_bearer_token",
     "method": "GET",
     "path": "/conform/v1/private/hello",
-    "headers": {"key": "$KEY_DEFAULT", "Authorization": "Bearer $TOKEN_VALID"}
+    "headers": {
+      "key": "$KEY_DEFAULT",
+      "Authorization": "Bearer $TOKEN_VALID"
+    }
   },
   {
     "name": "private_basic_auth",
     "method": "GET",
     "path": "/conform/v1/private/hello",
-    "headers": {"key": "$KEY_DEFAULT", "Authorization": "Basic Y29uZm9ybWFuY2U6Y29uZm9ybWFuY2U="}
+    "headers": {
+      "key": "$KEY_DEFAULT",
+      "Authorization": "Basic Y29uZm9ybWFuY2U6Y29uZm9ybWFuY2U="
+    }
   },
   {
     "name": "private_ok",
     "about": "key, ACL and token pass; the mock service answers",
     "method": "GET",
     "path": "/conform/v1/private/hello",
-    "headers": {"key": "$KEY_DEFAULT", "access_token": "$TOKEN_VALID"}
+    "headers": {
+      "key": "$KEY_DEFAULT",
+      "access_token": "$TOKEN_VALID"
+    }
   },
   {
     "name": "public_ok",
     "method": "GET",
     "path": "/conform/v1/public/hello",
-    "headers": {"key": "$KEY_DEFAULT"}
+    "headers": {
+      "key": "$KEY_DEFAULT"
+    }
   },
   {
     "name": "banned_ip",
     "method": "GET",
     "path": "/conform/v1/public/hello",
-    "headers": {"key": "$KEY_DEFAULT", "X-Real-IP": "10.255.0.1", "X-Forwarded-For": "10.255.0.1"}
+    "headers": {
+      "key": "$KEY_DEFAULT",
+      "X-Real-IP": "10.255.0.1",
+      "X-Forwarded-For": "10.255.0.1"
+    }
   },
   {
     "name": "maintenance_heartbeat",
     "target": "maintenance",
     "method": "GET",
     "path": "/heartbeat",
-    "ignoreFields": ["ts"]
+    "ignoreFields": [
+      "ts"
+    ]
   },
   {
     "name": "maintenance_unknown_path",
     "target": "maintenance",
     "method": "GET",
     "path": "/nosuchpath",
-    "ignoreFields": ["ts"]
+    "ignoreFields": [
+      "ts"
+    ]
   },
   {
     "name": "maintenance_favicon",
     "target": "maintenance",
     "method": "GET",
     "path": "/favicon.ico",
-    "compareHeaders": ["Content-Type"]
+    "compareHeaders": [
+      "Content-Type"
+    ]
+  },
+  {
+    "name": "key_too_short",
+    "about": "from integration acl ExpiredKey: a key that cannot decrypt",
+    "method": "GET",
+    "path": "/conform/v1/private/hello",
+    "headers": {
+      "key": "short"
+    }
+  },
+  {
+    "name": "key_expired",
+    "about": "an extKey whose expDate has passed",
+    "method": "GET",
+    "path": "/conform/v1/public/hello",
+    "headers": {
+      "key": "$KEY_EXPIRED"
+    }
+  },
+  {
+    "name": "key_other_env",
+    "about": "an extKey of another environment (144)",
+    "method": "GET",
+    "path": "/conform/v1/public/hello",
+    "headers": {
+      "key": "$KEY_STG"
+    }
+  },
+  {
+    "name": "private_post_ok",
+    "about": "from integration http_methods POST",
+    "method": "POST",
+    "path": "/conform/v1/private/item",
+    "headers": {
+      "key": "$KEY_DEFAULT",
+      "access_token": "$TOKEN_VALID",
+      "Content-Type": "application/json"
+    },
+    "body": "{\"name\":\"conformance\"}"
+  },
+  {
+    "name": "private_put_ok",
+    "about": "from integration http_methods PUT",
+    "method": "PUT",
+    "path": "/conform/v1/private/item/42",
+    "headers": {
+      "key": "$KEY_DEFAULT",
+      "access_token": "$TOKEN_VALID",
+      "Content-Type": "application/json"
+    },
+    "body": "{\"name\":\"conformance\"}"
+  },
+  {
+    "name": "private_delete_ok",
+    "about": "from integration http_methods DELETE",
+    "method": "DELETE",
+    "path": "/conform/v1/private/item/42?force=true",
+    "headers": {
+      "key": "$KEY_DEFAULT",
+      "access_token": "$TOKEN_VALID"
+    }
+  },
+  {
+    "name": "private_patch_ok",
+    "about": "from integration http_methods PATCH",
+    "method": "PATCH",
+    "path": "/conform/v1/private/item/42",
+    "headers": {
+      "key": "$KEY_DEFAULT",
+      "access_token": "$TOKEN_VALID",
+      "Content-Type": "application/json"
+    },
+    "body": "{\"name\":\"conformance\"}"
+  },
+  {
+    "name": "public_head",
+    "about": "from integration http_methods HEAD",
+    "method": "HEAD",
+    "path": "/conform/v1/public/hello",
+    "headers": {
+      "key": "$KEY_DEFAULT"
+    }
+  },
+  {
+    "name": "cors_preflight",
+    "about": "from integration http_methods OPTIONS",
+    "method": "OPTIONS",
+    "path": "/conform/v1/public/hello",
+    "headers": {
+      "Origin": "http://localhost:4005",
+      "Access-Control-Request-Method": "GET",
+      "Access-Control-Request-Headers": "key"
+    },
+    "compareHeaders": [
+      "Access-Control-Allow-Origin",
+      "Access-Control-Allow-Methods",
+      "Access-Control-Allow-Headers",
+      "Access-Control-Allow-Credentials",
+      "Access-Control-Max-Age"
+    ]
+  },
+  {
+    "name": "cors_simple_request",
+    "about": "CORS headers on an ordinary answer",
+    "method": "GET",
+    "path": "/conform/v1/public/hello",
+    "headers": {
+      "key": "$KEY_DEFAULT",
+      "Origin": "http://localhost:4005"
+    },
+    "compareHeaders": [
+      "Access-Control-Allow-Origin",
+      "Access-Control-Allow-Methods",
+      "Access-Control-Allow-Headers",
+      "Access-Control-Allow-Credentials",
+      "Access-Control-Max-Age"
+    ]
+  },
+  {
+    "name": "soajs_acl_no_key",
+    "about": "from integration SoajsACL NoKey",
+    "method": "GET",
+    "path": "/soajs/acl"
+  },
+  {
+    "name": "soajs_acl_key",
+    "about": "from integration GuestPackageACL",
+    "method": "GET",
+    "path": "/soajs/acl",
+    "headers": {
+      "key": "$KEY_DEFAULT"
+    },
+    "compareJSON": true
+  },
+  {
+    "name": "soajs_acl_key_token",
+    "about": "from integration SoajsACL WithKey and OwnerPackageACL",
+    "method": "GET",
+    "path": "/soajs/acl",
+    "headers": {
+      "key": "$KEY_DEFAULT",
+      "access_token": "$TOKEN_VALID"
+    },
+    "compareJSON": true
+  },
+  {
+    "name": "soajs_proxy_no_route",
+    "about": "from integration SoajsProxy MissingProxyRoute",
+    "method": "GET",
+    "path": "/soajs/proxy",
+    "headers": {
+      "key": "$KEY_DEFAULT",
+      "access_token": "$TOKEN_VALID"
+    }
+  },
+  {
+    "name": "soajs_proxy_relative_route",
+    "about": "from integration SoajsProxy ValidProxyRoute",
+    "method": "GET",
+    "path": "/soajs/proxy?proxyRoute=%2Fconform%2Fv1%2Fpublic%2Fhello",
+    "headers": {
+      "key": "$KEY_DEFAULT",
+      "access_token": "$TOKEN_VALID"
+    }
+  },
+  {
+    "name": "soajs_proxy_full_uri",
+    "about": "from integration SoajsProxy FullURI",
+    "method": "GET",
+    "path": "/soajs/proxy?proxyRoute=http%3A%2F%2F127.0.0.1%3A24100%2Fpublic%2Fhello",
+    "headers": {
+      "key": "$KEY_DEFAULT",
+      "access_token": "$TOKEN_VALID"
+    }
+  },
+  {
+    "name": "soajs_proxy_unknown_env",
+    "about": "from integration SoajsProxy InvalidEnv and MissingRegistryEnv",
+    "method": "GET",
+    "path": "/soajs/proxy?proxyRoute=%2Fconform%2Fv1%2Fpublic%2Fhello&__env=nosuchenv",
+    "headers": {
+      "key": "$KEY_DEFAULT",
+      "access_token": "$TOKEN_VALID"
+    }
+  },
+  {
+    "name": "soajs_proxy_other_env",
+    "about": "from integration SoajsProxy ForbiddenEnv: an environment the key has no extKey for",
+    "method": "GET",
+    "path": "/soajs/proxy?proxyRoute=%2Fconform%2Fv1%2Fpublic%2Fhello&__env=dashboard",
+    "headers": {
+      "key": "$KEY_DEFAULT",
+      "access_token": "$TOKEN_VALID"
+    }
+  },
+  {
+    "name": "soajs_proxy_env_without_registry",
+    "about": "from integration SoajsProxy MissingRegistryEnv: the key has an extKey for STG, which has no registry",
+    "method": "GET",
+    "path": "/soajs/proxy?proxyRoute=%2Fconform%2Fv1%2Fpublic%2Fhello&__env=stg",
+    "headers": {
+      "key": "$KEY_DEFAULT",
+      "access_token": "$TOKEN_VALID"
+    }
+  },
+  {
+    "name": "soajs_proxy_invalid_uri",
+    "about": "from integration SoajsProxy InvalidURI",
+    "method": "GET",
+    "path": "/soajs/proxy?proxyRoute=http%3A%2F%2F%3A%3A%3A",
+    "headers": {
+      "key": "$KEY_DEFAULT",
+      "access_token": "$TOKEN_VALID"
+    }
+  },
+  {
+    "name": "oauth_passport_login",
+    "about": "from integration OAuthPassport",
+    "method": "GET",
+    "path": "/oauth/passport/login/github",
+    "headers": {
+      "key": "$KEY_DEFAULT"
+    }
+  },
+  {
+    "name": "roaming_service_not_configured",
+    "about": "from integration Roaming NotInRegistry",
+    "method": "GET",
+    "path": "/other/v1/hello",
+    "headers": {
+      "key": "$KEY_DEFAULT",
+      "access_token": "$TOKEN_VALID",
+      "soajsroaming": "true",
+      "X-Real-IP": "10.255.0.9"
+    },
+    "compareHeaders": [
+      "Soajsinjectobj"
+    ]
+  },
+  {
+    "name": "roaming_wrong_ip",
+    "about": "from integration Roaming WrongIP",
+    "method": "GET",
+    "path": "/conform/v1/private/hello",
+    "headers": {
+      "key": "$KEY_DEFAULT",
+      "access_token": "$TOKEN_VALID",
+      "soajsroaming": "true",
+      "X-Real-IP": "10.255.0.8"
+    },
+    "compareHeaders": [
+      "Soajsinjectobj"
+    ]
+  },
+  {
+    "name": "roaming_ok",
+    "about": "from integration Roaming Success",
+    "method": "GET",
+    "path": "/conform/v1/private/hello",
+    "headers": {
+      "key": "$KEY_DEFAULT",
+      "access_token": "$TOKEN_VALID",
+      "soajsroaming": "true",
+      "X-Real-IP": "10.255.0.9",
+      "soajsinjectobj": "{\"tenant\":{\"id\":\"x\"}}"
+    },
+    "compareHeaders": [
+      "Soajsinjectobj"
+    ]
+  },
+  {
+    "name": "maintenance_get_registry",
+    "about": "from integration GetRegistry",
+    "target": "maintenance",
+    "method": "GET",
+    "path": "/getRegistry?serviceName=conform&type=service",
+    "compareJSON": true,
+    "ignoreFields": [
+      "timeLoaded",
+      "ts"
+    ]
+  },
+  {
+    "name": "maintenance_awareness_stat",
+    "about": "from integration AwarenessStat",
+    "target": "maintenance",
+    "method": "GET",
+    "path": "/awarenessStat",
+    "compareJSON": true,
+    "ignoreFields": [
+      "ts",
+      "lastCheck",
+      "downSince",
+      "downCount",
+      "healthy"
+    ]
+  },
+  {
+    "name": "maintenance_load_provision",
+    "about": "from integration LoadProvision",
+    "target": "maintenance",
+    "method": "GET",
+    "path": "/loadProvision",
+    "compareJSON": true,
+    "ignoreFields": [
+      "ts"
+    ]
+  },
+  {
+    "name": "maintenance_reload_registry",
+    "about": "from integration ReloadRegistry",
+    "target": "maintenance",
+    "method": "GET",
+    "path": "/reloadRegistry",
+    "compareJSON": true,
+    "ignoreFields": [
+      "timeLoaded",
+      "ts"
+    ]
+  },
+  {
+    "name": "maintenance_register",
+    "about": "from integration RegisterPOST; last, since it records a host",
+    "target": "maintenance",
+    "method": "POST",
+    "path": "/register",
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "body": "{\"name\":\"other\",\"group\":\"Conformance\",\"version\":\"1\",\"type\":\"service\",\"ip\":\"127.0.0.3\",\"port\":24200}",
+    "compareJSON": true,
+    "ignoreFields": [
+      "ts",
+      "timeLoaded"
+    ]
   }
 ]
