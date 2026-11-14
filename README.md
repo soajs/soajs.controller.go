@@ -1,207 +1,92 @@
 # SOAJS Controller (Go)
 
-[![Go Version](https://img.shields.io/badge/Go-1.26+-00ADD8?style=flat&logo=go)](https://go.dev/)
+[![Go Version](https://img.shields.io/badge/Go-1.25+-00ADD8?style=flat&logo=go)](https://go.dev/)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 
-High-performance API Gateway for SOAJS microservices platform, rewritten in Go.
+The SOAJS API gateway written in Go. The Node.js gateway, [soajs.controller](https://github.com/soajs/soajs.controller) 4.3.28, is its specification. The Go gateway reads the same profile and the same databases, and answers requests as that gateway does.
 
-> **Status**: Core Implementation Complete - Integration Tests Passing (22/22)
+**Status:**
+- Every area of the Node.js gateway is ported:
+  - the request chain (url, key, ACL, OAuth, urac, injectObj, proxy);
+  - awareness and HA;
+  - traffic, lastSeen and monitor;
+  - the maintenance port;
+  - `/soajs/acl`, `/soajs/proxy` and `/soajs/mcp` with its authorization flow;
+  - idempotency and the response cache.
+- The [conformance harness](test/conformance/README.md) replays 123 requests against both gateways on the same fixture database and compares status, headers and body byte for byte. Both pass all of them.
+- The places where Go deliberately answers differently are listed in [docs/differences.md](docs/differences.md).
 
-## Features
-
-- Multi-tenant API gateway
-- Service discovery and load balancing
-- API key authentication
-- OAuth 2.0 support
-- Rate limiting
-- ACL enforcement
-- Health monitoring
-- Kubernetes-native HA mode
+Go reads only the latest data schema ([docs/data-schema](docs/data-schema/README.md)). It carries no compatibility code for older shapes: a document that does not match its schema is logged and skipped or refused, never converted.
 
 ## Requirements
 
-- Go 1.25+
-- MongoDB 5.0+
+- Go 1.25 or later
+- MongoDB, holding the SOAJS databases (provision, the environment's core databases)
 
-## Quick Start
-
-### Build
+## Build
 
 ```bash
-go build -o controller ./cmd/controller
+make build                                   # bin/controller
+go build -o bin/controller ./cmd/controller  # the same, without make
 ```
 
-### Run locally (SOAJS development environment)
+## Run
 
 ```bash
-# Option 1: Use the start script
-./start_local.sh
-
-# Option 2: Run manually with environment variables
-SOAJS_ENV=dashboard SOAJS_PROFILE=/opt/soajs/profile/soajsprofile ./controller
+SOAJS_ENV=dev SOAJS_PROFILE=/opt/soajs/profile/soajsprofile ./bin/controller
 ```
 
-The controller will start on:
-- **Port 4000**: Main gateway (proxies requests to backend services)
-- **Port 5001**: Maintenance endpoints (heartbeat, reload, awareness)
+- **`SOAJS_PROFILE`** is required. It is the profile file the Node.js gateway reads (`module.exports = {"name": "core_provision", "prefix": "", "servers": [...], ...}`), which says where the provision database is.
+- **`SOAJS_ENV`** is the environment whose registry the gateway loads.
+- **Ports:**
+  - the gateway listens on `SOAJS_SERVICE_PORT` (4000);
+  - the maintenance port is the registry's `serviceConfig.ports.controller` + `serviceConfig.ports.maintenanceInc`.
 
-### Run with Docker
+All settings are in [docs/configuration.md](docs/configuration.md).
+
+## Test
 
 ```bash
-cd deployments
-docker-compose up -d
+make test                              # go test -race -cover ./...
+test/conformance/run.sh go             # the Go gateway against the Node.js answers
 ```
 
-### Run unit tests
+The conformance harness needs a local MongoDB (`127.0.0.1:27017`, or `MONGO_URI`) and free ports 24000, 25000, 26000, 27000, 24100, 25100, 24200 and 25200. To record the Node.js answers again:
 
 ```bash
-make test
+NODE_CONTROLLER_DIR=/path/to/soajs.controller test/conformance/run.sh node -record
 ```
 
-### Run the conformance tests
+Some unit tests use a local MongoDB too, in databases named `conformance_*` that they drop; they are skipped without one.
 
-The Go gateway must answer as the Node.js gateway does. `test/conformance` replays fixed requests and compares every answer with Node.js's, byte for byte (see test/conformance/README.md):
+## Routes
 
-```bash
-test/conformance/run.sh go
-```
+**Gateway port:**
 
-## Configuration
+| Route | |
+|---|---|
+| `/<service>[/v<version>]/<path>` | Proxied to the service, after the key, ACL, OAuth and user checks of its version. |
+| `/soajs/acl` | The caller's ACL, finalACL, packages, user and tenant. |
+| `/soajs/proxy?proxyRoute=…[&__env=…]` | Forwards the request to a URL, or to another environment's gateway with the tenant's key for it. |
+| `/soajs/mcp` | MCP (JSON-RPC 2.0): the APIs the caller may use, as tools. On when the custom registry `gateway.mcp.enabled` is true. |
+| `/.well-known/oauth-protected-resource[/soajs/mcp]`, `/.well-known/{oauth-authorization-server,openid-configuration}/soajs/mcp/auth/<id>` | MCP authorization metadata, when `gateway.mcp.auth` is set. |
 
-Configuration can be provided via:
-1. Environment variables (SOAJS_ prefix)
-2. Config file (configs/default.yaml)
+**Maintenance port:** `/heartbeat` (and any unknown path), `/reloadRegistry`, `/loadProvision`, `/getRegistry`, `/awarenessStat`, `POST /register`, `POST /cache/invalidate`, `/favicon.ico`.
 
-### Environment Variables
+How a request goes through the gateway: [docs/architecture.md](docs/architecture.md).
 
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `SOAJS_ENV` | Environment name | dev |
-| `SOAJS_SERVICE_PORT` | HTTP port | 4000 |
-| `SOAJS_PROFILE` | The profile file: where the provision database lives, the same file the Node.js gateway reads (`module.exports = {"name": "core_provision", "prefix": "", "servers": [...], ...}`) | required |
-| `SOAJS_SENSITIVE_ENVS` | JSON array of environments whose tokens are accepted everywhere | `["dashboard"]` |
-| `SOAJS_DEPLOY_HA` | Any value: HA mode, no hosts collection | |
-| `SOAJS_LOG_LEVEL` | Log level (debug/info/warn/error) | info |
+## Repository
 
-## API Endpoints
-
-### Gateway (Port 4000)
-
-All requests are proxied to backend services based on the URL path:
-- `/{service}/{path}` - Route to service (version defaults to 1)
-- `/{service}/v{N}/{path}` - Route to specific service version
-
-#### Special Routes
-
-| Route | Description |
-|-------|-------------|
-| `/soajs/acl` | Get ACL for current tenant/key |
-| `/soajs/proxy?proxyRoute=/{service}/{path}` | Proxy to service via query param |
-
-### Maintenance (Port 5001)
-
-| Endpoint | Description |
-|----------|-------------|
-| `GET /heartbeat` | Health check |
-| `GET /loadProvision` | Reload provision data |
-| `GET /reloadRegistry` | Reload registry |
-| `GET /getRegistry` | Get registry data for a service |
-| `GET /awarenessStat` | Get service awareness stats |
-| `GET,POST /register` | Register a service host |
-
-## Project Structure
-
-```
-├── cmd/controller/      # Application entry point
-├── internal/
-│   ├── config/         # Configuration management
-│   ├── server/         # HTTP server
-│   ├── middleware/     # 17-layer middleware pipeline
-│   ├── registry/       # Service registry
-│   ├── provision/      # Tenant/key management
-│   ├── awareness/      # Service discovery
-│   └── lib/            # Internal utilities
-├── pkg/
-│   ├── core/           # Core utilities
-│   ├── mongo/          # MongoDB client
-│   ├── types/          # Shared types
-│   └── urac/           # User management
-├── configs/            # Configuration files
-├── deployments/        # Docker/K8s files
-├── docs/               # Documentation
-└── test/               # Tests
-```
-
-## Middleware Pipeline
-
-The controller implements a 17-layer middleware pipeline:
-
-1. `context` - Initialize SOAJS context
-2. `cors` - CORS headers
-3. `favicon` - Favicon handler
-4. `response` - Response formatting
-5. `enhancer` - Request enrichment
-6. `ip2ban` - IP blacklist
-7. `maintenance` - Maintenance mode check
-8. `url` - URL parsing
-9. `awareness` - Service discovery
-10. `awarenessEnv` - Environment-aware discovery
-11. `key` - API key extraction
-12. `keyACL` - Key-based permissions
-13. `gotoService` - Service routing
-14. `oauth` - OAuth validation
-15. `mt` - Multi-tenant resolution
-16. `traffic` - Rate limiting
-17. `lastSeen` - Activity tracking
-
-## Documentation
-
-See the [docs/](./docs/) directory for detailed documentation:
-
-- [Feasibility Assessment](./docs/feasibility-assessment.md)
-- [Architecture Mapping](./docs/architecture-mapping.md)
-- [Project Structure](./docs/go-project-structure.md)
-- [Dependencies](./docs/go-dependencies.md)
-- [Implementation Phases](./docs/implementation-phases.md)
-
-## Development
-
-### Prerequisites
-
-```bash
-# Install Go 1.25+
-# Install MongoDB 5.0+
-```
-
-### Build
-
-```bash
-make build          # Build binary
-make build-linux    # Cross-compile for Linux
-make docker         # Build Docker image
-```
-
-### Test
-
-```bash
-make test           # Run tests
-make test-coverage  # Run with coverage report
-make lint           # Run linters
-```
-
-### Development mode
-
-```bash
-make dev            # Run in development mode
-make watch          # Run with hot reload (requires air)
-```
-
-## Related Projects
-
-- [soajs.controller](https://github.com/soajs/soajs.controller) - Original Node.js implementation
-- [soajs.core.modules](https://github.com/soajs/soajs.core.modules) - Core modules
-- [soajs.urac.driver](https://github.com/soajs/soajs.urac.driver) - URAC driver
+| Path | |
+|---|---|
+| `cmd/controller` | The gateway. |
+| `cmd/schemacheck` | Checks a database against the data schema (field names and types only). |
+| `internal/` | The gateway's packages: middleware, registry, provision, awareness, urac, server. |
+| `pkg/` | Types, the mongo client, key decryption, logging, version. |
+| `docs/` | Configuration, architecture, differences from Node.js, data schema. |
+| `test/conformance` | The conformance harness. |
+| `deployments/`, `configs/` | Container, Kubernetes and configuration examples. The conformance harness does not cover them. |
 
 ## License
 
-Apache 2.0 - See [LICENSE](LICENSE) file
+Apache 2.0, see [LICENSE](LICENSE). Third-party notices: [THIRD_PARTY.md](THIRD_PARTY.md).
