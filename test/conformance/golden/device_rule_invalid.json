@@ -1,0 +1,7 @@
+{
+  "status": 500,
+  "headers": {
+    "Content-Type": "application/json"
+  },
+  "body": "{\"result\":false,\"errors\":{\"codes\":[164],\"details\":[{\"code\":164,\"message\":\"Unknown error @ rest core!\"}]}}"
+}

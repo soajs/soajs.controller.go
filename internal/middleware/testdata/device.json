@@ -1,0 +1,1520 @@
+[
+ {
+  "name": "none",
+  "device": null,
+  "ua": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.6099.130 Safari/537.36",
+  "code": 0
+ },
+ {
+  "name": "none",
+  "device": null,
+  "ua": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_2_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2 Mobile/15E148 Safari/604.1",
+  "code": 0
+ },
+ {
+  "name": "none",
+  "device": null,
+  "ua": "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.6099.144 Mobile Safari/537.36",
+  "code": 0
+ },
+ {
+  "name": "none",
+  "device": null,
+  "ua": "curl/8.4.0",
+  "code": 0
+ },
+ {
+  "name": "none",
+  "device": null,
+  "ua": "constructor/1",
+  "code": 0
+ },
+ {
+  "name": "none",
+  "device": null,
+  "ua": "",
+  "code": 0
+ },
+ {
+  "name": "empty",
+  "device": {},
+  "ua": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.6099.130 Safari/537.36",
+  "code": 0
+ },
+ {
+  "name": "empty",
+  "device": {},
+  "ua": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_2_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2 Mobile/15E148 Safari/604.1",
+  "code": 0
+ },
+ {
+  "name": "empty",
+  "device": {},
+  "ua": "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.6099.144 Mobile Safari/537.36",
+  "code": 0
+ },
+ {
+  "name": "empty",
+  "device": {},
+  "ua": "curl/8.4.0",
+  "code": 0
+ },
+ {
+  "name": "empty",
+  "device": {},
+  "ua": "constructor/1",
+  "code": 0
+ },
+ {
+  "name": "empty",
+  "device": {},
+  "ua": "",
+  "code": 0
+ },
+ {
+  "name": "allow-chrome",
+  "device": {
+   "allow": [
+    {
+     "family": "chrome"
+    }
+   ]
+  },
+  "ua": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.6099.130 Safari/537.36",
+  "code": 0
+ },
+ {
+  "name": "allow-chrome",
+  "device": {
+   "allow": [
+    {
+     "family": "chrome"
+    }
+   ]
+  },
+  "ua": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_2_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2 Mobile/15E148 Safari/604.1",
+  "code": 156
+ },
+ {
+  "name": "allow-chrome",
+  "device": {
+   "allow": [
+    {
+     "family": "chrome"
+    }
+   ]
+  },
+  "ua": "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.6099.144 Mobile Safari/537.36",
+  "code": 156
+ },
+ {
+  "name": "allow-chrome",
+  "device": {
+   "allow": [
+    {
+     "family": "chrome"
+    }
+   ]
+  },
+  "ua": "curl/8.4.0",
+  "code": 156
+ },
+ {
+  "name": "allow-chrome",
+  "device": {
+   "allow": [
+    {
+     "family": "chrome"
+    }
+   ]
+  },
+  "ua": "constructor/1",
+  "code": 156
+ },
+ {
+  "name": "allow-chrome",
+  "device": {
+   "allow": [
+    {
+     "family": "chrome"
+    }
+   ]
+  },
+  "ua": "",
+  "code": 0
+ },
+ {
+  "name": "deny-chrome",
+  "device": {
+   "deny": [
+    {
+     "family": "Chrome"
+    }
+   ]
+  },
+  "ua": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.6099.130 Safari/537.36",
+  "code": 156
+ },
+ {
+  "name": "deny-chrome",
+  "device": {
+   "deny": [
+    {
+     "family": "Chrome"
+    }
+   ]
+  },
+  "ua": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_2_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2 Mobile/15E148 Safari/604.1",
+  "code": 0
+ },
+ {
+  "name": "deny-chrome",
+  "device": {
+   "deny": [
+    {
+     "family": "Chrome"
+    }
+   ]
+  },
+  "ua": "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.6099.144 Mobile Safari/537.36",
+  "code": 0
+ },
+ {
+  "name": "deny-chrome",
+  "device": {
+   "deny": [
+    {
+     "family": "Chrome"
+    }
+   ]
+  },
+  "ua": "curl/8.4.0",
+  "code": 0
+ },
+ {
+  "name": "deny-chrome",
+  "device": {
+   "deny": [
+    {
+     "family": "Chrome"
+    }
+   ]
+  },
+  "ua": "constructor/1",
+  "code": 0
+ },
+ {
+  "name": "deny-chrome",
+  "device": {
+   "deny": [
+    {
+     "family": "Chrome"
+    }
+   ]
+  },
+  "ua": "",
+  "code": 0
+ },
+ {
+  "name": "allow-star",
+  "device": {
+   "allow": [
+    {
+     "family": "*"
+    }
+   ]
+  },
+  "ua": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.6099.130 Safari/537.36",
+  "code": 0
+ },
+ {
+  "name": "allow-star",
+  "device": {
+   "allow": [
+    {
+     "family": "*"
+    }
+   ]
+  },
+  "ua": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_2_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2 Mobile/15E148 Safari/604.1",
+  "code": 0
+ },
+ {
+  "name": "allow-star",
+  "device": {
+   "allow": [
+    {
+     "family": "*"
+    }
+   ]
+  },
+  "ua": "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.6099.144 Mobile Safari/537.36",
+  "code": 0
+ },
+ {
+  "name": "allow-star",
+  "device": {
+   "allow": [
+    {
+     "family": "*"
+    }
+   ]
+  },
+  "ua": "curl/8.4.0",
+  "code": 0
+ },
+ {
+  "name": "allow-star",
+  "device": {
+   "allow": [
+    {
+     "family": "*"
+    }
+   ]
+  },
+  "ua": "constructor/1",
+  "code": 0
+ },
+ {
+  "name": "allow-star",
+  "device": {
+   "allow": [
+    {
+     "family": "*"
+    }
+   ]
+  },
+  "ua": "",
+  "code": 0
+ },
+ {
+  "name": "allow-chrome-major-120",
+  "device": {
+   "allow": [
+    {
+     "family": "Chrome",
+     "major": "120"
+    }
+   ]
+  },
+  "ua": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.6099.130 Safari/537.36",
+  "code": 0
+ },
+ {
+  "name": "allow-chrome-major-120",
+  "device": {
+   "allow": [
+    {
+     "family": "Chrome",
+     "major": "120"
+    }
+   ]
+  },
+  "ua": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_2_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2 Mobile/15E148 Safari/604.1",
+  "code": 156
+ },
+ {
+  "name": "allow-chrome-major-120",
+  "device": {
+   "allow": [
+    {
+     "family": "Chrome",
+     "major": "120"
+    }
+   ]
+  },
+  "ua": "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.6099.144 Mobile Safari/537.36",
+  "code": 156
+ },
+ {
+  "name": "allow-chrome-major-120",
+  "device": {
+   "allow": [
+    {
+     "family": "Chrome",
+     "major": "120"
+    }
+   ]
+  },
+  "ua": "curl/8.4.0",
+  "code": 156
+ },
+ {
+  "name": "allow-chrome-major-120",
+  "device": {
+   "allow": [
+    {
+     "family": "Chrome",
+     "major": "120"
+    }
+   ]
+  },
+  "ua": "constructor/1",
+  "code": 156
+ },
+ {
+  "name": "allow-chrome-major-120",
+  "device": {
+   "allow": [
+    {
+     "family": "Chrome",
+     "major": "120"
+    }
+   ]
+  },
+  "ua": "",
+  "code": 0
+ },
+ {
+  "name": "allow-chrome-major-min",
+  "device": {
+   "allow": [
+    {
+     "family": "Chrome",
+     "major": {
+      "min": "100"
+     }
+    }
+   ]
+  },
+  "ua": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.6099.130 Safari/537.36",
+  "code": 0
+ },
+ {
+  "name": "allow-chrome-major-min",
+  "device": {
+   "allow": [
+    {
+     "family": "Chrome",
+     "major": {
+      "min": "100"
+     }
+    }
+   ]
+  },
+  "ua": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_2_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2 Mobile/15E148 Safari/604.1",
+  "code": 156
+ },
+ {
+  "name": "allow-chrome-major-min",
+  "device": {
+   "allow": [
+    {
+     "family": "Chrome",
+     "major": {
+      "min": "100"
+     }
+    }
+   ]
+  },
+  "ua": "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.6099.144 Mobile Safari/537.36",
+  "code": 156
+ },
+ {
+  "name": "allow-chrome-major-min",
+  "device": {
+   "allow": [
+    {
+     "family": "Chrome",
+     "major": {
+      "min": "100"
+     }
+    }
+   ]
+  },
+  "ua": "curl/8.4.0",
+  "code": 156
+ },
+ {
+  "name": "allow-chrome-major-min",
+  "device": {
+   "allow": [
+    {
+     "family": "Chrome",
+     "major": {
+      "min": "100"
+     }
+    }
+   ]
+  },
+  "ua": "constructor/1",
+  "code": 156
+ },
+ {
+  "name": "allow-chrome-major-min",
+  "device": {
+   "allow": [
+    {
+     "family": "Chrome",
+     "major": {
+      "min": "100"
+     }
+    }
+   ]
+  },
+  "ua": "",
+  "code": 0
+ },
+ {
+  "name": "allow-chrome-major-max",
+  "device": {
+   "allow": [
+    {
+     "family": "Chrome",
+     "major": {
+      "max": "100"
+     }
+    }
+   ]
+  },
+  "ua": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.6099.130 Safari/537.36",
+  "code": 156
+ },
+ {
+  "name": "allow-chrome-major-max",
+  "device": {
+   "allow": [
+    {
+     "family": "Chrome",
+     "major": {
+      "max": "100"
+     }
+    }
+   ]
+  },
+  "ua": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_2_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2 Mobile/15E148 Safari/604.1",
+  "code": 156
+ },
+ {
+  "name": "allow-chrome-major-max",
+  "device": {
+   "allow": [
+    {
+     "family": "Chrome",
+     "major": {
+      "max": "100"
+     }
+    }
+   ]
+  },
+  "ua": "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.6099.144 Mobile Safari/537.36",
+  "code": 156
+ },
+ {
+  "name": "allow-chrome-major-max",
+  "device": {
+   "allow": [
+    {
+     "family": "Chrome",
+     "major": {
+      "max": "100"
+     }
+    }
+   ]
+  },
+  "ua": "curl/8.4.0",
+  "code": 156
+ },
+ {
+  "name": "allow-chrome-major-max",
+  "device": {
+   "allow": [
+    {
+     "family": "Chrome",
+     "major": {
+      "max": "100"
+     }
+    }
+   ]
+  },
+  "ua": "constructor/1",
+  "code": 156
+ },
+ {
+  "name": "allow-chrome-major-max",
+  "device": {
+   "allow": [
+    {
+     "family": "Chrome",
+     "major": {
+      "max": "100"
+     }
+    }
+   ]
+  },
+  "ua": "",
+  "code": 0
+ },
+ {
+  "name": "allow-major-number",
+  "device": {
+   "allow": [
+    {
+     "family": "Chrome",
+     "major": 120
+    }
+   ]
+  },
+  "ua": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.6099.130 Safari/537.36",
+  "code": 0
+ },
+ {
+  "name": "allow-major-number",
+  "device": {
+   "allow": [
+    {
+     "family": "Chrome",
+     "major": 120
+    }
+   ]
+  },
+  "ua": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_2_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2 Mobile/15E148 Safari/604.1",
+  "code": 156
+ },
+ {
+  "name": "allow-major-number",
+  "device": {
+   "allow": [
+    {
+     "family": "Chrome",
+     "major": 120
+    }
+   ]
+  },
+  "ua": "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.6099.144 Mobile Safari/537.36",
+  "code": 156
+ },
+ {
+  "name": "allow-major-number",
+  "device": {
+   "allow": [
+    {
+     "family": "Chrome",
+     "major": 120
+    }
+   ]
+  },
+  "ua": "curl/8.4.0",
+  "code": 156
+ },
+ {
+  "name": "allow-major-number",
+  "device": {
+   "allow": [
+    {
+     "family": "Chrome",
+     "major": 120
+    }
+   ]
+  },
+  "ua": "constructor/1",
+  "code": 156
+ },
+ {
+  "name": "allow-major-number",
+  "device": {
+   "allow": [
+    {
+     "family": "Chrome",
+     "major": 120
+    }
+   ]
+  },
+  "ua": "",
+  "code": 0
+ },
+ {
+  "name": "allow-os-windows",
+  "device": {
+   "allow": [
+    {
+     "os": {
+      "family": "win"
+     }
+    }
+   ]
+  },
+  "ua": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.6099.130 Safari/537.36",
+  "code": 0
+ },
+ {
+  "name": "allow-os-windows",
+  "device": {
+   "allow": [
+    {
+     "os": {
+      "family": "win"
+     }
+    }
+   ]
+  },
+  "ua": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_2_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2 Mobile/15E148 Safari/604.1",
+  "code": 156
+ },
+ {
+  "name": "allow-os-windows",
+  "device": {
+   "allow": [
+    {
+     "os": {
+      "family": "win"
+     }
+    }
+   ]
+  },
+  "ua": "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.6099.144 Mobile Safari/537.36",
+  "code": 156
+ },
+ {
+  "name": "allow-os-windows",
+  "device": {
+   "allow": [
+    {
+     "os": {
+      "family": "win"
+     }
+    }
+   ]
+  },
+  "ua": "curl/8.4.0",
+  "code": 156
+ },
+ {
+  "name": "allow-os-windows",
+  "device": {
+   "allow": [
+    {
+     "os": {
+      "family": "win"
+     }
+    }
+   ]
+  },
+  "ua": "constructor/1",
+  "code": 156
+ },
+ {
+  "name": "allow-os-windows",
+  "device": {
+   "allow": [
+    {
+     "os": {
+      "family": "win"
+     }
+    }
+   ]
+  },
+  "ua": "",
+  "code": 0
+ },
+ {
+  "name": "allow-os-ios-17",
+  "device": {
+   "allow": [
+    {
+     "os": {
+      "family": "iOS",
+      "major": "17"
+     }
+    }
+   ]
+  },
+  "ua": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.6099.130 Safari/537.36",
+  "code": 156
+ },
+ {
+  "name": "allow-os-ios-17",
+  "device": {
+   "allow": [
+    {
+     "os": {
+      "family": "iOS",
+      "major": "17"
+     }
+    }
+   ]
+  },
+  "ua": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_2_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2 Mobile/15E148 Safari/604.1",
+  "code": 0
+ },
+ {
+  "name": "allow-os-ios-17",
+  "device": {
+   "allow": [
+    {
+     "os": {
+      "family": "iOS",
+      "major": "17"
+     }
+    }
+   ]
+  },
+  "ua": "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.6099.144 Mobile Safari/537.36",
+  "code": 156
+ },
+ {
+  "name": "allow-os-ios-17",
+  "device": {
+   "allow": [
+    {
+     "os": {
+      "family": "iOS",
+      "major": "17"
+     }
+    }
+   ]
+  },
+  "ua": "curl/8.4.0",
+  "code": 156
+ },
+ {
+  "name": "allow-os-ios-17",
+  "device": {
+   "allow": [
+    {
+     "os": {
+      "family": "iOS",
+      "major": "17"
+     }
+    }
+   ]
+  },
+  "ua": "constructor/1",
+  "code": 156
+ },
+ {
+  "name": "allow-os-ios-17",
+  "device": {
+   "allow": [
+    {
+     "os": {
+      "family": "iOS",
+      "major": "17"
+     }
+    }
+   ]
+  },
+  "ua": "",
+  "code": 0
+ },
+ {
+  "name": "allow-os-android-major",
+  "device": {
+   "allow": [
+    {
+     "os": {
+      "family": "Android",
+      "major": "0"
+     }
+    }
+   ]
+  },
+  "ua": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.6099.130 Safari/537.36",
+  "code": 156
+ },
+ {
+  "name": "allow-os-android-major",
+  "device": {
+   "allow": [
+    {
+     "os": {
+      "family": "Android",
+      "major": "0"
+     }
+    }
+   ]
+  },
+  "ua": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_2_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2 Mobile/15E148 Safari/604.1",
+  "code": 156
+ },
+ {
+  "name": "allow-os-android-major",
+  "device": {
+   "allow": [
+    {
+     "os": {
+      "family": "Android",
+      "major": "0"
+     }
+    }
+   ]
+  },
+  "ua": "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.6099.144 Mobile Safari/537.36",
+  "code": 0
+ },
+ {
+  "name": "allow-os-android-major",
+  "device": {
+   "allow": [
+    {
+     "os": {
+      "family": "Android",
+      "major": "0"
+     }
+    }
+   ]
+  },
+  "ua": "curl/8.4.0",
+  "code": 156
+ },
+ {
+  "name": "allow-os-android-major",
+  "device": {
+   "allow": [
+    {
+     "os": {
+      "family": "Android",
+      "major": "0"
+     }
+    }
+   ]
+  },
+  "ua": "constructor/1",
+  "code": 156
+ },
+ {
+  "name": "allow-os-android-major",
+  "device": {
+   "allow": [
+    {
+     "os": {
+      "family": "Android",
+      "major": "0"
+     }
+    }
+   ]
+  },
+  "ua": "",
+  "code": 0
+ },
+ {
+  "name": "allow-os-string",
+  "device": {
+   "allow": [
+    {
+     "os": "Windows"
+    }
+   ]
+  },
+  "ua": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.6099.130 Safari/537.36",
+  "code": 164
+ },
+ {
+  "name": "allow-os-string",
+  "device": {
+   "allow": [
+    {
+     "os": "Windows"
+    }
+   ]
+  },
+  "ua": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_2_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2 Mobile/15E148 Safari/604.1",
+  "code": 164
+ },
+ {
+  "name": "allow-os-string",
+  "device": {
+   "allow": [
+    {
+     "os": "Windows"
+    }
+   ]
+  },
+  "ua": "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.6099.144 Mobile Safari/537.36",
+  "code": 164
+ },
+ {
+  "name": "allow-os-string",
+  "device": {
+   "allow": [
+    {
+     "os": "Windows"
+    }
+   ]
+  },
+  "ua": "curl/8.4.0",
+  "code": 164
+ },
+ {
+  "name": "allow-os-string",
+  "device": {
+   "allow": [
+    {
+     "os": "Windows"
+    }
+   ]
+  },
+  "ua": "constructor/1",
+  "code": 164
+ },
+ {
+  "name": "allow-os-string",
+  "device": {
+   "allow": [
+    {
+     "os": "Windows"
+    }
+   ]
+  },
+  "ua": "",
+  "code": 0
+ },
+ {
+  "name": "allow-os-star",
+  "device": {
+   "allow": [
+    {
+     "os": "*"
+    }
+   ]
+  },
+  "ua": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.6099.130 Safari/537.36",
+  "code": 0
+ },
+ {
+  "name": "allow-os-star",
+  "device": {
+   "allow": [
+    {
+     "os": "*"
+    }
+   ]
+  },
+  "ua": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_2_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2 Mobile/15E148 Safari/604.1",
+  "code": 0
+ },
+ {
+  "name": "allow-os-star",
+  "device": {
+   "allow": [
+    {
+     "os": "*"
+    }
+   ]
+  },
+  "ua": "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.6099.144 Mobile Safari/537.36",
+  "code": 0
+ },
+ {
+  "name": "allow-os-star",
+  "device": {
+   "allow": [
+    {
+     "os": "*"
+    }
+   ]
+  },
+  "ua": "curl/8.4.0",
+  "code": 0
+ },
+ {
+  "name": "allow-os-star",
+  "device": {
+   "allow": [
+    {
+     "os": "*"
+    }
+   ]
+  },
+  "ua": "constructor/1",
+  "code": 0
+ },
+ {
+  "name": "allow-os-star",
+  "device": {
+   "allow": [
+    {
+     "os": "*"
+    }
+   ]
+  },
+  "ua": "",
+  "code": 0
+ },
+ {
+  "name": "allow-family-number",
+  "device": {
+   "allow": [
+    {
+     "family": 5
+    }
+   ]
+  },
+  "ua": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.6099.130 Safari/537.36",
+  "code": 164
+ },
+ {
+  "name": "allow-family-number",
+  "device": {
+   "allow": [
+    {
+     "family": 5
+    }
+   ]
+  },
+  "ua": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_2_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2 Mobile/15E148 Safari/604.1",
+  "code": 164
+ },
+ {
+  "name": "allow-family-number",
+  "device": {
+   "allow": [
+    {
+     "family": 5
+    }
+   ]
+  },
+  "ua": "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.6099.144 Mobile Safari/537.36",
+  "code": 164
+ },
+ {
+  "name": "allow-family-number",
+  "device": {
+   "allow": [
+    {
+     "family": 5
+    }
+   ]
+  },
+  "ua": "curl/8.4.0",
+  "code": 164
+ },
+ {
+  "name": "allow-family-number",
+  "device": {
+   "allow": [
+    {
+     "family": 5
+    }
+   ]
+  },
+  "ua": "constructor/1",
+  "code": 164
+ },
+ {
+  "name": "allow-family-number",
+  "device": {
+   "allow": [
+    {
+     "family": 5
+    }
+   ]
+  },
+  "ua": "",
+  "code": 0
+ },
+ {
+  "name": "allow-null-entry",
+  "device": {
+   "allow": [
+    null
+   ]
+  },
+  "ua": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.6099.130 Safari/537.36",
+  "code": 156
+ },
+ {
+  "name": "allow-null-entry",
+  "device": {
+   "allow": [
+    null
+   ]
+  },
+  "ua": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_2_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2 Mobile/15E148 Safari/604.1",
+  "code": 156
+ },
+ {
+  "name": "allow-null-entry",
+  "device": {
+   "allow": [
+    null
+   ]
+  },
+  "ua": "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.6099.144 Mobile Safari/537.36",
+  "code": 156
+ },
+ {
+  "name": "allow-null-entry",
+  "device": {
+   "allow": [
+    null
+   ]
+  },
+  "ua": "curl/8.4.0",
+  "code": 156
+ },
+ {
+  "name": "allow-null-entry",
+  "device": {
+   "allow": [
+    null
+   ]
+  },
+  "ua": "constructor/1",
+  "code": 156
+ },
+ {
+  "name": "allow-null-entry",
+  "device": {
+   "allow": [
+    null
+   ]
+  },
+  "ua": "",
+  "code": 0
+ },
+ {
+  "name": "allow-string-entry",
+  "device": {
+   "allow": [
+    "chrome"
+   ]
+  },
+  "ua": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.6099.130 Safari/537.36",
+  "code": 0
+ },
+ {
+  "name": "allow-string-entry",
+  "device": {
+   "allow": [
+    "chrome"
+   ]
+  },
+  "ua": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_2_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2 Mobile/15E148 Safari/604.1",
+  "code": 0
+ },
+ {
+  "name": "allow-string-entry",
+  "device": {
+   "allow": [
+    "chrome"
+   ]
+  },
+  "ua": "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.6099.144 Mobile Safari/537.36",
+  "code": 0
+ },
+ {
+  "name": "allow-string-entry",
+  "device": {
+   "allow": [
+    "chrome"
+   ]
+  },
+  "ua": "curl/8.4.0",
+  "code": 0
+ },
+ {
+  "name": "allow-string-entry",
+  "device": {
+   "allow": [
+    "chrome"
+   ]
+  },
+  "ua": "constructor/1",
+  "code": 0
+ },
+ {
+  "name": "allow-string-entry",
+  "device": {
+   "allow": [
+    "chrome"
+   ]
+  },
+  "ua": "",
+  "code": 0
+ },
+ {
+  "name": "allow-min-number",
+  "device": {
+   "allow": [
+    {
+     "major": {
+      "min": 5
+     }
+    }
+   ]
+  },
+  "ua": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.6099.130 Safari/537.36",
+  "code": 164
+ },
+ {
+  "name": "allow-min-number",
+  "device": {
+   "allow": [
+    {
+     "major": {
+      "min": 5
+     }
+    }
+   ]
+  },
+  "ua": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_2_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2 Mobile/15E148 Safari/604.1",
+  "code": 164
+ },
+ {
+  "name": "allow-min-number",
+  "device": {
+   "allow": [
+    {
+     "major": {
+      "min": 5
+     }
+    }
+   ]
+  },
+  "ua": "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.6099.144 Mobile Safari/537.36",
+  "code": 164
+ },
+ {
+  "name": "allow-min-number",
+  "device": {
+   "allow": [
+    {
+     "major": {
+      "min": 5
+     }
+    }
+   ]
+  },
+  "ua": "curl/8.4.0",
+  "code": 164
+ },
+ {
+  "name": "allow-min-number",
+  "device": {
+   "allow": [
+    {
+     "major": {
+      "min": 5
+     }
+    }
+   ]
+  },
+  "ua": "constructor/1",
+  "code": 164
+ },
+ {
+  "name": "allow-min-number",
+  "device": {
+   "allow": [
+    {
+     "major": {
+      "min": 5
+     }
+    }
+   ]
+  },
+  "ua": "",
+  "code": 0
+ },
+ {
+  "name": "deny-curl-allow-all",
+  "device": {
+   "deny": [
+    {
+     "family": "curl"
+    }
+   ],
+   "allow": [
+    {
+     "family": "*"
+    }
+   ]
+  },
+  "ua": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.6099.130 Safari/537.36",
+  "code": 0
+ },
+ {
+  "name": "deny-curl-allow-all",
+  "device": {
+   "deny": [
+    {
+     "family": "curl"
+    }
+   ],
+   "allow": [
+    {
+     "family": "*"
+    }
+   ]
+  },
+  "ua": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_2_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2 Mobile/15E148 Safari/604.1",
+  "code": 0
+ },
+ {
+  "name": "deny-curl-allow-all",
+  "device": {
+   "deny": [
+    {
+     "family": "curl"
+    }
+   ],
+   "allow": [
+    {
+     "family": "*"
+    }
+   ]
+  },
+  "ua": "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.6099.144 Mobile Safari/537.36",
+  "code": 0
+ },
+ {
+  "name": "deny-curl-allow-all",
+  "device": {
+   "deny": [
+    {
+     "family": "curl"
+    }
+   ],
+   "allow": [
+    {
+     "family": "*"
+    }
+   ]
+  },
+  "ua": "curl/8.4.0",
+  "code": 156
+ },
+ {
+  "name": "deny-curl-allow-all",
+  "device": {
+   "deny": [
+    {
+     "family": "curl"
+    }
+   ],
+   "allow": [
+    {
+     "family": "*"
+    }
+   ]
+  },
+  "ua": "constructor/1",
+  "code": 0
+ },
+ {
+  "name": "deny-curl-allow-all",
+  "device": {
+   "deny": [
+    {
+     "family": "curl"
+    }
+   ],
+   "allow": [
+    {
+     "family": "*"
+    }
+   ]
+  },
+  "ua": "",
+  "code": 0
+ },
+ {
+  "name": "allow-empty-list",
+  "device": {
+   "allow": []
+  },
+  "ua": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.6099.130 Safari/537.36",
+  "code": 156
+ },
+ {
+  "name": "allow-empty-list",
+  "device": {
+   "allow": []
+  },
+  "ua": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_2_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2 Mobile/15E148 Safari/604.1",
+  "code": 156
+ },
+ {
+  "name": "allow-empty-list",
+  "device": {
+   "allow": []
+  },
+  "ua": "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.6099.144 Mobile Safari/537.36",
+  "code": 156
+ },
+ {
+  "name": "allow-empty-list",
+  "device": {
+   "allow": []
+  },
+  "ua": "curl/8.4.0",
+  "code": 156
+ },
+ {
+  "name": "allow-empty-list",
+  "device": {
+   "allow": []
+  },
+  "ua": "constructor/1",
+  "code": 156
+ },
+ {
+  "name": "allow-empty-list",
+  "device": {
+   "allow": []
+  },
+  "ua": "",
+  "code": 0
+ },
+ {
+  "name": "deny-not-array",
+  "device": {
+   "deny": {
+    "family": "Chrome"
+   }
+  },
+  "ua": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.6099.130 Safari/537.36",
+  "code": 0
+ },
+ {
+  "name": "deny-not-array",
+  "device": {
+   "deny": {
+    "family": "Chrome"
+   }
+  },
+  "ua": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_2_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2 Mobile/15E148 Safari/604.1",
+  "code": 0
+ },
+ {
+  "name": "deny-not-array",
+  "device": {
+   "deny": {
+    "family": "Chrome"
+   }
+  },
+  "ua": "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.6099.144 Mobile Safari/537.36",
+  "code": 0
+ },
+ {
+  "name": "deny-not-array",
+  "device": {
+   "deny": {
+    "family": "Chrome"
+   }
+  },
+  "ua": "curl/8.4.0",
+  "code": 0
+ },
+ {
+  "name": "deny-not-array",
+  "device": {
+   "deny": {
+    "family": "Chrome"
+   }
+  },
+  "ua": "constructor/1",
+  "code": 0
+ },
+ {
+  "name": "deny-not-array",
+  "device": {
+   "deny": {
+    "family": "Chrome"
+   }
+  },
+  "ua": "",
+  "code": 0
+ }
+]

@@ -238,6 +238,56 @@
     "body": "{\"name\":\"conformance\"}"
   },
   {
+    "name": "device_allow_ok",
+    "about": "an extKey whose device allow list matches the User-Agent",
+    "method": "GET",
+    "path": "/conform/v1/public/hello",
+    "headers": {
+      "key": "$KEY_DEVICE_ALLOW",
+      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.6099.130 Safari/537.36"
+    }
+  },
+  {
+    "name": "device_allow_refused",
+    "about": "an extKey whose device allow list does not match the User-Agent (156)",
+    "method": "GET",
+    "path": "/conform/v1/public/hello",
+    "headers": {
+      "key": "$KEY_DEVICE_ALLOW",
+      "User-Agent": "curl/8.4.0"
+    }
+  },
+  {
+    "name": "device_deny_refused",
+    "about": "an extKey whose device deny list matches the User-Agent (156)",
+    "method": "GET",
+    "path": "/conform/v1/public/hello",
+    "headers": {
+      "key": "$KEY_DEVICE_DENY",
+      "User-Agent": "curl/8.4.0"
+    }
+  },
+  {
+    "name": "device_deny_ok",
+    "about": "an extKey whose device deny list does not match the User-Agent",
+    "method": "GET",
+    "path": "/conform/v1/public/hello",
+    "headers": {
+      "key": "$KEY_DEVICE_DENY",
+      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.6099.130 Safari/537.36"
+    }
+  },
+  {
+    "name": "device_rule_invalid",
+    "about": "a device rule Node.js cannot evaluate (a numeric family): Node.js answers 164",
+    "method": "GET",
+    "path": "/conform/v1/public/hello",
+    "headers": {
+      "key": "$KEY_DEVICE_INVALID",
+      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.6099.130 Safari/537.36"
+    }
+  },
+  {
     "name": "public_head",
     "about": "from integration http_methods HEAD",
     "method": "HEAD",
