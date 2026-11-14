@@ -1,0 +1,7 @@
+{
+  "status": 401,
+  "headers": {
+    "Content-Type": "application/json"
+  },
+  "body": "{\"result\":false,\"errors\":{\"codes\":[159],\"details\":[{\"code\":159,\"message\":\"System api access is restricted. api is not in provision.\"}]}}"
+}

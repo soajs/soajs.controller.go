@@ -548,5 +548,144 @@
       "ts",
       "timeLoaded"
     ]
+  },
+  {
+    "name": "urac_public_no_token",
+    "about": "dashboard: a public API with the console key needs no user",
+    "env": "dashboard",
+    "method": "GET",
+    "path": "/conform/v1/public/hello",
+    "headers": {
+      "key": "$KEY_CONSOLE"
+    }
+  },
+  {
+    "name": "urac_owner_ok",
+    "about": "dashboard: the user is read from coreDB[masterDB]; its group's package allows the API",
+    "env": "dashboard",
+    "method": "GET",
+    "path": "/conform/v1/private/hello",
+    "headers": {
+      "key": "$KEY_CONSOLE",
+      "Authorization": "Bearer $TOKEN_U_OWNER"
+    }
+  },
+  {
+    "name": "urac_owner_acl_refused",
+    "about": "dashboard: the user's ACL replaces the key package's, it does not list the API (159)",
+    "env": "dashboard",
+    "method": "GET",
+    "path": "/conform/v1/private/admin",
+    "headers": {
+      "key": "$KEY_CONSOLE",
+      "Authorization": "Bearer $TOKEN_U_OWNER"
+    }
+  },
+  {
+    "name": "urac_invited_ok",
+    "about": "dashboard: a user invited to the tenant takes the groups of the invitation",
+    "env": "dashboard",
+    "method": "GET",
+    "path": "/conform/v1/private/admin",
+    "headers": {
+      "key": "$KEY_CONSOLE",
+      "Authorization": "Bearer $TOKEN_U_INVITED"
+    }
+  },
+  {
+    "name": "urac_invited_acl_refused",
+    "about": "dashboard: the invitation's groups only, not the home tenant's (159)",
+    "env": "dashboard",
+    "method": "GET",
+    "path": "/conform/v1/private/hello",
+    "headers": {
+      "key": "$KEY_CONSOLE",
+      "Authorization": "Bearer $TOKEN_U_INVITED"
+    }
+  },
+  {
+    "name": "urac_paused",
+    "about": "dashboard: an inactive user is refused on the next call (146)",
+    "env": "dashboard",
+    "method": "GET",
+    "path": "/conform/v1/private/hello",
+    "headers": {
+      "key": "$KEY_CONSOLE",
+      "Authorization": "Bearer $TOKEN_U_PAUSED"
+    }
+  },
+  {
+    "name": "urac_pending",
+    "about": "dashboard: a pending user is refused (146)",
+    "env": "dashboard",
+    "method": "GET",
+    "path": "/conform/v1/private/hello",
+    "headers": {
+      "key": "$KEY_CONSOLE",
+      "Authorization": "Bearer $TOKEN_U_PENDING"
+    }
+  },
+  {
+    "name": "urac_unknown_user",
+    "about": "dashboard: a token whose user is not in urac (146)",
+    "env": "dashboard",
+    "method": "GET",
+    "path": "/conform/v1/private/hello",
+    "headers": {
+      "key": "$KEY_CONSOLE",
+      "Authorization": "Bearer $TOKEN_U_GHOST"
+    }
+  },
+  {
+    "name": "urac_outsider",
+    "about": "dashboard: a user of another tenant without an invitation (146)",
+    "env": "dashboard",
+    "method": "GET",
+    "path": "/conform/v1/private/hello",
+    "headers": {
+      "key": "$KEY_CONSOLE",
+      "Authorization": "Bearer $TOKEN_U_OUTSIDER"
+    }
+  },
+  {
+    "name": "urac_email_changed",
+    "about": "dashboard: validateTokenAccount email, the record's email changed since the token (146)",
+    "env": "dashboard",
+    "method": "GET",
+    "path": "/conform/v1/private/hello",
+    "headers": {
+      "key": "$KEY_CONSOLE",
+      "Authorization": "Bearer $TOKEN_U_MOVED"
+    }
+  },
+  {
+    "name": "urac_dev_no_masterdb",
+    "about": "dev: a urac token where the environment has no urac masterDB (146)",
+    "method": "GET",
+    "path": "/conform/v1/private/hello",
+    "headers": {
+      "key": "$KEY_DEFAULT",
+      "Authorization": "Bearer $TOKEN_U_DEV"
+    }
+  },
+  {
+    "name": "urac_roaming_ok",
+    "about": "dev: a dashboard token roams: its user comes from the token",
+    "method": "GET",
+    "path": "/conform/v1/private/hello",
+    "headers": {
+      "key": "$KEY_DEFAULT",
+      "Authorization": "Bearer $TOKEN_R_ROAMING"
+    }
+  },
+  {
+    "name": "urac_roaming_unknown_client",
+    "about": "dev: a roaming token whose client tenant does not exist (170)",
+    "method": "GET",
+    "path": "/conform/v1/private/hello",
+    "headers": {
+      "key": "$KEY_DEFAULT",
+      "Authorization": "Bearer $TOKEN_R_GONE"
+    }
   }
 ]

@@ -1,0 +1,7 @@
+{
+  "status": 500,
+  "headers": {
+    "Content-Type": "application/json"
+  },
+  "body": "{\"result\":false,\"errors\":{\"codes\":[170],\"details\":[{\"code\":170,\"message\":\"Roaming: Unable to load registry for roam to env\"}]}}"
+}

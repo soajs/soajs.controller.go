@@ -35,6 +35,90 @@
         "groups": ["owner"],
         "tenant": {"id": "6a0e00000000000000000001", "code": "CONF"}
       }
+    },
+    {
+      "_id": {
+        "$oid": "6a0e000000000000000000f8"
+      },
+      "type": "accessToken",
+      "token": "d0a0000000000000000000000000000000000008",
+      "expires": {
+        "$date": "2099-01-01T00:00:00Z"
+      },
+      "clientId": "6a0e00000000000000000002",
+      "env": "dashboard",
+      "user": {
+        "_id": {
+          "$oid": "6a0e000000000000000000ac"
+        },
+        "id": "6a0e000000000000000000ac",
+        "loginMode": "urac",
+        "deviceId": null,
+        "agent": null,
+        "username": "console_owner",
+        "email": "owner@conformance.invalid",
+        "groups": [],
+        "tenant": {
+          "id": "6a0e00000000000000000002",
+          "code": "DBTN"
+        }
+      }
+    },
+    {
+      "_id": {
+        "$oid": "6a0e000000000000000000f9"
+      },
+      "type": "accessToken",
+      "token": "d0a0000000000000000000000000000000000009",
+      "expires": {
+        "$date": "2099-01-01T00:00:00Z"
+      },
+      "clientId": "6a0e0000000000000000ffff",
+      "env": "dashboard",
+      "user": {
+        "_id": {
+          "$oid": "6a0e000000000000000000ac"
+        },
+        "id": "6a0e000000000000000000ac",
+        "loginMode": "urac",
+        "deviceId": null,
+        "agent": null,
+        "username": "console_owner",
+        "email": "owner@conformance.invalid",
+        "groups": [],
+        "tenant": {
+          "id": "6a0e0000000000000000ffff",
+          "code": "GONE"
+        }
+      }
+    },
+    {
+      "_id": {
+        "$oid": "6a0e000000000000000000fa"
+      },
+      "type": "accessToken",
+      "token": "d0a000000000000000000000000000000000000a",
+      "expires": {
+        "$date": "2099-01-01T00:00:00Z"
+      },
+      "clientId": "6a0e00000000000000000001",
+      "env": "dev",
+      "user": {
+        "_id": {
+          "$oid": "6a0e000000000000000000ab"
+        },
+        "id": "6a0e000000000000000000ab",
+        "loginMode": "urac",
+        "deviceId": null,
+        "agent": null,
+        "username": "conformance",
+        "email": "conformance@conformance.invalid",
+        "groups": [],
+        "tenant": {
+          "id": "6a0e00000000000000000001",
+          "code": "CONF"
+        }
+      }
     }
   ]
 }

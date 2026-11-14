@@ -1,0 +1,7 @@
+{
+  "status": 200,
+  "headers": {
+    "Content-Type": "application/json"
+  },
+  "body": "{\"data\":{\"method\":\"GET\",\"path\":\"/public/hello\",\"query\":\"\"},\"result\":true}"
+}

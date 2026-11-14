@@ -7,6 +7,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/soajs/soajs.controller.go/internal/config"
+	"github.com/soajs/soajs.controller.go/internal/urac"
 	"github.com/soajs/soajs.controller.go/pkg/types"
 	"go.uber.org/zap"
 )
@@ -24,6 +25,10 @@ type SOAJSContext struct {
 	Device         *types.DeviceInfo
 	Geo            *types.GeoInfo
 	Environment    string // Current environment (e.g., "dashboard")
+	// Urac is the logged-in user on a key's API, set after OAuth.
+	Urac *urac.User
+	// Roaming is set when the token comes from another, sensitive, environment.
+	Roaming *urac.Roaming
 }
 
 // ControllerContext holds gateway-specific request data
