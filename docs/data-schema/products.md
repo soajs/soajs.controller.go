@@ -74,10 +74,3 @@ Products and their packages. A package's ACL decides which services, versions an
   }]
 }
 ```
-
-## Live data
-
-26 documents; 23 match.
-- One product has 6 version ACLs with no method level, with `access` only.
-- One package has no `aclTypeByEnv`; its data fix is handled in Connect.
-- One API rule has no `access`.

@@ -4,7 +4,7 @@
 // each one that does not; -explain adds where each document breaks the schema (field and schema
 // locations, never values). The connection string is read from SOAJS_MONGO_URI and never printed.
 //
-//	SOAJS_MONGO_URI=... schemacheck -provision core_provision -oauth prod_oauth -urac DBTN_urac
+//	SOAJS_MONGO_URI=... schemacheck -provision core_provision -oauth oauth -urac urac -gateway gateway
 package main
 
 import (

@@ -58,7 +58,3 @@ Shared resources. The gateway uses those of type `cluster`: the MongoDB clusters
   }
 }
 ```
-
-## Live data
-
-3 documents; all match.

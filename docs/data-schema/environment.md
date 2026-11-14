@@ -26,7 +26,7 @@ One document per environment. It holds the gateway's registry: its ports, oauth,
 | `deployer.container.kubernetes.namespace` | string | for kubernetes | | Namespace of the environment's services. |
 | `deployer.manual.nodes` | string | | | Not used by the gateway. |
 | `dbs.config.prefix` | string | yes | may be `""` | Prefix of every database of the environment. |
-| `dbs.databases.<name>` | object | | | A database of the environment. `<name>` is also the core DB name, e.g. `oauth`, `gateway`, `og`. |
+| `dbs.databases.<name>` | object | | | A database of the environment. `<name>` is also the core DB name, e.g. `oauth`, `gateway`, `users`. |
 | `dbs.databases.<name>.cluster` | string | yes | name of a `resources` document of type `cluster` | Where the database lives. |
 | `dbs.databases.<name>.tenantSpecific` | boolean | yes | | `false`: a core DB (`coreDB.<name>`). `true`: not used by the Go gateway (see [urac](urac.md)). |
 | `dbs.databases.<name>.prefix` | string | | overrides `dbs.config.prefix` for this database | Part of the latest shape: an optional per-database prefix. |
@@ -101,7 +101,7 @@ These are Node.js compatibility shapes, refused by the schema:
     "databases": {
       "oauth": {"cluster": "<cluster name>", "tenantSpecific": false},
       "gateway": {"cluster": "<cluster name>", "tenantSpecific": false},
-      "og": {"cluster": "<cluster name>", "tenantSpecific": false, "prefix": "dev2_"}
+      "users": {"cluster": "<cluster name>", "tenantSpecific": false, "prefix": "shared_"}
     }
   },
   "services": {
@@ -120,7 +120,3 @@ These are Node.js compatibility shapes, refused by the schema:
   }
 }
 ```
-
-## Live data
-
-8 documents; 7 match. One environment has `services.config.cors.credentials` as the string `"true"`. The console's manual template writes the string; the kubernetes template writes `true`.

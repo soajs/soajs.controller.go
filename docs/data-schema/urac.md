@@ -7,11 +7,7 @@ The user record and its groups. When the token's `loginMode` is `urac` and `getU
 - **Written by** the urac service (model/mongo/user.js, group.js), and by the oauth service through soajs.urac.driver (social login, `lastLogin`). The gateway never writes.
 - **Indexes:** created by urac. The gateway relies on lookups by `username`, `email` and `_id`, and on groups by `{tenant.id, code}`.
 
-**DASHBOARD target configuration:**
-- `custom_registry` `urac` `value.masterDB` = `"DBTN_urac"`;
-- `environment` DASHBOARD `dbs.databases.DBTN_urac = {cluster, tenantSpecific: false}`.
-
-With `dbs.config.prefix` `""`, `coreDB["DBTN_urac"]` is the existing `DBTN_urac` database. The live DASHBOARD environment does not match this yet; the user handles that configuration.
+**Example configuration for the console environment:** it can set `custom_registry` `urac` `value.masterDB` to its existing urac database, e.g. `"DBTN_urac"`, and declare that database as a core DB of the environment: `dbs.databases.DBTN_urac = {cluster, tenantSpecific: false}`. With `dbs.config.prefix` `""`, `coreDB["DBTN_urac"]` is that database.
 
 ## users
 
@@ -84,9 +80,3 @@ With `dbs.config.prefix` `""`, `coreDB["DBTN_urac"]` is the existing `DBTN_urac`
   "config": {"allowedPackages": {"SHOP": ["SHOP_DEFAULT"]}}
 }
 ```
-
-## Live data
-
-Checked in DBTN_urac only; the `og` databases could not be read with the access used.
-- users: 14 documents, 13 match. One has `config.packages`.
-- groups: 3 documents, all match.

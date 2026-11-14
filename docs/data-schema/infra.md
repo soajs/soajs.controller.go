@@ -31,7 +31,3 @@ A kubernetes account: the API address and token of a cluster.
   "deployments": [{"env": "dev", "namespace": "dev"}]
 }
 ```
-
-## Live data
-
-2 documents; both match.

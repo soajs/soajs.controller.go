@@ -81,7 +81,3 @@ Marks an invalidation, so an answer computed before it is not stored after it.
 | `expiresAt` | date | yes | `clearedAt` + 15 minutes. |
 
 **Indexes:** `{l1, service, api, user}` unique, and a TTL index on `{expiresAt: 1}`.
-
-## Live data
-
-All empty in prod_gateway and core_provision.

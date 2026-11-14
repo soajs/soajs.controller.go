@@ -67,7 +67,3 @@ Other `user` fields are allowed: the oauth service copies the urac user into the
   }
 }
 ```
-
-## Live data
-
-7 documents in core_provision, all matching. prod_oauth holds 0.

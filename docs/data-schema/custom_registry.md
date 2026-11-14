@@ -111,9 +111,3 @@ Refused: `masterCode` and `dbCodes`, which belong to the per-tenant urac databas
   }
 }
 ```
-
-## Live data
-
-73 documents; 69 match.
-- 3 `gateway` entries have `lastSeen` without `include`.
-- 1 `urac` entry, DASHBOARD's, has no `masterDB`. DASHBOARD's target configuration is `masterDB` `"DBTN_urac"` (see [urac](urac.md)).

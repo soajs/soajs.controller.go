@@ -87,7 +87,3 @@ Other item types (`static`, `resource`, `custom`, `daemon`, `config`) are not re
   }]
 }
 ```
-
-## Live data
-
-52 documents; 49 match. Three service versions have `interConnect: null`.

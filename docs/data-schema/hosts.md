@@ -31,9 +31,6 @@ Not part of this spec: a host without `version`, which Node.js reads as `"1"` (m
 {"_id": {"$oid": "<id>"}, "env": "dev", "name": "orders", "version": "1", "ip": "10.0.0.12", "port": 4100, "hostname": "orders-7d9f"}
 ```
 
-## Live data
-
-82 documents; all match.
 
 ---
 
@@ -50,7 +47,3 @@ The gateway's snapshot of its awareness: each service's hosts and their health. 
 | `ip` | string | yes | The gateway host. |
 | `ts` | number (ms) | yes | |
 | `data.services`, `data.daemons` | object | yes | The registry entries with their `hosts` and `awarenessStats`. Keys that MongoDB cannot store are encoded: a `.` in a version becomes `x`, and in an IP becomes `_dot_`. |
-
-### Live data
-
-0 documents.

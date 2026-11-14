@@ -6,7 +6,7 @@ Two things make it up:
 - each `<collection>.schema.json` file (JSON Schema draft 2020-12) is used by the Go tests and by `cmd/schemacheck`;
 - the `.md` pages explain the fields.
 
-The shapes come from the Node.js gateway's code (soajs.controller 4.3.28 and the soajs.core.modules 5.2.22 and soajs.urac.driver 3.2.20 it bundles). They are checked against the live data with read-only access, and against the code of the services that write each collection.
+The shapes come from the Node.js gateway's code (soajs.controller 4.3.28 and the soajs.core.modules 5.2.22 and soajs.urac.driver 3.2.20 it bundles) and from the code of the services that write each collection. They were checked read-only against a production dataset; the results are kept outside this repository.
 
 ## Rules
 
@@ -52,7 +52,7 @@ Not used by the gateway:
 ## Validator
 
 ```bash
-SOAJS_MONGO_URI=... go run ./cmd/schemacheck -provision core_provision -oauth <env>_oauth -urac <masterDB> -gateway <env>_gateway
+SOAJS_MONGO_URI=... go run ./cmd/schemacheck -provision core_provision -oauth oauth -urac urac -gateway gateway
 ```
 
 - It only reads.
@@ -61,26 +61,3 @@ SOAJS_MONGO_URI=... go run ./cmd/schemacheck -provision core_provision -oauth <e
 - The connection string is read from the environment and never printed.
 
 `internal/dataschema` holds the same validation for Go tests. `TestConformanceFixture` checks the conformance fixture against these schemas.
-
-## Live data, 2026-11-14 (read only)
-
-| Collection | Database | Documents | Match | Do not match | Why (no values) |
-|---|---|---|---|---|---|
-| environment | core_provision | 8 | 7 | 1 | `services.config.cors.credentials` is a string instead of a boolean |
-| infra | core_provision | 2 | 2 | 0 | |
-| resources | core_provision | 3 | 3 | 0 | |
-| custom_registry | core_provision | 73 | 69 | 4 | 3 `gateway` entries have `lastSeen` without `include`; 1 `urac` entry has no `masterDB` (DASHBOARD) |
-| marketplace | core_provision | 52 | 49 | 3 | `versions[].interConnect` is `null` instead of an array |
-| hosts | core_provision | 82 | 82 | 0 | |
-| controllers | core_provision | 0 | 0 | 0 | |
-| tenants | core_provision | 3496 | 3470 | 26 | 58 extKeys have `device` / `geo` as `{}` instead of `null` |
-| products | core_provision | 26 | 23 | 3 | 6 version ACLs with no method level; 1 package without `aclTypeByEnv`; 1 api rule without `access` |
-| oauth_token | core_provision | 7 | 7 | 0 | |
-| oauth_token | prod_oauth | 0 | 0 | 0 | |
-| users | DBTN_urac | 14 | 13 | 1 | `config.packages`, which no current writer produces |
-| groups | DBTN_urac | 3 | 3 | 0 | |
-| gateway stores | prod_gateway | 0 | 0 | 0 | all empty |
-
-This is information only. The live data is not changed by this work.
-
-The urac databases behind `masterDB` `og` could not be read with the access used. Only `DBTN_urac` was checked.

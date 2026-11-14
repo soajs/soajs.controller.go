@@ -54,7 +54,7 @@ Tenants, their applications and keys, and their oauth settings.
 
 - `applications[].acl`, `acl_all_env`, and ACL not keyed by environment (soajs.core/provision/mongo.js:287-302).
 - `oauth.type` 0 (JWT).
-- `expDate` as a date string. multitenant's `PUT` on an extKey writes the input string (bl/tenant.js:1411); the schema refuses it.
+- `expDate` as a date string; the schema refuses it.
 - `device` / `geo` as `{}`. No restriction is `null`.
 
 ## Example
@@ -82,7 +82,3 @@ Tenants, their applications and keys, and their oauth settings.
   }]
 }
 ```
-
-## Live data
-
-3496 documents; 3470 match. 26 tenants have 58 extKeys with `device` and `geo` stored as `{}` instead of `null`.
