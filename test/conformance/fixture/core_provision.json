@@ -740,6 +740,48 @@
                   "device": null,
                   "geo": null,
                   "expDate": null
+                },
+                {
+                  "extKey": "5bbf311a30f4acaec52b7472be854cc95259156275114822ad91615d02d276090161d2ca4e8c4f1f7674012c0f9951162a40214185d3bef8910b61fc9961940a35c240d4bae7ef93469c4dcc42719d8347dfa6fe078b9b4c91e247d69c0ce49d",
+                  "env": "DEV",
+                  "label": "conformance device allow",
+                  "device": {
+                    "allow": [
+                      {
+                        "family": "Chrome"
+                      }
+                    ]
+                  },
+                  "geo": null,
+                  "expDate": null
+                },
+                {
+                  "extKey": "5bbf311a30f4acaec52b7472be854cc95259156275114822ad91615d02d27609856bbdf663aba70a17267c46c56626b7f5e73acfe511e279630c82efaadbaf3a0b55c38bbcdf702cd841312cdd2afa3dae8289de9bcc029f15090ef61841ec7e",
+                  "env": "DEV",
+                  "label": "conformance device deny",
+                  "device": {
+                    "deny": [
+                      {
+                        "family": "curl"
+                      }
+                    ]
+                  },
+                  "geo": null,
+                  "expDate": null
+                },
+                {
+                  "extKey": "5bbf311a30f4acaec52b7472be854cc95259156275114822ad91615d02d27609feae4af9fb2356a6cc6e7b1680e6531f95480d462ea6ffbe166a67f1a80e1dcd7568954446f89aeedf7fe019d27812ba5a112e2cdfa975daf59762cbae576fb6",
+                  "env": "DEV",
+                  "label": "conformance device rule Node.js cannot evaluate",
+                  "device": {
+                    "allow": [
+                      {
+                        "family": 5
+                      }
+                    ]
+                  },
+                  "geo": null,
+                  "expDate": null
                 }
               ]
             }

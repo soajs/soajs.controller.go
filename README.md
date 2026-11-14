@@ -20,7 +20,7 @@ High-performance API Gateway for SOAJS microservices platform, rewritten in Go.
 
 ## Requirements
 
-- Go 1.26+
+- Go 1.25+
 - MongoDB 5.0+
 
 ## Quick Start
@@ -169,7 +169,7 @@ See the [docs/](./docs/) directory for detailed documentation:
 ### Prerequisites
 
 ```bash
-# Install Go 1.26+
+# Install Go 1.25+
 # Install MongoDB 5.0+
 ```
 

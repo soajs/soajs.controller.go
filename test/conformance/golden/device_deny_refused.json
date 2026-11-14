@@ -1,0 +1,7 @@
+{
+  "status": 403,
+  "headers": {
+    "Content-Type": "application/json"
+  },
+  "body": "{\"result\":false,\"errors\":{\"codes\":[156],\"details\":[{\"code\":156,\"message\":\"Device forbidden\"}]}}"
+}

@@ -15,7 +15,7 @@ import (
 //   - a key without a package answers 153, a package that did not load 152;
 //   - the tenant and its oauth come from the key;
 //   - the custom registry mt.whitelist can skip the ACL and OAuth checks;
-//   - the extKey's geo allow and deny lists answer 155;
+//   - the extKey's geo allow and deny lists answer 155, its device allow and deny lists 156;
 //   - for a version with oauth, OAuth is required unless the API is public (oauthCheck).
 //
 // Without extKeyRequired the API is public and OAuth runs when the version has oauth.
@@ -61,6 +61,12 @@ func MT(prov provision.Provision, reg registry.Registry, uracDriver *urac.Driver
 			if !params.SkipACL && !geoAllowed(key.Geo, getClientIP(r)) {
 				WriteCode(w, 155)
 				return
+			}
+			if !params.SkipACL {
+				if code := deviceCheck(key.Device, r.Header.Get("User-Agent")); code != 0 {
+					WriteCode(w, code)
+					return
+				}
 			}
 
 			if version.OAuth && !params.SkipOAuth && reg.Get() != nil && reg.Get().ServiceConfig != nil {
