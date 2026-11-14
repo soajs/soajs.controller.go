@@ -1,16 +1,22 @@
 package types
 
 import (
+	"bytes"
 	"encoding/json"
+	"fmt"
 	"sort"
 )
 
 // ServiceConfig is a registry service entry (registry.services.<name>). The controller entry
 // also carries Name, Version and Authorization.
 type ServiceConfig struct {
-	Name                  string                  `json:"name,omitempty"`
-	Group                 string                  `json:"group"`
-	Version               string                  `json:"version,omitempty"`
+	Name    string `json:"name,omitempty"`
+	Group   string `json:"group"`
+	Version string `json:"version,omitempty"`
+	// ExtKeyRequired and OAuth are the latest version's, at the root as Node.js's registry gives
+	// them (modules/registry/index.js:224-234): the gateway does not read them, the SDKs do.
+	ExtKeyRequired        *bool                   `json:"extKeyRequired,omitempty"`
+	OAuth                 *bool                   `json:"oauth,omitempty"`
 	Authorization         *bool                   `json:"authorization,omitempty"`
 	Port                  int                     `json:"port"`
 	OPort                 int                     `json:"oport,omitempty"`
@@ -65,9 +71,10 @@ type RootMaintenance struct {
 
 // MaintenanceInfo is a version's maintenance declaration.
 type MaintenanceInfo struct {
-	Readiness string    `json:"readiness"`
-	Port      PortInfo  `json:"port"`
-	Commands  []Command `json:"commands,omitempty"`
+	Readiness string   `json:"readiness"`
+	Port      PortInfo `json:"port"`
+	// Commands is kept as stored, an empty list included.
+	Commands *[]Command `json:"commands,omitempty"`
 }
 
 // PortInfo says which port answers maintenance: "maintenance" (port + maintenanceInc) or
@@ -84,7 +91,11 @@ type Command struct {
 }
 
 // VersionInfo is one version of a service.
+//
+// Present, when set, names the fields a registration gave (/register): the others are written out
+// of the registry dump, as Node.js writes undefined ones, and read as false.
 type VersionInfo struct {
+	Present         map[string]bool    `json:"-"`
 	ExtKeyRequired  bool               `json:"extKeyRequired"`
 	Urac            bool               `json:"urac"`
 	UracProfile     bool               `json:"urac_Profile"`
@@ -118,4 +129,37 @@ type ServiceInfo struct {
 	Version string `json:"version"`
 	Host    string `json:"host"`
 	Port    int    `json:"port"`
+}
+
+// MarshalJSON writes the version as Node.js's registry holds it: every field from the marketplace,
+// only the given ones after a registration.
+func (v VersionInfo) MarshalJSON() ([]byte, error) {
+	fields := []struct {
+		key   string
+		value interface{}
+	}{
+		{"extKeyRequired", v.ExtKeyRequired}, {"urac", v.Urac}, {"urac_Profile", v.UracProfile}, {"urac_ACL", v.UracACL},
+		{"urac_Config", v.UracConfig}, {"urac_GroupConfig", v.UracGroupConfig}, {"tenant_Profile", v.TenantProfile},
+		{"provision_ACL", v.ProvisionACL}, {"oauth", v.OAuth}, {"interConnect", v.InterConnect}, {"maintenance", v.Maintenance},
+	}
+	var b bytes.Buffer
+	b.WriteByte('{')
+	first := true
+	for _, f := range fields {
+		if v.Present != nil && !v.Present[f.key] {
+			continue
+		}
+		if !first {
+			b.WriteByte(',')
+		}
+		first = false
+		raw, err := json.Marshal(f.value)
+		if err != nil {
+			return nil, err
+		}
+		fmt.Fprintf(&b, "%q:", f.key)
+		b.Write(raw)
+	}
+	b.WriteByte('}')
+	return b.Bytes(), nil
 }

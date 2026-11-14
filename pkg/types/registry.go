@@ -29,8 +29,10 @@ type RegistryData struct {
 	CustomRegistry map[string]interface{} `json:"custom"`
 	// Resources holds the resources for the environment by type, then name, each as stored.
 	Resources map[string]map[string]map[string]interface{} `json:"resources"`
-	Services  map[string]*ServiceConfig                    `json:"services"`
-	Daemons   map[string]*DaemonConfig                     `json:"daemons"`
+	// SessionDB is coreDB.session as the Node.js registry gives it (build.sessionDB).
+	SessionDB map[string]interface{}    `json:"-"`
+	Services  map[string]*ServiceConfig `json:"services"`
+	Daemons   map[string]*DaemonConfig  `json:"daemons"`
 }
 
 // GlobalServiceConfig is environment.services.config (docs/data-schema/environment.md).

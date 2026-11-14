@@ -229,6 +229,11 @@ func (r *MongoRegistry) build(env string) (*types.RegistryData, error) {
 		reg.CoreDB[name] = db
 	}
 	reg.TenantMetaDB = meta
+	reg.SessionDB = map[string]interface{}{
+		"prefix":           e.Dbs.Config.Prefix,
+		"registryLocation": map[string]interface{}{"l1": "coreDB", "l2": "session", "env": env, "timeLoaded": timeLoaded},
+		"servers":          nil, "credentials": nil, "URLParam": nil, "extraParam": nil,
+	}
 
 	if err := r.eachTyped(ctx, schemas, CollMarketplace, bson.M{"type": "service"}, func(item *marketItem) {
 		addService(reg.Services, item)
@@ -371,8 +376,8 @@ func (r *MongoRegistry) UpsertEnvController(env, ip string, ts int64, data map[s
 	return err
 }
 
-// RegisterHost upserts a host as Node.js does (modules/registry/mongo.js:262-286) and adds it to
-// the registry.
+// RegisterHost upserts a host as Node.js does (modules/registry/mongo.js:262-286); the registry in
+// use takes it at its next load, as in Node.js.
 func (r *MongoRegistry) RegisterHost(h types.HostRecord) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -391,15 +396,8 @@ func (r *MongoRegistry) RegisterHost(h types.HostRecord) error {
 	if h.ServiceHATask != "" {
 		set["serviceHATask"] = h.ServiceHATask
 	}
-	if _, err := r.db.Collection(CollHosts).UpdateOne(ctx, filter, bson.M{"$set": set}, options.Update().SetUpsert(true)); err != nil {
-		return err
-	}
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	if r.data != nil {
-		applyHosts(r.data, []*types.HostRecord{&h})
-	}
-	return nil
+	_, err := r.db.Collection(CollHosts).UpdateOne(ctx, filter, bson.M{"$set": set}, options.Update().SetUpsert(true))
+	return err
 }
 
 // GetHost returns the first host of a service version, or of its latest version when version is

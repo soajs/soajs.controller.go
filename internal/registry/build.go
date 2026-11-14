@@ -96,6 +96,14 @@ func buildDatabases(env *envDoc, clusters map[string]map[string]interface{}, env
 			URLParam:    cfg.URLParam,
 			Streaming:   cfg.Streaming,
 		}
+		// the entry as Node.js gives it: prefix, cluster, the cluster configuration as stored,
+		// registryLocation, name (build.metaAndCoreDB)
+		db.Dump = map[string]interface{}{"prefix": prefix, "cluster": rec.Cluster}
+		if config, ok := resource["config"].(map[string]interface{}); ok {
+			for k, v := range config {
+				db.Dump[k] = v
+			}
+		}
 		if rec.TenantSpecific {
 			db.Name = "#TENANT_NAME#_" + name
 			db.RegistryLocation = &dbconfig.Location{L1: "metaDB", L2: db.Name, Env: envCode, Cluster: rec.Cluster, TimeLoaded: timeLoaded}
@@ -105,6 +113,8 @@ func buildDatabases(env *envDoc, clusters map[string]map[string]interface{}, env
 			db.RegistryLocation = &dbconfig.Location{L1: "coreDB", L2: name, Env: envCode, Cluster: rec.Cluster, TimeLoaded: timeLoaded}
 			core[name] = db
 		}
+		db.Dump["registryLocation"] = db.RegistryLocation
+		db.Dump["name"] = db.Name
 	}
 	return core, meta, nil
 }
@@ -146,6 +156,11 @@ func addService(services map[string]*types.ServiceConfig, item *marketItem) {
 		svc.Versions[v.Version] = &info
 		if svc.Maintenance == nil && info.Maintenance != nil {
 			svc.Maintenance = &types.RootMaintenance{Readiness: info.Maintenance.Readiness, Port: info.Maintenance.Port}
+		}
+		// the latest version's flags at the root, as Node.js's registry gives them
+		if svc.Version == "" || lib.IsLatest(v.Version, svc.Version) {
+			extKey, oauth := info.ExtKeyRequired, info.OAuth
+			svc.Version, svc.ExtKeyRequired, svc.OAuth = v.Version, &extKey, &oauth
 		}
 	}
 	services[item.Name] = svc

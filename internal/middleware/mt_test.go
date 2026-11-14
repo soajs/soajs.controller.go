@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"github.com/soajs/soajs.controller.go/internal/registry"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -201,6 +202,8 @@ func (m *mockRegistryMT) OtherEnvControllerHosts(string) ([]types.HostRecord, er
 func (m *mockRegistryMT) UpsertEnvController(string, string, int64, map[string]interface{}) error {
 	return nil
 }
+
+func (m *mockRegistryMT) Register(registry.RegisterOptions) (interface{}, error) { return nil, nil }
 
 func (m *mockRegistryMT) LoadByEnv(env string, reload bool) (*types.RegistryData, error) {
 	return m.Get(), nil

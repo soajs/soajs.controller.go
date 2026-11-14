@@ -70,7 +70,8 @@ func (s *Server) Run(ctx context.Context) error {
 			maintPort = controllerPort + maintenanceInc
 		}
 	}
-	s.maintServer = NewMaintenanceServer(maintPort, ctrl, s.logger)
+	serviceIP := awareness.ServiceIP()
+	s.maintServer = NewMaintenanceServer(maintPort, ctrl, serviceIP, s.logger)
 
 	// Start servers
 	errChan := make(chan error, 2)
@@ -87,7 +88,6 @@ func (s *Server) Run(ctx context.Context) error {
 
 	// Register the gateway's host and its controllers document, as Node.js does without
 	// SOAJS_DEPLOY_HA (server/controller.js start); on SIGINT the document marks it stopping
-	serviceIP := awareness.ServiceIP()
 	registered := make(chan bool, 1)
 	go func() {
 		time.Sleep(100 * time.Millisecond)

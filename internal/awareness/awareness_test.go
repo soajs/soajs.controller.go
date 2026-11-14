@@ -3,6 +3,7 @@ package awareness
 import (
 	"encoding/json"
 	"errors"
+	"github.com/soajs/soajs.controller.go/internal/registry"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -36,6 +37,8 @@ func (r *testRegistry) Get() *types.RegistryData {
 	defer r.mu.Unlock()
 	return r.data
 }
+func (r *testRegistry) Register(registry.RegisterOptions) (interface{}, error) { return nil, nil }
+
 func (r *testRegistry) LoadByEnv(env string, _ bool) (*types.RegistryData, error) {
 	if d, ok := r.others[env]; ok {
 		return d, nil

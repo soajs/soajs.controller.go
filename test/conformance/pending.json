@@ -1,7 +1,4 @@
 {
-  "maintenance_heartbeat": "PR 11 (maintenance): heartbeat body and service block",
-  "maintenance_unknown_path": "PR 11 (maintenance): any unknown path answers the heartbeat",
-  "maintenance_favicon": "PR 11 (maintenance): answer 200 image/x-icon",
   "soajs_acl_no_key": "PR 12 (/soajs/acl): key required, 132 with 403",
   "soajs_acl_key_token": "PR 12 (/soajs/acl): finalACL as Node.js builds it",
   "soajs_proxy_no_route": "PR 12 (/soajs/proxy): cross-environment proxy, 139",
@@ -10,10 +7,5 @@
   "soajs_proxy_unknown_env": "PR 12 (/soajs/proxy): 137 for an environment the key has no extKey for",
   "soajs_proxy_other_env": "PR 12 (/soajs/proxy): 137 for an environment the key has no extKey for",
   "soajs_proxy_env_without_registry": "PR 12 (/soajs/proxy): 207 for an environment without a registry",
-  "soajs_proxy_invalid_uri": "PR 12 (/soajs/proxy): 135 for an invalid URI",
-  "maintenance_get_registry": "PR 11 (maintenance): /getRegistry as Node.js answers it",
-  "maintenance_awareness_stat": "PR 4 (awareness) and PR 11 (maintenance): awarenessStats",
-  "maintenance_load_provision": "PR 11 (maintenance): /loadProvision answer",
-  "maintenance_reload_registry": "PR 11 (maintenance): /reloadRegistry answer",
-  "maintenance_register": "PR 11 (maintenance): /register with the full registration"
+  "soajs_proxy_invalid_uri": "PR 12 (/soajs/proxy): 135 for an invalid URI"
 }
