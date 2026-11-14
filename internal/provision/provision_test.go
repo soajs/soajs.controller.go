@@ -79,21 +79,53 @@ func TestKeyData(t *testing.T) {
 	}
 }
 
-func TestKeyDataConcurrent(t *testing.T) {
+// Requests change what provision returns (servicesConfig merges, ACL shaping); concurrently, under
+// -race, and the cache stays as loaded.
+func TestReturnedValuesDoNotShareTheCache(t *testing.T) {
 	p := newTestProvision()
-	p.ingestTenant(tenantFixture(t, "null"), time.Now().UnixMilli())
+	now := time.Now().UnixMilli()
+	p.ingestTenant(tenantFixture(t, "null"), now)
+	var prod productDoc
+	if err := json.Unmarshal([]byte(`{"packages":[{"code":"P_A","_TTL":0,"acl":{"dev":{"svc":{"1":{"access":true,"get":{"apis":{"/a":{"access":true}}}}}}}}]}`), &prod); err != nil {
+		t.Fatal(err)
+	}
+	p.packages = packageEntries(&prod, "dev", "", now)
+
 	var wg sync.WaitGroup
 	for i := 0; i < 50; i++ {
 		wg.Add(1)
-		go func() {
+		go func(i int) {
 			defer wg.Done()
 			p.mu.RLock()
 			k := keyData(p.keys["k1"], "e1", time.Now().UnixMilli())
 			p.mu.RUnlock()
-			k.ExtKey = "mutated"
-		}()
+			k.Config["merged"] = i
+			k.Config["conform"].(map[string]interface{})["a"] = i
+			k.Tenant.Profile["x"] = i
+			k.Tenant.Main.Code = "CHANGED"
+
+			pkg, err := p.GetPackageData("P_A")
+			if err != nil {
+				t.Error(err)
+				return
+			}
+			pkg.ACL["svc"].(map[string]interface{})["1"].(map[string]interface{})["access"] = false
+			delete(pkg.ACLAllEnv, "dev")
+		}(i)
 	}
 	wg.Wait()
+
+	k := keyData(p.keys["k1"], "e1", time.Now().UnixMilli())
+	if _, ok := k.Config["merged"]; ok || k.Config["conform"].(map[string]interface{})["a"] != float64(1) {
+		t.Errorf("the cached key config changed: %v", k.Config)
+	}
+	if len(k.Tenant.Profile) != 0 || k.Tenant.Main.Code != "MAIN" {
+		t.Error("the cached tenant changed")
+	}
+	pkg, _ := p.GetPackageData("P_A")
+	if pkg.ACL["svc"].(map[string]interface{})["1"].(map[string]interface{})["access"] != true || pkg.ACLAllEnv["dev"] == nil {
+		t.Error("the cached package ACL changed")
+	}
 }
 
 func jsonInt(v int64) string {
