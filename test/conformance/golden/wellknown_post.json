@@ -1,0 +1,7 @@
+{
+  "status": 404,
+  "headers": {
+    "Content-Type": "application/json"
+  },
+  "body": "{\"result\":false,\"errors\":{\"codes\":[130],\"details\":[{\"code\":130,\"message\":\"Unknown service.\"}]}}"
+}

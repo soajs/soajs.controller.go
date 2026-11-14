@@ -159,9 +159,11 @@ func (c *Controller) Setup(r *chi.Mux) error {
 	r.Use(middleware.Enhancer())
 	r.Use(middleware.IP2BanWithRegistry(c.registry))
 	r.Use(middleware.MaintenanceMode(c.registry))
+	r.Use(middleware.WellKnown(c.registry, c.provision)) // MCP authorization metadata, before the url middleware
 	r.Use(middleware.URL(c.registry))
 	r.Use(middleware.Awareness(c.awareness))
 	r.Use(middleware.AwarenessEnv(c.awarenessEnv))
+	r.Use(middleware.MCPAuthorize(c.registry, c.provision)) // /soajs/mcp: 401 to authorize, the key of an agent's token
 	r.Use(middleware.Key(c.provision, c.registry, c.cfg.Environment))
 	r.Use(middleware.KeyACL())
 	r.Use(middleware.GotoService(c.registry, c.awareness, middleware.NewMonitor(c.registry.Get, c.awareness, c.logger), c.provision,

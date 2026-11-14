@@ -1,0 +1,8 @@
+{
+  "status": 200,
+  "headers": {
+    "Cache-Control": "no-store",
+    "Content-Type": "application/json"
+  },
+  "body": "{\"resource\":\"https://127.0.0.1:24000/soajs/mcp\",\"authorization_servers\":[\"https://127.0.0.1:24000/soajs/mcp/auth/default\"],\"bearer_methods_supported\":[\"header\"]}"
+}

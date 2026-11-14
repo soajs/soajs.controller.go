@@ -1,0 +1,7 @@
+{
+  "status": 200,
+  "headers": {
+    "Content-Type": "application/json"
+  },
+  "body": "{\"resource\":\"https://mcp.conformance.invalid/soajs/mcp\",\"authorization_servers\":[\"https://mcp.conformance.invalid/soajs/mcp/auth/host\"],\"bearer_methods_supported\":[\"header\"]}"
+}

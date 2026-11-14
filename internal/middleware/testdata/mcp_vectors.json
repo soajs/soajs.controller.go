@@ -1,0 +1,681 @@
+{
+ "swagger": [
+  {
+   "doc": {
+    "swagger": "2.0",
+    "basePath": "/api",
+    "definitions": {
+     "Pet": {
+      "type": "object",
+      "required": [
+       "name",
+       "ghost"
+      ],
+      "properties": {
+       "id": {
+        "type": "integer",
+        "readOnly": true
+       },
+       "name": {
+        "type": "string",
+        "example": "rex"
+       },
+       "tag": {
+        "$ref": "#/definitions/Tag"
+       },
+       "kids": {
+        "type": "array",
+        "items": {
+         "$ref": "#/definitions/Pet"
+        }
+       }
+      }
+     },
+     "Tag": {
+      "type": "string",
+      "x-extra": 1,
+      "xml": {
+       "name": "t"
+      }
+     }
+    },
+    "paths": {
+     "10": {
+      "get": {}
+     },
+     "/pets/{petId}": {
+      "parameters": [
+       {
+        "name": "petId",
+        "in": "path",
+        "type": "integer",
+        "description": "The pet"
+       }
+      ],
+      "get": {
+       "operationId": "getPet",
+       "tags": [
+        "Pets",
+        "x"
+       ],
+       "parameters": [
+        {
+         "name": "verbose",
+         "in": "query",
+         "type": "boolean",
+         "default": false
+        }
+       ]
+      },
+      "put": {
+       "summary": "Replace",
+       "parameters": [
+        {
+         "name": "body",
+         "in": "body",
+         "required": true,
+         "schema": {
+          "$ref": "#/definitions/Pet"
+         }
+        }
+       ]
+      },
+      "delete": {
+       "description": "Remove it"
+      },
+      "patch": {
+       "summary": "ignored"
+      }
+     },
+     "/upload/{folder}": {
+      "post": {
+       "parameters": [
+        {
+         "name": "file",
+         "in": "formData",
+         "type": "file",
+         "required": true
+        },
+        {
+         "name": "note",
+         "in": "formData",
+         "type": "string"
+        }
+       ]
+      }
+     },
+     "/raw": {
+      "post": {
+       "parameters": [
+        {
+         "in": "body",
+         "name": "list",
+         "schema": {
+          "type": "array",
+          "items": {
+           "type": "string"
+          }
+         }
+        }
+       ]
+      }
+     },
+     "/2": {
+      "get": {
+       "summary": "numeric"
+      }
+     },
+     "/1": {
+      "get": {
+       "summary": "numeric one"
+      }
+     }
+    }
+   },
+   "tools": [
+    {
+     "m": "get",
+     "v": "/pets/:petId",
+     "l": "GET /pets/{petId}",
+     "inputSchema": {
+      "type": "object",
+      "properties": {
+       "petId": {
+        "type": "integer",
+        "description": "The pet"
+       },
+       "verbose": {
+        "type": "boolean",
+        "default": false
+       }
+      },
+      "required": [
+       "petId"
+      ]
+     },
+     "fields": {
+      "petId": {
+       "in": "params",
+       "path": [
+        "petId"
+       ]
+      },
+      "verbose": {
+       "in": "query",
+       "path": [
+        "verbose"
+       ]
+      }
+     },
+     "group": "Pets",
+     "operationId": "getPet"
+    },
+    {
+     "m": "put",
+     "v": "/pets/:petId",
+     "l": "Replace",
+     "inputSchema": {
+      "type": "object",
+      "properties": {
+       "petId": {
+        "type": "integer",
+        "description": "The pet"
+       },
+       "name": {
+        "type": "string"
+       },
+       "tag": {
+        "type": "string",
+        "x-extra": 1
+       },
+       "kids": {
+        "type": "array",
+        "items": {}
+       }
+      },
+      "required": [
+       "petId",
+       "name"
+      ]
+     },
+     "fields": {
+      "petId": {
+       "in": "params",
+       "path": [
+        "petId"
+       ]
+      },
+      "name": {
+       "in": "body",
+       "path": [
+        "name"
+       ]
+      },
+      "tag": {
+       "in": "body",
+       "path": [
+        "tag"
+       ]
+      },
+      "kids": {
+       "in": "body",
+       "path": [
+        "kids"
+       ]
+      }
+     }
+    },
+    {
+     "m": "delete",
+     "v": "/pets/:petId",
+     "l": "Remove it",
+     "inputSchema": {
+      "type": "object",
+      "properties": {
+       "petId": {
+        "type": "integer",
+        "description": "The pet"
+       }
+      },
+      "required": [
+       "petId"
+      ]
+     },
+     "fields": {
+      "petId": {
+       "in": "params",
+       "path": [
+        "petId"
+       ]
+      }
+     }
+    },
+    {
+     "m": "post",
+     "v": "/upload/:folder",
+     "l": "POST /upload/{folder}",
+     "inputSchema": {
+      "type": "object",
+      "properties": {
+       "file": {
+        "type": "string"
+       },
+       "note": {
+        "type": "string"
+       },
+       "folder": {
+        "type": "string"
+       }
+      },
+      "required": [
+       "file",
+       "folder"
+      ]
+     },
+     "fields": {
+      "file": {
+       "in": "body",
+       "path": [
+        "file"
+       ]
+      },
+      "note": {
+       "in": "body",
+       "path": [
+        "note"
+       ]
+      },
+      "folder": {
+       "in": "params",
+       "path": [
+        "folder"
+       ]
+      }
+     }
+    },
+    {
+     "m": "post",
+     "v": "/raw",
+     "l": "POST /raw",
+     "inputSchema": {
+      "type": "object",
+      "properties": {
+       "list": {
+        "type": "array",
+        "items": {
+         "type": "string"
+        }
+       }
+      }
+     },
+     "fields": {
+      "list": {
+       "in": "body",
+       "path": []
+      }
+     }
+    },
+    {
+     "m": "get",
+     "v": "/2",
+     "l": "numeric",
+     "inputSchema": {
+      "type": "object",
+      "properties": {}
+     },
+     "fields": {}
+    },
+    {
+     "m": "get",
+     "v": "/1",
+     "l": "numeric one",
+     "inputSchema": {
+      "type": "object",
+      "properties": {}
+     },
+     "fields": {}
+    }
+   ]
+  },
+  {
+   "doc": {
+    "openapi": "3.0.3",
+    "paths": {
+     "/orders/{id}": {
+      "get": {
+       "parameters": [
+        {
+         "name": "id",
+         "in": "path",
+         "schema": {
+          "type": "string",
+          "nullable": true
+         }
+        },
+        {
+         "name": "fields",
+         "in": "query",
+         "required": true,
+         "schema": {
+          "type": "array",
+          "items": {
+           "type": "string"
+          }
+         }
+        }
+       ]
+      },
+      "post": {
+       "operationId": "create order!",
+       "requestBody": {
+        "required": true,
+        "content": {
+         "text/plain": {
+          "schema": {
+           "type": "string"
+          }
+         },
+         "application/x-www-form-urlencoded": {
+          "schema": {
+           "type": "object",
+           "properties": {
+            "a": {
+             "type": "integer"
+            }
+           },
+           "required": [
+            "a",
+            "b"
+           ]
+          }
+         }
+        }
+       }
+      }
+     },
+     "/forms": {
+      "put": {
+       "requestBody": {
+        "content": {
+         "multipart/form-data": {
+          "schema": {
+           "$ref": "#/components/schemas/Loop"
+          }
+         }
+        }
+       }
+      }
+     }
+    },
+    "components": {
+     "schemas": {
+      "Loop": {
+       "type": "object",
+       "properties": {
+        "self": {
+         "$ref": "#/components/schemas/Loop"
+        },
+        "n": {
+         "type": "number",
+         "minimum": 0.5
+        }
+       }
+      }
+     }
+    }
+   },
+   "tools": [
+    {
+     "m": "get",
+     "v": "/orders/:id",
+     "l": "GET /orders/{id}",
+     "inputSchema": {
+      "type": "object",
+      "properties": {
+       "id": {
+        "type": [
+         "string",
+         "null"
+        ]
+       },
+       "fields": {
+        "type": "array",
+        "items": {
+         "type": "string"
+        }
+       }
+      },
+      "required": [
+       "id",
+       "fields"
+      ]
+     },
+     "fields": {
+      "id": {
+       "in": "params",
+       "path": [
+        "id"
+       ]
+      },
+      "fields": {
+       "in": "query",
+       "path": [
+        "fields"
+       ]
+      }
+     }
+    },
+    {
+     "m": "post",
+     "v": "/orders/:id",
+     "l": "POST /orders/{id}",
+     "inputSchema": {
+      "type": "object",
+      "properties": {
+       "a": {
+        "type": "integer"
+       },
+       "id": {
+        "type": "string"
+       }
+      },
+      "required": [
+       "a",
+       "id"
+      ]
+     },
+     "fields": {
+      "a": {
+       "in": "body",
+       "path": [
+        "a"
+       ]
+      },
+      "id": {
+       "in": "params",
+       "path": [
+        "id"
+       ]
+      }
+     },
+     "operationId": "create order!"
+    },
+    {
+     "m": "put",
+     "v": "/forms",
+     "l": "PUT /forms",
+     "inputSchema": {
+      "type": "object",
+      "properties": {
+       "self": {},
+       "n": {
+        "type": "number",
+        "minimum": 0.5
+       }
+      }
+     },
+     "fields": {
+      "self": {
+       "in": "body",
+       "path": [
+        "self"
+       ]
+      },
+      "n": {
+       "in": "body",
+       "path": [
+        "n"
+       ]
+      }
+     }
+    }
+   ]
+  }
+ ],
+ "calls": [
+  {
+   "args": {
+    "id": "a b/c",
+    "rest": 5,
+    "q": "x y&z",
+    "deep": {
+     "k": [
+      1,
+      "é"
+     ]
+    },
+    "list": [
+     1,
+     null,
+     {
+      "a": 1
+     },
+     "s"
+    ],
+    "name": "n",
+    "n": 1e+21,
+    "nul": null
+   },
+   "call": {
+    "path": "/a/a%20b%2Fc/b/c/5",
+    "query": "?q=x+y%26z&x.y=%7B%22k%22%3A%5B1%2C%22%C3%A9%22%5D%7D&list=1&list=null&list=%7B%22a%22%3A1%7D&list=s&n=1e%2B21&nul=null",
+    "body": {
+     "user": {
+      "name": "n"
+     }
+    }
+   }
+  },
+  {
+   "args": {
+    "id": "1",
+    "opt": "o",
+    "rest": true,
+    "whole": [
+     1,
+     2
+    ]
+   },
+   "call": {
+    "path": "/a/1/b/o/c/true",
+    "query": "",
+    "body": [
+     1,
+     2
+    ]
+   }
+  },
+  {
+   "args": {
+    "id": "1",
+    "whole": "w",
+    "name": "after"
+   },
+   "call": {
+    "error": "Missing path parameter: rest"
+   }
+  },
+  {
+   "args": {
+    "rest": "r"
+   },
+   "call": {
+    "error": "Missing path parameter: id"
+   }
+  },
+  {
+   "args": {
+    "id": null,
+    "rest": "r"
+   },
+   "call": {
+    "error": "Missing path parameter: id"
+   }
+  }
+ ],
+ "tool": {
+  "m": "post",
+  "v": "/a/:id/b{/:opt}/c/*rest",
+  "fields": {
+   "id": {
+    "in": "params",
+    "path": [
+     "id"
+    ]
+   },
+   "opt": {
+    "in": "params"
+   },
+   "rest": {
+    "in": "params",
+    "path": [
+     "rest"
+    ]
+   },
+   "q": {
+    "in": "query",
+    "path": [
+     "q"
+    ]
+   },
+   "deep": {
+    "in": "query",
+    "path": [
+     "x",
+     "y"
+    ]
+   },
+   "list": {
+    "in": "query"
+   },
+   "whole": {
+    "in": "body",
+    "path": []
+   },
+   "name": {
+    "in": "body",
+    "path": [
+     "user",
+     "name"
+    ]
+   },
+   "n": {
+    "in": "query",
+    "path": [
+     "n"
+    ]
+   },
+   "nul": {
+    "in": "query"
+   }
+  }
+ },
+ "names": [
+  "svc_get_a_b",
+  "svc_get_a_b_2",
+  "svc_get_a_b_3",
+  "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+  "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx_2",
+  "svc_op_ids"
+ ]
+}

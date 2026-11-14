@@ -284,6 +284,30 @@
               }
             }
           }
+        },
+        "mcp": {
+          "enabled": true,
+          "timeout": 5000,
+          "auth": {
+            "scheme": "https",
+            "default": {
+              "authorization_endpoint": "https://auth.conformance.invalid/authorize",
+              "token_endpoint": "https://auth.conformance.invalid/token"
+            },
+            "byProduct": {
+              "CONF": {
+                "authorization_endpoint": "https://conf.conformance.invalid/authorize",
+                "token_endpoint": "https://conf.conformance.invalid/token",
+                "registration_endpoint": "https://conf.conformance.invalid/register"
+              }
+            },
+            "byHost": {
+              "mcp.conformance.invalid": {
+                "authorization_endpoint": "https://host.conformance.invalid/authorize",
+                "token_endpoint": "https://host.conformance.invalid/token"
+              }
+            }
+          }
         }
       }
     },

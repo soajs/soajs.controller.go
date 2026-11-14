@@ -1,0 +1,8 @@
+{
+  "status": 405,
+  "headers": {
+    "Allow": "POST",
+    "Content-Type": "application/json"
+  },
+  "body": "{\"jsonrpc\":\"2.0\",\"id\":null,\"error\":{\"code\":-32600,\"message\":\"Use POST\"}}"
+}
