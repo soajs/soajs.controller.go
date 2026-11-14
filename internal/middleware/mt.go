@@ -17,6 +17,10 @@ import (
 //   - for a version with oauth, OAuth is required unless the API is public (oauthCheck).
 //
 // Without extKeyRequired the API is public and OAuth runs when the version has oauth.
+//
+// /soajs/acl is checked as an API of the gateway with extKeyRequired and oauth; a geo or device
+// refusal answers 158 there. /soajs/proxy takes the key's tenant when a key is sent, skips the
+// other checks, and always requires OAuth.
 func MT(prov provision.Provision, reg registry.Registry, env string) Middleware {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -33,41 +37,49 @@ func MT(prov provision.Provision, reg registry.Registry, env string) Middleware 
 			params.ServiceName = serviceName
 			params.ServiceVersion = params.URLInfo.ServiceVersion
 
-			if serviceName == "soajs" || !version.ExtKeyRequired {
+			// the oauth middleware exists when the registry has a serviceConfig
+			oauthOn := reg.Get() != nil && reg.Get().ServiceConfig != nil
+			if params.Proxy {
+				// with a key, its tenant; a token is always required
+				if r.Header.Get("key") != "" && !keyTenant(w, soajsCtx, prov) {
+					return
+				}
+				params.IsAPIPublic = soajsCtx.Tenant == nil
+				params.RequiresOAuth = oauthOn
+				next.ServeHTTP(w, r)
+				return
+			}
+			if params.GatewayAPI {
+				version = types.VersionInfo{ExtKeyRequired: true, OAuth: true}
+			}
+			if !version.ExtKeyRequired {
 				params.IsAPIPublic = true
-				params.RequiresOAuth = serviceName != "soajs" && version.OAuth
+				params.RequiresOAuth = version.OAuth
 				next.ServeHTTP(w, r)
 				return
 			}
 
+			if !keyTenant(w, soajsCtx, prov) {
+				return
+			}
 			key := soajsCtx.Key
-			if key == nil || key.Application.Package == "" {
-				WriteCode(w, 153)
-				return
-			}
-			if params.Package == nil {
-				WriteCode(w, 152)
-				return
-			}
-			soajsCtx.Tenant = types.TenantFromKey(key)
 			params.KeyAPI = true
-			tenantOauth, _ := prov.GetTenantOauth(key.Tenant.ID)
-			params.TenantOauth = tenantOauth
+			tenantOauth := params.TenantOauth
 
 			params.SkipACL, params.SkipOAuth = CheckMTWhitelist(reg.Get(), getClientIP(r))
 
 			if !params.SkipACL && !geoAllowed(key.Geo, getClientIP(r)) {
-				WriteCode(w, 155)
+				WriteCode(w, gatewayAPICode(params, 155))
 				return
 			}
 			if !params.SkipACL {
 				if code := deviceCheck(key.Device, r.Header.Get("User-Agent")); code != 0 {
-					WriteCode(w, code)
+					WriteCode(w, gatewayAPICode(params, code))
 					return
 				}
 			}
 
-			if version.OAuth && !params.SkipOAuth && reg.Get() != nil && reg.Get().ServiceConfig != nil {
+			if version.OAuth && !params.SkipOAuth && oauthOn {
 				disabled := tenantOauth != nil && tenantOauth.Disabled != 0
 				if !disabled && !isAPIPublic(params.ACL, params.URLInfo.ServicePath, r) {
 					params.RequiresOAuth = true
@@ -92,7 +104,16 @@ func MTACL(reg registry.Registry) Middleware {
 				return
 			}
 			params := soajsCtx.Controller.ServiceParams
-			if params.URLInfo.ServiceName == "soajs" || params.SkipACL ||
+			if params.GatewayAPI {
+				// the gateway's API needs the user: any failure before it was loaded is 158
+				if soajsCtx.Urac == nil {
+					WriteCode(w, 158)
+					return
+				}
+				next.ServeHTTP(w, r)
+				return
+			}
+			if params.Proxy || params.SkipACL ||
 				!versionFlags(reg, params.URLInfo.ServiceName, params.URLInfo.ServiceVersion).ExtKeyRequired {
 				next.ServeHTTP(w, r)
 				return
@@ -133,6 +154,33 @@ func apiCheck(params *types.ServiceParams, loggedIn bool) int {
 		return checkPermission(acl, api, loggedIn)
 	}
 	return 0
+}
+
+// keyTenant takes the tenant of a key's call (mw/mt/index.js): a key without a package answers
+// 153, a package that did not load 152; the tenant and its oauth come from the key.
+func keyTenant(w http.ResponseWriter, soajsCtx *SOAJSContext, prov provision.Provision) bool {
+	params := soajsCtx.Controller.ServiceParams
+	key := soajsCtx.Key
+	if key == nil || key.Application.Package == "" {
+		WriteCode(w, 153)
+		return false
+	}
+	if params.Package == nil {
+		WriteCode(w, 152)
+		return false
+	}
+	soajsCtx.Tenant = types.TenantFromKey(key)
+	params.TenantOauth, _ = prov.GetTenantOauth(key.Tenant.ID)
+	return true
+}
+
+// gatewayAPICode is the code of a check that fails on the gateway's API before the user is
+// loaded: 158, as Node.js answers for /soajs/acl; other APIs keep the check's code.
+func gatewayAPICode(params *types.ServiceParams, code int) int {
+	if params.GatewayAPI {
+		return 158
+	}
+	return code
 }
 
 // checkPermission is the Node.js _api.checkPermission.

@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"encoding/json"
+	"errors"
 	"github.com/soajs/soajs.controller.go/internal/registry"
 	"io"
 	"net"
@@ -43,6 +44,8 @@ func (m *mockAwarenessProxy) Stats() map[string]map[string]map[string]*awareness
 // mockRegistryProxy implements registry.Registry for proxy tests
 type mockRegistryProxy struct {
 	data *types.RegistryData
+	// others, when set, are the registries of the other environments, by lowercase code
+	others map[string]*types.RegistryData
 }
 
 func (m *mockRegistryProxy) Load(env string) error                    { return nil }
@@ -62,6 +65,12 @@ func (m *mockRegistryProxy) UpsertEnvController(string, string, int64, map[strin
 func (m *mockRegistryProxy) Register(registry.RegisterOptions) (interface{}, error) { return nil, nil }
 
 func (m *mockRegistryProxy) LoadByEnv(env string, reload bool) (*types.RegistryData, error) {
+	if m.others != nil {
+		if d, ok := m.others[strings.ToLower(env)]; ok {
+			return d, nil
+		}
+		return nil, errors.New("no registry for " + env)
+	}
 	return m.Get(), nil
 }
 func (m *mockRegistryProxy) Close() {}
@@ -125,7 +134,7 @@ func newProxyEnv(t *testing.T, handler http.HandlerFunc) *proxyEnv {
 
 // serve runs URL, GotoService, InjectObj and the gotoservice, as the gateway's chain does.
 func (e *proxyEnv) serve(req *http.Request) *httptest.ResponseRecorder {
-	handler := Context(zap.NewNop(), "test")(URL(nil)(GotoService(e.reg, e.aw, e.monitor())(InjectObj(e.reg, e.aw)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := Context(zap.NewNop(), "test")(URL(nil)(GotoService(e.reg, e.aw, e.monitor(), &mockProvision{}, GatewayService{Name: "controller", Version: "1"})(InjectObj(e.reg, e.aw)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := GetSOAJSContext(r.Context())
 		if ctx.Controller.Gotoservice == nil {
 			w.WriteHeader(299)
@@ -162,7 +171,11 @@ func TestGotoService_Resolution(t *testing.T) {
 		{"unknown soajs route", "/soajs/other", nil, `"code":130`, 0},
 		{"extKeyRequired without key", "/svc/v1/x", nil, `"code":132`, 0},
 		{"extKeyRequired with a bad key", "/svc/v1/x", map[string]string{"key": "bad"}, `"code":132`, 0},
-		{"soajs acl goes on", "/soajs/acl", nil, "", 299},
+		{"soajs acl without a key", "/soajs/acl", nil, `"code":132`, 0},
+		{"soajs acl with a key that did not resolve", "/soajs/acl", map[string]string{"key": "any"}, `"code":132`, 0},
+		{"soajs proxy with a bad key", "/soajs/proxy?proxyRoute=%2Fsvc%2Fx", map[string]string{"key": "bad"}, `"code":132`, 0},
+		{"soajs proxy to a relative route", "/soajs/proxy?proxyRoute=%2Fsvc%2Fx", nil, `"code":135`, 0},
+		{"soajs proxy without a route", "/soajs/proxy", nil, `"code":139`, 0},
 	}
 	for _, c := range cases {
 		req := httptest.NewRequest("GET", c.path, nil)

@@ -25,7 +25,8 @@ var resolverClient = &http.Client{}
 //   - the key's configuration, with the user's (config.keys.<iKey>.config) merged into a copy,
 //     becomes the services configuration;
 //   - when the user's groups allow packages under the product, their ACL replaces the package
-//     ACL for the request.
+//     ACL for the request (not on /soajs/acl, which answers with it);
+//   - on /soajs/acl a roaming failure answers 158.
 func Urac(driver *urac.Driver, prov provision.Provision, reg registry.Registry, env string) Middleware {
 	regEnvironment := strings.ToLower(env)
 	return func(next http.Handler) http.Handler {
@@ -52,7 +53,7 @@ func Urac(driver *urac.Driver, prov provision.Provision, reg registry.Registry, 
 					c, err := prov.GetTenantCode(token.ClientID)
 					if err != nil || c == "" {
 						soajsCtx.Log.Error("roaming: tenant not found", zap.String("clientId", token.ClientID), zap.Error(err))
-						WriteCode(w, 170)
+						WriteCode(w, gatewayAPICode(params, 170))
 						return
 					}
 					code = c
@@ -60,7 +61,7 @@ func Urac(driver *urac.Driver, prov provision.Provision, reg registry.Registry, 
 				data, err := reg.LoadByEnv(token.Env, false)
 				if err != nil || data == nil {
 					soajsCtx.Log.Error("roaming: registry not found", zap.String("env", token.Env), zap.Error(err))
-					WriteCode(w, 170)
+					WriteCode(w, gatewayAPICode(params, 170))
 					return
 				}
 				roaming = &urac.Roaming{TID: token.ClientID, ID: token.ClientID, User: token.User, Code: code, TenantMetaDB: map[string]interface{}{}}
@@ -112,7 +113,8 @@ func Urac(driver *urac.Driver, prov provision.Provision, reg registry.Registry, 
 			soajsCtx.ServicesConfig = mergeRecursive(deepCopyJSON(key.Config), userConfig)
 			soajsCtx.Urac = user
 
-			if acl := user.ACL(); acl != nil {
+			// the gateway's API answers with the caller's ACL; it has no final ACL
+			if acl := user.ACL(); acl != nil && !params.GatewayAPI {
 				params.ACL = uracFinalACL(acl, params, strings.ToLower(r.Method))
 			}
 			next.ServeHTTP(w, r)

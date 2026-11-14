@@ -42,6 +42,11 @@ type Provision interface {
 	// GetTenantCode returns a tenant's code.
 	GetTenantCode(tenantID string) (string, error)
 
+	// GetTenantEnvExtKey reads the tenant with a code and returns the last of its extKeys for env
+	// (the /soajs/proxy getTenantByCode and findExtKeyForEnvironment). found is false when no
+	// tenant has the code.
+	GetTenantEnvExtKey(code, env string) (extKey string, found bool, err error)
+
 	// OAuthModel returns the access token store.
 	OAuthModel() OAuthModel
 }
@@ -292,6 +297,38 @@ func (p *MongoProvision) GetTenantCode(tenantID string) (string, error) {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 	return p.codes[tenantID], nil
+}
+
+func (p *MongoProvision) GetTenantEnvExtKey(code, env string) (string, bool, error) {
+	schema, err := schemaFor("tenants")
+	if err != nil {
+		return "", false, err
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	raw, err := p.db.Collection("tenants").FindOne(ctx, bson.M{"code": strings.ToUpper(code)}).Raw()
+	if err == drv.ErrNoDocuments {
+		return "", false, nil
+	}
+	if err != nil {
+		return "", false, fmt.Errorf("tenants: %w", err)
+	}
+	var t tenantDoc
+	if problems, err := schema.Decode(raw, &t); err != nil || problems != nil {
+		p.skip("tenants", raw, problems, err)
+		return "", false, nil
+	}
+	extKey := ""
+	for _, app := range t.Applications {
+		for _, k := range app.Keys {
+			for _, e := range k.ExtKeys {
+				if e.Env != "" && e.Env == env {
+					extKey = e.ExtKey
+				}
+			}
+		}
+	}
+	return extKey, true, nil
 }
 
 func (p *MongoProvision) ensureTenant(tenantID string) error {

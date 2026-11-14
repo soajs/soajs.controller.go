@@ -1,11 +1,1 @@
-{
-  "soajs_acl_no_key": "PR 12 (/soajs/acl): key required, 132 with 403",
-  "soajs_acl_key_token": "PR 12 (/soajs/acl): finalACL as Node.js builds it",
-  "soajs_proxy_no_route": "PR 12 (/soajs/proxy): cross-environment proxy, 139",
-  "soajs_proxy_relative_route": "PR 12 (/soajs/proxy): cross-environment proxy, 135 for a route that is not a URL",
-  "soajs_proxy_full_uri": "PR 12 (/soajs/proxy): cross-environment proxy to a full URI",
-  "soajs_proxy_unknown_env": "PR 12 (/soajs/proxy): 137 for an environment the key has no extKey for",
-  "soajs_proxy_other_env": "PR 12 (/soajs/proxy): 137 for an environment the key has no extKey for",
-  "soajs_proxy_env_without_registry": "PR 12 (/soajs/proxy): 207 for an environment without a registry",
-  "soajs_proxy_invalid_uri": "PR 12 (/soajs/proxy): 135 for an invalid URI"
-}
+{}

@@ -6,7 +6,6 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
-	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -19,7 +18,7 @@ import (
 	"time"
 
 	"github.com/soajs/soajs.controller.go/internal/awareness"
-	"github.com/soajs/soajs.controller.go/internal/config"
+	"github.com/soajs/soajs.controller.go/internal/provision"
 	"github.com/soajs/soajs.controller.go/internal/registry"
 	"github.com/soajs/soajs.controller.go/internal/soajserr"
 	"github.com/soajs/soajs.controller.go/pkg/security"
@@ -44,7 +43,12 @@ var proxyTransport http.RoundTripper = &http.Transport{
 //   - a version with extKeyRequired needs a key that decrypts (else 132);
 //   - the oauth passport login is passed through (simpleRTS), a soajsroaming request is answered
 //     with the injectObj (roaming), any other is redirected to the service.
-func GotoService(reg registry.Registry, aw awareness.Awareness, mon *Monitor) Middleware {
+//
+// The gateway's own routes: /soajs/acl answers 132 without a key, else is checked as an API of
+// the gateway and answered with the caller's ACL; /soajs/proxy forwards the request to its
+// proxyRoute, a key that is sent having to decrypt (else 132); any other /soajs route is not a
+// service (130).
+func GotoService(reg registry.Registry, aw awareness.Awareness, mon *Monitor, prov provision.Provision, gw GatewayService) Middleware {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			soajsCtx := GetSOAJSContext(r.Context())
@@ -55,62 +59,39 @@ func GotoService(reg registry.Registry, aw awareness.Awareness, mon *Monitor) Mi
 			}
 			serviceParams := soajsCtx.Controller.ServiceParams
 			serviceName := serviceParams.URLInfo.ServiceName
-			serviceVersion := serviceParams.URLInfo.ServiceVersion
-			servicePath := serviceParams.URLInfo.ServicePath
-			_ = serviceVersion
 
-			// Handle /soajs/proxy - extract proxyRoute query param and route to that service
-			// Note: URL middleware parses /soajs/proxy as ServiceName="soajs", ServicePath="/proxy"
-			if serviceName == "soajs" && serviceParams.URLInfo.ServicePath == "/proxy" {
-				proxyRoute := r.URL.Query().Get("proxyRoute")
-				if proxyRoute == "" {
-					WriteError(w, http.StatusBadRequest,
-						config.ErrCodeInvalidRoute,
-						"proxyRoute query parameter is required")
-					return
-				}
-
-				// Decode the proxyRoute
-				decodedRoute, err := url.QueryUnescape(proxyRoute)
-				if err != nil {
-					decodedRoute = proxyRoute
-				}
-
-				// Parse the proxyRoute to extract service name
-				// Format: /serviceName/path or /serviceName/version/path
-				parts := strings.Split(strings.TrimPrefix(decodedRoute, "/"), "/")
-				if len(parts) < 1 || parts[0] == "" {
-					WriteError(w, http.StatusBadRequest,
-						config.ErrCodeInvalidRoute,
-						"Invalid proxyRoute format")
-					return
-				}
-
-				serviceName = parts[0]
-				serviceVersion = "1" // default version
-				servicePath = "/" + strings.Join(parts[1:], "/")
-
-				// Check if second part is a version number
-				if len(parts) > 1 {
-					if _, err := fmt.Sscanf(parts[1], "%d", new(int)); err == nil {
-						serviceVersion = parts[1]
-						servicePath = "/" + strings.Join(parts[2:], "/")
+			// the gateway's routes, on the path segments as Node.js reads them (serviceInfo)
+			if segments := strings.Split(serviceParams.URLInfo.OriginalPath, "/"); len(segments) > 2 && segments[1] == "soajs" {
+				switch segments[2] {
+				case "acl":
+					if r.Header.Get("key") == "" {
+						WriteCode(w, 132)
+						return
 					}
-				}
-
-				// Update serviceParams for downstream middleware
-				serviceParams.URLInfo.ServiceName = serviceName
-				serviceParams.URLInfo.ServiceVersion = serviceVersion
-				serviceParams.URLInfo.ServicePath = servicePath
-			}
-
-			// Gateway routes: /soajs/acl and /soajs/mcp are handled further on; any other /soajs
-			// route is not a service
-			if serviceName == "soajs" {
-				if servicePath == "/acl" || strings.HasPrefix(servicePath, "/acl/") || servicePath == "/mcp" {
+					mimicGatewayAPI(serviceParams, gw, "/soajs/acl")
+					soajsCtx.Controller.Gotoservice = func(w http.ResponseWriter, r *http.Request) {
+						soajsACL(w, soajsCtx)
+					}
+					next.ServeHTTP(w, r)
+					return
+				case "proxy":
+					if !proxyRoute(w, r, soajsCtx, reg) {
+						return
+					}
+					if r.Header.Get("soajsroaming") != "" {
+						soajsCtx.Controller.Gotoservice = func(w http.ResponseWriter, r *http.Request) {
+							roaming(w, r, soajsCtx, reg)
+						}
+					} else {
+						soajsCtx.Controller.Gotoservice = func(w http.ResponseWriter, r *http.Request) {
+							soajsProxy(w, r, soajsCtx, reg, prov)
+						}
+					}
 					next.ServeHTTP(w, r)
 					return
 				}
+			}
+			if serviceName == "soajs" {
 				WriteCode(w, 130)
 				return
 			}
@@ -188,7 +169,8 @@ func InjectObj(reg registry.Registry, aw awareness.Awareness) Middleware {
 			r.Header.Del("soajsinjectobj")
 			soajsCtx := GetSOAJSContext(r.Context())
 			if soajsCtx != nil && soajsCtx.Controller != nil && soajsCtx.Controller.ServiceParams != nil &&
-				soajsCtx.Controller.ServiceParams.KeyAPI && soajsCtx.Key != nil && soajsCtx.Controller.ServiceParams.URLInfo != nil {
+				soajsCtx.Controller.ServiceParams.KeyAPI && !soajsCtx.Controller.ServiceParams.GatewayAPI &&
+				soajsCtx.Key != nil && soajsCtx.Controller.ServiceParams.URLInfo != nil {
 				h, ok := BuildInjectObj(soajsCtx, reg, aw, &httpRequestInfo{userAgent: r.Header.Get("User-Agent"), clientIP: getClientIP(r)})
 				if !ok {
 					WriteCode(w, 135)

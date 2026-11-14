@@ -77,18 +77,17 @@ func OAuth(prov provision.Provision, reg registry.Registry) Middleware {
 			}
 
 			if !deviceIDMatch(reg, record, r.Header.Get("device-id")) {
-				WriteCode(w, 156)
+				WriteCode(w, gatewayAPICode(params, 156))
 				return
 			}
 			if !restrictedToMatch(record, soajsCtx, reg.GetEnvironment(), r.Header.Get("User-Agent")) {
-				WriteCode(w, 147)
+				WriteCode(w, gatewayAPICode(params, 147))
 				return
 			}
 			params.OAuthToken = record
-			params.UserInfo = record.User
 			if params.KeyAPI {
 				if code := pinCheck(reg, record, soajsCtx, r.Method); code != 0 {
-					WriteCode(w, code)
+					WriteCode(w, gatewayAPICode(params, code))
 					return
 				}
 			}

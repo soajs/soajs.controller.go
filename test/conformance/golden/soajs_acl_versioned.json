@@ -1,0 +1,7 @@
+{
+  "status": 200,
+  "headers": {
+    "Content-Type": "application/json"
+  },
+  "body": "{\"acl\":{\"conform\":{\"1\":{\"access\":true,\"apisPermission\":\"restricted\",\"get\":{\"apis\":{\"/public/hello\":{\"access\":false,\"group\":\"Hello\"},\"/private/hello\":{\"access\":true,\"group\":\"Hello\"}}},\"put\":{\"apis\":{\"/private/item/:id\":{\"access\":true,\"group\":\"Item\"}}},\"post\":{\"apis\":{\"/private/item\":{\"access\":true,\"group\":\"Item\"}}},\"delete\":{\"apis\":{\"/private/item/:id\":{\"access\":true,\"group\":\"Item\"}}},\"patch\":{\"apis\":{\"/private/item/:id\":{\"access\":true,\"group\":\"Item\"}}}}},\"other\":{\"1\":{\"access\":true,\"apisPermission\":\"restricted\",\"get\":{\"apis\":{\"/hello\":{\"access\":true,\"group\":\"Hello\"},\"/throttled\":{\"access\":true,\"group\":\"Hello\"}}}}},\"oauth\":{\"1\":{\"access\":false,\"apisPermission\":\"restricted\",\"get\":{\"apis\":{\"/passport/login/:strategy\":{\"access\":false,\"group\":\"Passport\"}}}}}},\"finalACL\":{\"conform\":{\"version\":\"1\",\"get\":[\"/public/hello\",\"/private/hello\"],\"put\":[\"/private/item/:id\"],\"post\":[\"/private/item\"],\"delete\":[\"/private/item/:id\"],\"patch\":[\"/private/item/:id\"]},\"other\":{\"version\":\"1\",\"get\":[\"/hello\",\"/throttled\"]},\"oauth\":{\"version\":\"1\",\"get\":[\"/passport/login/:strategy\"]}},\"packages\":[\"CONF_DEFAULT\"],\"urac\":{\"_id\":\"6a0e000000000000000000ab\"},\"tenant\":{\"id\":\"6a0e00000000000000000001\",\"name\":\"Conformance tenant\",\"code\":\"CONF\",\"type\":\"product\"}}"
+}

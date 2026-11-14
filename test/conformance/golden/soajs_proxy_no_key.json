@@ -1,0 +1,7 @@
+{
+  "status": 200,
+  "headers": {
+    "Content-Type": "application/json"
+  },
+  "body": "{\"data\":{\"inject\":null,\"method\":\"GET\",\"path\":\"/public/hello\",\"query\":\"access_token=c0f0000000000000000000000000000000000001\"},\"result\":true}"
+}
