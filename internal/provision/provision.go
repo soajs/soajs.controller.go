@@ -191,6 +191,9 @@ func (p *MongoProvision) GetExternalKeyData(extKey string) (*types.Key, error) {
 	}
 	p.mu.RUnlock()
 
+	// As in Node.js, a key that is not cached, has passed its _TTL, or whose extKey is not one of
+	// its listed, unexpired extKeys is read again from the database, on every such request: an
+	// extKey just added or renewed works at once.
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	if err := p.loadTenants(ctx, bson.M{"applications.keys.key": info.Key}); err != nil {
@@ -206,7 +209,8 @@ func (p *MongoProvision) GetExternalKeyData(extKey string) (*types.Key, error) {
 }
 
 // keyData is what a cached key gives for one of its extKeys: nothing when the extKey is not one of
-// them or has expired (soajs.provision getKeyData). It is a new value on every call.
+// them or has expired (soajs.provision getKeyData). It is a deep copy on every call: a request may
+// change it, the cache never sees it.
 func keyData(entry *keyEntry, extKey string, now int64) *types.Key {
 	for _, e := range entry.extKeys {
 		if e.ExtKey != extKey {
@@ -215,21 +219,27 @@ func keyData(entry *keyEntry, extKey string, now int64) *types.Key {
 		if e.ExpDate != nil && *e.ExpDate != 0 && *e.ExpDate <= now {
 			return nil
 		}
+		tenant := entry.tenant
+		tenant.Profile = copyMap(entry.tenant.Profile)
+		if entry.tenant.Main != nil {
+			main := *entry.tenant.Main
+			tenant.Main = &main
+		}
 		return &types.Key{
 			InternalKey: entry.key,
 			ExtKey:      extKey,
-			Tenant:      entry.tenant,
+			Tenant:      tenant,
 			Application: entry.app,
-			Device:      e.Device,
+			Device:      copyMap(e.Device),
 			Env:         e.Env,
-			Geo:         e.Geo,
-			Config:      entry.config,
+			Geo:         copyMap(e.Geo),
+			Config:      copyMap(entry.config),
 		}
 	}
 	return nil
 }
 
-// GetPackageData returns a package (soajs.provision getPackageData), a copy of the cached one.
+// GetPackageData returns a package (soajs.provision getPackageData), a deep copy of the cached one.
 func (p *MongoProvision) GetPackageData(code string) (*types.Package, error) {
 	if code == "" {
 		return nil, codeError(201)
@@ -252,6 +262,8 @@ func (p *MongoProvision) GetPackageData(code string) (*types.Package, error) {
 		}
 	}
 	pkg := entry.pkg
+	pkg.ACL = copyMap(entry.pkg.ACL)
+	pkg.ACLAllEnv = copyMap(entry.pkg.ACLAllEnv)
 	return &pkg, nil
 }
 
@@ -483,6 +495,33 @@ func logSkipped(logger *zap.Logger, coll string, raw bson.Raw, problems []datasc
 	}
 	logger.Error("document skipped, it does not match the data schema",
 		zap.String("collection", coll), zap.String("_id", id), zap.Any("problems", problems), zap.Error(err))
+}
+
+// copyMap deep-copies a decoded JSON object: maps and arrays are copied, other values are
+// immutable.
+func copyMap(m map[string]interface{}) map[string]interface{} {
+	if m == nil {
+		return nil
+	}
+	out := make(map[string]interface{}, len(m))
+	for k, v := range m {
+		out[k] = copyValue(v)
+	}
+	return out
+}
+
+func copyValue(v interface{}) interface{} {
+	switch t := v.(type) {
+	case map[string]interface{}:
+		return copyMap(t)
+	case []interface{}:
+		out := make([]interface{}, len(t))
+		for i, e := range t {
+			out[i] = copyValue(e)
+		}
+		return out
+	}
+	return v
 }
 
 // CodeError is a provision error with a SOAJS error code.
