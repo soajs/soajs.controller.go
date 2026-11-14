@@ -5,7 +5,6 @@ import (
 	"net/http"
 	"sync"
 
-	"github.com/soajs/soajs.controller.go/internal/config"
 	"github.com/soajs/soajs.controller.go/internal/registry"
 	"github.com/soajs/soajs.controller.go/pkg/types"
 )
@@ -47,9 +46,7 @@ func IP2BanWithRegistry(reg registry.Registry) Middleware {
 				bannedIPs := getIP2BanList(regData)
 				for _, bannedIP := range bannedIPs {
 					if matchIP(ip, bannedIP) {
-						WriteError(w, http.StatusForbidden,
-							config.ErrCodeIPBanned,
-							config.DefaultErrors[config.ErrCodeIPBanned])
+						WriteStatusMsg(w, http.StatusForbidden, "banned", nil, false)
 						return
 					}
 				}
@@ -57,9 +54,7 @@ func IP2BanWithRegistry(reg registry.Registry) Middleware {
 
 			// Also check programmatic blacklist
 			if isBanned(ip) {
-				WriteError(w, http.StatusForbidden,
-					config.ErrCodeIPBanned,
-					config.DefaultErrors[config.ErrCodeIPBanned])
+				WriteStatusMsg(w, http.StatusForbidden, "banned", nil, false)
 				return
 			}
 

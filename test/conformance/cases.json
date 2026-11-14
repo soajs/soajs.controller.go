@@ -1,0 +1,125 @@
+[
+  {
+    "name": "root",
+    "about": "the gateway's own root path",
+    "method": "GET",
+    "path": "/"
+  },
+  {
+    "name": "favicon",
+    "method": "GET",
+    "path": "/favicon.ico",
+    "compareHeaders": ["Content-Type"]
+  },
+  {
+    "name": "unknown_service",
+    "method": "GET",
+    "path": "/nosuchservice/v1/hello"
+  },
+  {
+    "name": "unknown_soajs_route",
+    "method": "GET",
+    "path": "/soajs/nosuchroute"
+  },
+  {
+    "name": "no_key",
+    "about": "extKeyRequired service called without a key",
+    "method": "GET",
+    "path": "/conform/v1/private/hello"
+  },
+  {
+    "name": "invalid_key",
+    "method": "GET",
+    "path": "/conform/v1/private/hello",
+    "headers": {"key": "00112233445566778899aabbccddeeff"}
+  },
+  {
+    "name": "service_not_in_package",
+    "method": "GET",
+    "path": "/other/v1/hello",
+    "headers": {"key": "$KEY_NOSVC", "access_token": "$TOKEN_VALID"}
+  },
+  {
+    "name": "api_not_in_package",
+    "method": "GET",
+    "path": "/conform/v1/restricted/api",
+    "headers": {"key": "$KEY_DEFAULT", "access_token": "$TOKEN_VALID"}
+  },
+  {
+    "name": "private_no_token",
+    "method": "GET",
+    "path": "/conform/v1/private/hello",
+    "headers": {"key": "$KEY_DEFAULT"}
+  },
+  {
+    "name": "private_unknown_token",
+    "method": "GET",
+    "path": "/conform/v1/private/hello",
+    "headers": {"key": "$KEY_DEFAULT", "access_token": "c0f00000000000000000000000000000000000ff"}
+  },
+  {
+    "name": "private_expired_token",
+    "method": "GET",
+    "path": "/conform/v1/private/hello",
+    "headers": {"key": "$KEY_DEFAULT", "access_token": "$TOKEN_EXPIRED"}
+  },
+  {
+    "name": "private_token_twice",
+    "about": "token in the query and in the header",
+    "method": "GET",
+    "path": "/conform/v1/private/hello?access_token=$TOKEN_VALID",
+    "headers": {"key": "$KEY_DEFAULT", "access_token": "$TOKEN_VALID"}
+  },
+  {
+    "name": "private_bearer_token",
+    "method": "GET",
+    "path": "/conform/v1/private/hello",
+    "headers": {"key": "$KEY_DEFAULT", "Authorization": "Bearer $TOKEN_VALID"}
+  },
+  {
+    "name": "private_basic_auth",
+    "method": "GET",
+    "path": "/conform/v1/private/hello",
+    "headers": {"key": "$KEY_DEFAULT", "Authorization": "Basic Y29uZm9ybWFuY2U6Y29uZm9ybWFuY2U="}
+  },
+  {
+    "name": "private_ok",
+    "about": "key, ACL and token pass; the mock service answers",
+    "method": "GET",
+    "path": "/conform/v1/private/hello",
+    "headers": {"key": "$KEY_DEFAULT", "access_token": "$TOKEN_VALID"}
+  },
+  {
+    "name": "public_ok",
+    "method": "GET",
+    "path": "/conform/v1/public/hello",
+    "headers": {"key": "$KEY_DEFAULT"}
+  },
+  {
+    "name": "banned_ip",
+    "method": "GET",
+    "path": "/conform/v1/public/hello",
+    "headers": {"key": "$KEY_DEFAULT", "X-Real-IP": "10.255.0.1", "X-Forwarded-For": "10.255.0.1"}
+  },
+  {
+    "name": "maintenance_heartbeat",
+    "target": "maintenance",
+    "method": "GET",
+    "path": "/heartbeat",
+    "ignoreFields": ["ts"]
+  },
+  {
+    "name": "maintenance_unknown_path",
+    "target": "maintenance",
+    "method": "GET",
+    "path": "/nosuchpath",
+    "ignoreFields": ["ts"]
+  },
+  {
+    "name": "maintenance_favicon",
+    "target": "maintenance",
+    "method": "GET",
+    "path": "/favicon.ico",
+    "compareHeaders": ["Content-Type"]
+  }
+]

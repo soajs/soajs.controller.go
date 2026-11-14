@@ -4,7 +4,6 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/soajs/soajs.controller.go/internal/config"
 	"github.com/soajs/soajs.controller.go/internal/registry"
 	"github.com/soajs/soajs.controller.go/pkg/types"
 )
@@ -42,24 +41,14 @@ func MaintenanceMode(reg registry.Registry) Middleware {
 				}
 				message := customConfig.Message
 				if message == "" {
-					message = config.DefaultErrors[config.ErrCodeMaintenanceMode]
+					message = "Maintenance mode is on, come back soon"
 				}
-
-				// Set Retry-After header if configured
 				if customConfig.RetryAfter > 0 {
-					w.Header().Set("Retry-After", strconv.Itoa(customConfig.RetryAfter))
+					WriteStatusMsg(w, status, message,
+						map[string]string{"Retry-After": strconv.Itoa(customConfig.RetryAfter)}, false)
+				} else {
+					WriteStatusMsg(w, status, message, nil, true)
 				}
-
-				w.WriteHeader(status)
-				WriteError(w, status, config.ErrCodeMaintenanceMode, message)
-				return
-			}
-
-			// Fall back to serviceConfig maintenance mode
-			if regData.ServiceConfig != nil && regData.ServiceConfig.MaintenanceMode {
-				WriteError(w, http.StatusServiceUnavailable,
-					config.ErrCodeMaintenanceMode,
-					config.DefaultErrors[config.ErrCodeMaintenanceMode])
 				return
 			}
 

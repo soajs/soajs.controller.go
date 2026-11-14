@@ -1,0 +1,7 @@
+{
+  "status": 401,
+  "headers": {
+    "Content-Type": "application/json"
+  },
+  "body": "{\"result\":false,\"errors\":{\"codes\":[401],\"details\":[{\"code\":401,\"message\":\"The access token provided has expired.\"}]}}"
+}
