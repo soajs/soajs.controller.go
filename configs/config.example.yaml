@@ -1,0 +1,20 @@
+# Example configuration. The gateway reads config.yaml from the working directory, ./configs or
+# /etc/soajs/ (copy this file there); the SOAJS_ environment variables take precedence. Every key
+# is optional; the values below are the defaults. See docs/configuration.md.
+
+service_name: controller
+service_version: "1"
+service_group: Gateway
+service_port: 4000          # SOAJS_SERVICE_PORT
+
+environment: dev            # SOAJS_ENV
+log_level: info             # SOAJS_LOG_LEVEL
+# profile: /opt/soajs/profile/soajsprofile   # SOAJS_PROFILE, required
+
+server:
+  shutdown_timeout: 10      # seconds, SOAJS_SERVER_SHUTDOWN_TIMEOUT
+
+maintenance:
+  # maintenance port = service_port + this, only when the registry has no
+  # serviceConfig.ports.controller and maintenanceInc (SOAJS_MAINTENANCE_PORT_INCREMENT)
+  port_increment: 1001

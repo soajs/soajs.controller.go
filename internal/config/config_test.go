@@ -2,6 +2,7 @@ package config
 
 import (
 	"os"
+	"reflect"
 	"testing"
 )
 
@@ -61,5 +62,34 @@ func TestLoadFromEnv_SOAJS_ENV(t *testing.T) {
 
 	if cfg.Environment != "dashboard" {
 		t.Errorf("Environment = %q, want %q (SOAJS_ENV compatibility)", cfg.Environment, "dashboard")
+	}
+}
+
+// configs/config.example.yaml, used as config.yaml, gives the defaults: every key it shows is one
+// the gateway reads, with its default value.
+func TestExampleConfigIsTheDefaults(t *testing.T) {
+	raw, err := os.ReadFile("../../configs/config.example.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defaults, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	if err := os.WriteFile(dir+"/config.yaml", raw, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	wd, _ := os.Getwd()
+	if err := os.Chdir(dir); err != nil {
+		t.Fatal(err)
+	}
+	defer os.Chdir(wd)
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("the example does not load: %v", err)
+	}
+	if !reflect.DeepEqual(cfg, defaults) {
+		t.Errorf("the example is not the defaults:\n got  %+v\n want %+v", cfg, defaults)
 	}
 }

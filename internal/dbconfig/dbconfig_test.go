@@ -81,3 +81,14 @@ module.exports = {"name":"core_provision","prefix":"t_","servers":[{"host":"127.
 		t.Error("a file without module.exports accepted")
 	}
 }
+
+// The compose profile (deployments/profile.js) loads.
+func TestComposeProfile(t *testing.T) {
+	p, err := LoadProfile("../../deployments/profile.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p.Name != "core_provision" || len(p.Servers) != 1 || p.Servers[0].Host != "mongo" || p.Servers[0].Port != 27017 {
+		t.Errorf("profile %+v", p)
+	}
+}

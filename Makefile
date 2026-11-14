@@ -52,7 +52,7 @@ run: build
 
 docker:
 	@echo "Building Docker image..."
-	docker build -t soajs/controller:$(VERSION) .
+	docker build -f deployments/Dockerfile -t soajs/controller:$(VERSION) .
 
 docker-push:
 	@echo "Pushing Docker image..."
