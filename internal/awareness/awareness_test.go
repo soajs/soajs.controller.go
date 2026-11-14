@@ -24,19 +24,10 @@ func newMockRegistry() *mockRegistry {
 	}
 }
 
-func (m *mockRegistry) Load(env string) error                                    { return nil }
-func (m *mockRegistry) Reload() error                                            { return nil }
-func (m *mockRegistry) Get() *types.RegistryData                                 { return nil }
-func (m *mockRegistry) GetService(name string) (*types.ServiceConfig, error)     { return nil, nil }
-func (m *mockRegistry) GetCustomRegistry(name string) (interface{}, error)       { return nil, nil }
-func (m *mockRegistry) GetResource(resourceType, name string) (*types.Resource, error) {
-	return nil, nil
-}
-func (m *mockRegistry) IsMaintenanceMode() bool                                  { return false }
-func (m *mockRegistry) GetEnvironment() string                                   { return "dev" }
-func (m *mockRegistry) AddUpdateEnvControllers(data types.ControllerUpdate) error {
-	return nil
-}
+func (m *mockRegistry) Load(env string) error    { return nil }
+func (m *mockRegistry) Reload() error            { return nil }
+func (m *mockRegistry) Get() *types.RegistryData { return nil }
+func (m *mockRegistry) GetEnvironment() string   { return "dev" }
 
 func (m *mockRegistry) GetHost(serviceName, version string) (*types.HostInfo, error) {
 	key := serviceName + ":" + version
@@ -46,12 +37,12 @@ func (m *mockRegistry) GetHost(serviceName, version string) (*types.HostInfo, er
 	return nil, nil
 }
 
-func (m *mockRegistry) RegisterHost(info types.HostInfo) error {
+func (m *mockRegistry) RegisterHost(info types.HostRecord) error {
 	if m.registerErr != nil {
 		return m.registerErr
 	}
 	key := info.Name + ":" + info.Version
-	m.hosts[key] = &info
+	m.hosts[key] = &types.HostInfo{Name: info.Name, Version: info.Version, Host: info.IP, Port: info.Port}
 	return nil
 }
 
@@ -344,3 +335,9 @@ func TestDefaultAwareness_GetHostUnhealthySkipped(t *testing.T) {
 		t.Errorf("Expected fallback host 192.168.1.1, got %s", host.Host)
 	}
 }
+
+func (m *mockRegistry) LoadByEnv(env string, reload bool) (*types.RegistryData, error) {
+	return m.Get(), nil
+}
+
+func (m *mockRegistry) Close() {}

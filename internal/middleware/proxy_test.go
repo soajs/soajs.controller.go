@@ -47,17 +47,14 @@ type mockRegistryProxy struct {
 	data *types.RegistryData
 }
 
-func (m *mockRegistryProxy) Load(env string) error                                        { return nil }
-func (m *mockRegistryProxy) Reload() error                                                { return nil }
-func (m *mockRegistryProxy) Get() *types.RegistryData                                     { return m.data }
-func (m *mockRegistryProxy) GetService(name string) (*types.ServiceConfig, error)         { return nil, nil }
-func (m *mockRegistryProxy) GetCustomRegistry(name string) (interface{}, error)           { return nil, nil }
-func (m *mockRegistryProxy) GetResource(resourceType, name string) (*types.Resource, error) { return nil, nil }
-func (m *mockRegistryProxy) RegisterHost(info types.HostInfo) error                       { return nil }
-func (m *mockRegistryProxy) GetHost(serviceName, version string) (*types.HostInfo, error) { return nil, nil }
-func (m *mockRegistryProxy) AddUpdateEnvControllers(data types.ControllerUpdate) error    { return nil }
-func (m *mockRegistryProxy) IsMaintenanceMode() bool                                      { return false }
-func (m *mockRegistryProxy) GetEnvironment() string                                       { return "test" }
+func (m *mockRegistryProxy) Load(env string) error                    { return nil }
+func (m *mockRegistryProxy) Reload() error                            { return nil }
+func (m *mockRegistryProxy) Get() *types.RegistryData                 { return m.data }
+func (m *mockRegistryProxy) RegisterHost(info types.HostRecord) error { return nil }
+func (m *mockRegistryProxy) GetHost(serviceName, version string) (*types.HostInfo, error) {
+	return nil, nil
+}
+func (m *mockRegistryProxy) GetEnvironment() string { return "test" }
 
 // =============================================================================
 // GotoService Middleware Tests
@@ -695,3 +692,9 @@ func TestStripPrefix_Empty(t *testing.T) {
 		t.Errorf("Result = %s, want empty", result)
 	}
 }
+
+func (m *mockRegistryProxy) LoadByEnv(env string, reload bool) (*types.RegistryData, error) {
+	return m.Get(), nil
+}
+
+func (m *mockRegistryProxy) Close() {}

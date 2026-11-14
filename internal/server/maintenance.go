@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"os"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -84,17 +86,11 @@ func (h *maintenanceHandler) reloadRegistry(w http.ResponseWriter, r *http.Reque
 		h.respondError(w, "/reloadRegistry", err)
 		return
 	}
-	// Return the registry data like Node.js does
-	regData := h.ctrl.Registry().Get()
-	h.respondWithRoute(w, true, regData, "/reloadRegistry")
+	h.respondWithRoute(w, true, cloneAndFilterRegistry(h.ctrl.Registry().Get(), "", ""), "/reloadRegistry")
 }
 
 func (h *maintenanceHandler) getRegistry(w http.ResponseWriter, r *http.Request) {
-	// Get query parameters
-	reqServiceName := r.URL.Query().Get("name")
-	if reqServiceName == "" {
-		reqServiceName = r.URL.Query().Get("serviceName")
-	}
+	reqServiceName := r.URL.Query().Get("serviceName")
 	reqServiceType := r.URL.Query().Get("type")
 	if reqServiceType == "" {
 		reqServiceType = "service"
@@ -106,8 +102,7 @@ func (h *maintenanceHandler) getRegistry(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	// Build filtered registry like Node.js does
-	filteredRegistry := h.cloneAndFilterRegistry(regData, reqServiceName, reqServiceType)
+	filteredRegistry := cloneAndFilterRegistry(regData, reqServiceName, reqServiceType)
 
 	// Add awareness info
 	controllerPort := 4000
@@ -122,17 +117,18 @@ func (h *maintenanceHandler) getRegistry(w http.ResponseWriter, r *http.Request)
 	h.respondWithRoute(w, true, filteredRegistry, "/getRegistry")
 }
 
-func (h *maintenanceHandler) cloneAndFilterRegistry(reg *types.RegistryData, reqServiceName, reqServiceType string) map[string]interface{} {
-	filtered := make(map[string]interface{})
-
+// cloneAndFilterRegistry is the registry a service receives (Node.js server/maintenance.js:51-139):
+// serviceConfig without cors, and without oauth except for the oauth service; the deployer without
+// its kubernetes token; for a service, only the gateway entry and its own group and port.
+func cloneAndFilterRegistry(reg *types.RegistryData, reqServiceName, reqServiceType string) map[string]interface{} {
+	filtered := map[string]interface{}{}
 	if reg == nil {
 		return filtered
 	}
-
-	// Copy basic fields
 	filtered["timeLoaded"] = reg.TimeLoaded
-	filtered["name"] = reg.Name
-	filtered["environment"] = reg.Environment
+	if reg.Name != "" {
+		filtered["name"] = reg.Name
+	}
 	if reg.Domain != "" {
 		filtered["domain"] = reg.Domain
 	}
@@ -145,97 +141,65 @@ func (h *maintenanceHandler) cloneAndFilterRegistry(reg *types.RegistryData, req
 	if reg.Protocol != "" {
 		filtered["protocol"] = reg.Protocol
 	}
-	if reg.Port > 0 {
+	if reg.Port != 0 {
 		filtered["port"] = reg.Port
 	}
-
-	// Copy coreDB and tenantMetaDB
-	if reg.CoreDB != nil {
-		filtered["coreDB"] = reg.CoreDB
+	if reg.Environment != "" {
+		filtered["environment"] = reg.Environment
 	}
-	if reg.TenantMetaDB != nil {
-		filtered["tenantMetaDB"] = reg.TenantMetaDB
-	}
-
-	// Copy serviceConfig (filter out cors, and oauth unless requesting service is oauth)
+	filtered["coreDB"] = reg.CoreDB
+	filtered["tenantMetaDB"] = reg.TenantMetaDB
 	if reg.ServiceConfig != nil {
-		serviceConfig := map[string]interface{}{
-			"logger":    reg.ServiceConfig.Logger,
-			"ports":     reg.ServiceConfig.Ports,
-			"awareness": reg.ServiceConfig.Awareness,
-			"key":       reg.ServiceConfig.Key,
-		}
-		if reg.ServiceConfig.Cookie.Secret != "" {
-			serviceConfig["cookie"] = reg.ServiceConfig.Cookie
-		}
-		if reg.ServiceConfig.Session.Name != "" {
-			serviceConfig["session"] = reg.ServiceConfig.Session
-		}
-		// Only include oauth config if requesting service is oauth
-		if reqServiceName == "oauth" && len(reg.ServiceConfig.OAuth.Grants) > 0 {
-			serviceConfig["oauth"] = reg.ServiceConfig.OAuth
-		}
-		if reg.ServiceConfig.Throttling != nil {
-			serviceConfig["throttling"] = reg.ServiceConfig.Throttling
+		var serviceConfig map[string]interface{}
+		clone(reg.ServiceConfig, &serviceConfig)
+		delete(serviceConfig, "cors")
+		if reqServiceName != "oauth" {
+			delete(serviceConfig, "oauth")
 		}
 		filtered["serviceConfig"] = serviceConfig
 	}
-
-	// Copy deployer
 	if reg.Deployer != nil {
-		filtered["deployer"] = reg.Deployer
-	}
-
-	// Copy custom and resources
-	if reg.CustomRegistry != nil {
-		filtered["custom"] = reg.CustomRegistry
-	}
-	if reg.Resources != nil {
-		filtered["resources"] = reg.Resources
-	}
-
-	// Filter services based on request
-	services := make(map[string]interface{})
-	if reg.Services != nil {
-		// Always include controller
-		if ctrl, ok := reg.Services["controller"]; ok {
-			services["controller"] = ctrl
-		}
-
-		if reqServiceType == "service" && reqServiceName != "" {
-			// Only include the requested service (minimal info)
-			if svc, ok := reg.Services[reqServiceName]; ok {
-				services[reqServiceName] = map[string]interface{}{
-					"group": svc.Group,
-					"port":  svc.Port,
-				}
-			}
-		} else if reqServiceType != "mdaemon" {
-			// Include all services
-			for name, svc := range reg.Services {
-				services[name] = svc
+		var deployer map[string]interface{}
+		clone(reg.Deployer, &deployer)
+		if deployer["type"] == "container" {
+			container, _ := deployer["container"].(map[string]interface{})
+			k8s, _ := container["kubernetes"].(map[string]interface{})
+			if conf, ok := k8s["configuration"].(map[string]interface{}); ok {
+				delete(conf, "token")
 			}
 		}
+		filtered["deployer"] = deployer
 	}
-	filtered["services"] = services
+	filtered["custom"] = reg.CustomRegistry
+	filtered["resources"] = reg.Resources
 
-	// Handle daemons
-	if reqServiceType == "mdaemon" && reqServiceName != "" {
-		daemons := make(map[string]interface{})
-		if reg.Daemons != nil {
-			if daemon, ok := reg.Daemons[reqServiceName]; ok {
-				daemons[reqServiceName] = map[string]interface{}{
-					"group": daemon.Group,
-					"port":  daemon.Port,
-				}
-			}
+	services := map[string]interface{}{}
+	if gw, ok := reg.Services["controller"]; ok {
+		services["controller"] = gw
+	}
+	switch reqServiceType {
+	case "service":
+		if svc, ok := reg.Services[reqServiceName]; ok && reqServiceName != "" {
+			services[reqServiceName] = map[string]interface{}{"group": svc.Group, "port": svc.Port}
 		}
-		filtered["daemons"] = daemons
-	} else if reg.Daemons != nil {
+	case "mdaemon":
+		if d, ok := reg.Daemons[reqServiceName]; ok && reqServiceName != "" {
+			filtered["daemons"] = map[string]interface{}{reqServiceName: map[string]interface{}{"group": d.Group, "port": d.Port}}
+		}
+	default:
+		for name, svc := range reg.Services {
+			services[name] = svc
+		}
 		filtered["daemons"] = reg.Daemons
 	}
-
+	filtered["services"] = services
 	return filtered
+}
+
+// clone deep-copies through JSON, so filtering never touches the registry in use.
+func clone(in, out interface{}) {
+	raw, _ := json.Marshal(in)
+	_ = json.Unmarshal(raw, out)
 }
 
 func (h *maintenanceHandler) awarenessStat(w http.ResponseWriter, r *http.Request) {
@@ -300,11 +264,14 @@ func (h *maintenanceHandler) register(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Register the host
-	hostInfo := types.HostInfo{
-		Name:    regInfo.Name,
-		Version: regInfo.Version,
-		Host:    regInfo.IP,
-		Port:    regInfo.Port,
+	hostname, _ := os.Hostname()
+	hostInfo := types.HostRecord{
+		Env:      h.ctrl.Registry().GetEnvironment(),
+		Name:     regInfo.Name,
+		Version:  regInfo.Version,
+		IP:       regInfo.IP,
+		Port:     regInfo.Port,
+		Hostname: strings.ToLower(hostname),
 	}
 
 	if err := h.ctrl.Registry().RegisterHost(hostInfo); err != nil {
