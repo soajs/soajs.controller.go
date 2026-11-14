@@ -18,8 +18,8 @@ type Config struct {
 	Environment string `mapstructure:"environment"`
 	LogLevel    string `mapstructure:"log_level"`
 
-	// MongoDB configuration
-	Mongo MongoConfig `mapstructure:"mongo"`
+	// Profile is SOAJS_PROFILE: the file that says where the provision database lives
+	Profile string `mapstructure:"profile"`
 
 	// Server configuration
 	Server ServerConfig `mapstructure:"server"`
@@ -29,16 +29,6 @@ type Config struct {
 
 	// Awareness configuration
 	Awareness AwarenessConfig `mapstructure:"awareness"`
-}
-
-// MongoConfig holds MongoDB connection settings
-type MongoConfig struct {
-	URI            string `mapstructure:"uri"`
-	Database       string `mapstructure:"database"`
-	OAuthDatabase  string `mapstructure:"oauth_database"` // Separate oauth database (optional)
-	MaxPoolSize    uint64 `mapstructure:"max_pool_size"`
-	MinPoolSize    uint64 `mapstructure:"min_pool_size"`
-	ConnectTimeout int    `mapstructure:"connect_timeout"`
 }
 
 // ServerConfig holds HTTP server settings
@@ -79,6 +69,7 @@ func Load() (*Config, error) {
 	// Bind SOAJS_ENV to environment (Node.js compatibility)
 	// Node.js uses SOAJS_ENV, viper would expect SOAJS_ENVIRONMENT
 	v.BindEnv("environment", "SOAJS_ENV")
+	v.BindEnv("profile", "SOAJS_PROFILE")
 
 	// Read from config file if exists
 	v.SetConfigName("config")
@@ -112,14 +103,6 @@ func setDefaults(v *viper.Viper) {
 	// Environment defaults
 	v.SetDefault("environment", "dev")
 	v.SetDefault("log_level", "info")
-
-	// MongoDB defaults
-	v.SetDefault("mongo.uri", "mongodb://localhost:27017")
-	v.SetDefault("mongo.database", "core_provision")
-	v.SetDefault("mongo.oauth_database", "oauth") // Default oauth database name
-	v.SetDefault("mongo.max_pool_size", 100)
-	v.SetDefault("mongo.min_pool_size", 10)
-	v.SetDefault("mongo.connect_timeout", 5)
 
 	// Server defaults
 	v.SetDefault("server.read_timeout", 30)

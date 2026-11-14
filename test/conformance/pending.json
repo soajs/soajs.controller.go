@@ -11,7 +11,6 @@
   "private_unknown_token": "PR 7 (oauth): oauth2-server texts and statuses",
   "private_expired_token": "PR 7 (oauth): oauth2-server texts and statuses",
   "private_basic_auth": "PR 7 (oauth): Malformed auth header",
-  "banned_ip": "PR 2 (registry): custom registry entries are kept as bson.M, which the middleware never reads as a map, so traffic.ip2ban is ignored",
   "maintenance_heartbeat": "PR 11 (maintenance): heartbeat body and service block",
   "maintenance_unknown_path": "PR 11 (maintenance): any unknown path answers the heartbeat",
   "maintenance_favicon": "PR 11 (maintenance): answer 200 image/x-icon"

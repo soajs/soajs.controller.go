@@ -3,6 +3,8 @@ package awareness
 import (
 	"fmt"
 	"net/http"
+	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -178,7 +180,15 @@ func (a *DefaultAwareness) RegisterService(info types.ServiceInfo) error {
 	a.hosts[key] = append(a.hosts[key], entry)
 
 	// Also register with registry
-	return a.registry.RegisterHost(*entry.info)
+	hostname, _ := os.Hostname()
+	return a.registry.RegisterHost(types.HostRecord{
+		Env:      a.registry.GetEnvironment(),
+		Name:     info.Name,
+		Version:  info.Version,
+		IP:       info.Host,
+		Port:     info.Port,
+		Hostname: strings.ToLower(hostname),
+	})
 }
 
 // DeregisterService removes a service host

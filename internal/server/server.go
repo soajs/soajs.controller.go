@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"os"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -14,10 +16,10 @@ import (
 
 // Server represents the HTTP server
 type Server struct {
-	cfg        *config.Config
-	logger     *zap.Logger
-	router     *chi.Mux
-	httpServer *http.Server
+	cfg         *config.Config
+	logger      *zap.Logger
+	router      *chi.Mux
+	httpServer  *http.Server
 	maintServer *http.Server
 }
 
@@ -100,11 +102,18 @@ func (s *Server) Run(ctx context.Context) error {
 				}
 			}
 
-			hostInfo := types.HostInfo{
-				Name:    "controller",
-				Version: controllerVersion,
-				Host:    "127.0.0.1",
-				Port:    s.cfg.ServicePort,
+			ip := os.Getenv("SOAJS_SRVIP")
+			if ip == "" {
+				ip = "127.0.0.1"
+			}
+			hostname, _ := os.Hostname()
+			hostInfo := types.HostRecord{
+				Env:      ctrl.Registry().GetEnvironment(),
+				Name:     "controller",
+				Version:  controllerVersion,
+				IP:       ip,
+				Port:     s.cfg.ServicePort,
+				Hostname: strings.ToLower(hostname),
 			}
 
 			if err := ctrl.Registry().RegisterHost(hostInfo); err != nil {
@@ -113,7 +122,7 @@ func (s *Server) Run(ctx context.Context) error {
 				)
 			} else {
 				s.logger.Info("controller self-registered as healthy host",
-					zap.String("host", hostInfo.Host),
+					zap.String("host", hostInfo.IP),
 					zap.Int("port", hostInfo.Port),
 					zap.String("version", controllerVersion),
 				)

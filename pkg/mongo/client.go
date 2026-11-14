@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/soajs/soajs.controller.go/internal/config"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
@@ -16,62 +15,35 @@ import (
 // ErrNotFound is returned when a document is not found
 var ErrNotFound = mongo.ErrNoDocuments
 
-// Client wraps the MongoDB client
+// Client wraps a MongoDB client and the database it works on.
 type Client struct {
 	client   *mongo.Client
 	database *mongo.Database
-	cfg      config.MongoConfig
 }
 
-// NewClient creates a new MongoDB client with retry logic
-func NewClient(cfg config.MongoConfig) (*Client, error) {
+// Connect connects with opts, pings, and works on database. It retries three times.
+func Connect(opts *options.ClientOptions, database string) (*Client, error) {
 	var client *mongo.Client
 	var err error
-
-	// Retry connection up to 3 times
-	maxRetries := 3
-	for i := 0; i < maxRetries; i++ {
-		ctx, cancel := context.WithTimeout(context.Background(), time.Duration(cfg.ConnectTimeout)*time.Second)
-
-		clientOpts := options.Client().
-			ApplyURI(cfg.URI).
-			SetMaxPoolSize(cfg.MaxPoolSize).
-			SetMinPoolSize(cfg.MinPoolSize).
-			SetServerSelectionTimeout(5 * time.Second).
-			SetConnectTimeout(time.Duration(cfg.ConnectTimeout) * time.Second)
-
-		client, err = mongo.Connect(ctx, clientOpts)
-		cancel()
-
-		if err != nil {
-			if i < maxRetries-1 {
-				time.Sleep(time.Duration(i+1) * time.Second)
-				continue
-			}
-			return nil, fmt.Errorf("failed to connect to MongoDB after %d retries: %w", maxRetries, err)
+	opts.SetServerSelectionTimeout(5 * time.Second).SetConnectTimeout(10 * time.Second)
+	for i := 0; i < 3; i++ {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		client, err = mongo.Connect(ctx, opts)
+		if err == nil {
+			err = client.Ping(ctx, readpref.Primary())
 		}
-
-		// Ping to verify connection
-		ctx, cancel = context.WithTimeout(context.Background(), 5*time.Second)
-		err = client.Ping(ctx, readpref.Primary())
 		cancel()
-
-		if err != nil {
-			if i < maxRetries-1 {
-				time.Sleep(time.Duration(i+1) * time.Second)
-				continue
-			}
-			return nil, fmt.Errorf("failed to ping MongoDB after %d retries: %w", maxRetries, err)
+		if err == nil {
+			return &Client{client: client, database: client.Database(database)}, nil
 		}
-
-		break
+		time.Sleep(time.Duration(i+1) * time.Second)
 	}
+	return nil, fmt.Errorf("failed to connect to MongoDB: %w", err)
+}
 
-	return &Client{
-		client:   client,
-		database: client.Database(cfg.Database),
-		cfg:      cfg,
-	}, nil
+// WithDatabase returns a Client on the same connection working on another database.
+func (c *Client) WithDatabase(name string) *Client {
+	return &Client{client: c.client, database: c.client.Database(name)}
 }
 
 // Database returns the database instance
@@ -172,88 +144,4 @@ func Upsert() *options.UpdateOptions {
 // IsNotFound checks if an error is a not found error
 func IsNotFound(err error) bool {
 	return errors.Is(err, mongo.ErrNoDocuments)
-}
-
-// NewClientFromDBConfig creates a MongoDB client from DBConnectionConfig
-// This is used when connecting to a different cluster (e.g., OAuth on separate cluster)
-func NewClientFromDBConfig(servers []ServerConfig, credentials *CredentialsConfig, dbName string, urlParams map[string]string) (*Client, error) {
-	if len(servers) == 0 {
-		return nil, fmt.Errorf("no servers configured")
-	}
-
-	// Build connection URI
-	uri := buildConnectionURI(servers, credentials, dbName, urlParams)
-
-	cfg := config.MongoConfig{
-		URI:            uri,
-		Database:       dbName,
-		MaxPoolSize:    100,
-		MinPoolSize:    10,
-		ConnectTimeout: 10,
-	}
-
-	return NewClient(cfg)
-}
-
-// ServerConfig matches types.ServerConfig
-type ServerConfig struct {
-	Host string `json:"host"`
-	Port int    `json:"port"`
-}
-
-// CredentialsConfig matches types.CredentialsConfig
-type CredentialsConfig struct {
-	Username string `json:"username"`
-	Password string `json:"password"`
-}
-
-// buildConnectionURI builds a MongoDB URI from config
-func buildConnectionURI(servers []ServerConfig, credentials *CredentialsConfig, dbName string, urlParams map[string]string) string {
-	var uri string
-
-	// Check if this looks like a replica set or Atlas
-	if len(servers) > 1 || (len(servers) == 1 && servers[0].Port == 0) {
-		// MongoDB Atlas or replica set (SRV)
-		uri = "mongodb+srv://"
-	} else {
-		uri = "mongodb://"
-	}
-
-	// Add credentials if present
-	if credentials != nil && credentials.Username != "" {
-		uri += credentials.Username
-		if credentials.Password != "" {
-			uri += ":" + credentials.Password
-		}
-		uri += "@"
-	}
-
-	// Add servers
-	for i, server := range servers {
-		if i > 0 {
-			uri += ","
-		}
-		uri += server.Host
-		if server.Port > 0 {
-			uri += fmt.Sprintf(":%d", server.Port)
-		}
-	}
-
-	// Add database
-	uri += "/" + dbName
-
-	// Add URL parameters
-	if len(urlParams) > 0 {
-		uri += "?"
-		first := true
-		for k, v := range urlParams {
-			if !first {
-				uri += "&"
-			}
-			uri += k + "=" + v
-			first = false
-		}
-	}
-
-	return uri
 }

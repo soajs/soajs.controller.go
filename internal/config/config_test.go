@@ -25,9 +25,6 @@ func TestLoadDefaults(t *testing.T) {
 	if cfg.Environment != "dev" {
 		t.Errorf("Environment = %q, want %q", cfg.Environment, "dev")
 	}
-	if cfg.Mongo.Database != "core_provision" {
-		t.Errorf("Mongo.Database = %q, want %q", cfg.Mongo.Database, "core_provision")
-	}
 }
 
 func TestLoadFromEnv(t *testing.T) {

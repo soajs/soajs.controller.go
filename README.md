@@ -38,10 +38,7 @@ go build -o controller ./cmd/controller
 ./start_local.sh
 
 # Option 2: Run manually with environment variables
-SOAJS_ENV=dashboard SOAJS_MONGO_URI="mongodb://127.0.0.1:32017" ./controller
-
-# Option 3: Run in background with logs
-SOAJS_ENV=dashboard SOAJS_MONGO_URI="mongodb://127.0.0.1:32017" ./controller > /tmp/go-ctrl.log 2>&1 &
+SOAJS_ENV=dashboard SOAJS_PROFILE=/opt/soajs/profile/soajsprofile ./controller
 ```
 
 The controller will start on:
@@ -61,20 +58,13 @@ docker-compose up -d
 make test
 ```
 
-### Run integration tests
+### Run the conformance tests
+
+The Go gateway must answer as the Node.js gateway does. `test/conformance` replays fixed requests and compares every answer with Node.js's, byte for byte (see test/conformance/README.md):
 
 ```bash
-# Start the controller first
-./start_local.sh
-
-# In another terminal, run integration tests
-cd test/integration && ./run_tests.sh
+test/conformance/run.sh go
 ```
-
-Integration tests include:
-- Gateway routes (ACL, proxy, service routing)
-- HTTP methods (GET, POST, PUT, DELETE, PATCH, HEAD, OPTIONS)
-- Maintenance endpoints (heartbeat, registry, awareness)
 
 ## Configuration
 
@@ -88,8 +78,9 @@ Configuration can be provided via:
 |----------|-------------|---------|
 | `SOAJS_ENV` | Environment name | dev |
 | `SOAJS_SERVICE_PORT` | HTTP port | 4000 |
-| `SOAJS_MONGO_URI` | MongoDB connection URI | mongodb://localhost:27017 |
-| `SOAJS_MONGO_DATABASE` | Database name | core_provision |
+| `SOAJS_PROFILE` | The profile file: where the provision database lives, the same file the Node.js gateway reads (`module.exports = {"name": "core_provision", "prefix": "", "servers": [...], ...}`) | required |
+| `SOAJS_SENSITIVE_ENVS` | JSON array of environments whose tokens are accepted everywhere | `["dashboard"]` |
+| `SOAJS_DEPLOY_HA` | Any value: HA mode, no hosts collection | |
 | `SOAJS_LOG_LEVEL` | Log level (debug/info/warn/error) | info |
 
 ## API Endpoints

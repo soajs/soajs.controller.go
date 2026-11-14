@@ -4,7 +4,7 @@
 # This mirrors the configuration used by Node.js services via index_local.js
 
 export SOAJS_ENV="dashboard"
-export SOAJS_MONGO_URI="mongodb://127.0.0.1:32017"
+export SOAJS_PROFILE="${SOAJS_PROFILE:-/opt/soajs/profile/soajsprofile}"
 
 # Optional: Additional environment variables
 # export SOAJS_LOG_LEVEL="debug"

@@ -36,31 +36,8 @@ jobs:
       - name: Run unit tests
         run: go test ./... -v -race
 
-      - name: Import test data
-        run: go run ./test/data/cmd/import.go -uri=mongodb://127.0.0.1:27017 -db=core_provision
-
-      - name: Build controller
-        run: go build -o controller ./cmd/controller
-
-      - name: Run integration tests
-        env:
-          INTEGRATION_TEST: "true"
-          SOAJS_ENV: "dev"
-          SOAJS_MONGO_URI: "mongodb://127.0.0.1:27017"
-          SOAJS_MONGO_DATABASE: "core_provision"
-        run: |
-          ./controller &
-          CONTROLLER_PID=$!
-          for i in {1..30}; do
-            if curl -s http://127.0.0.1:5001/heartbeat > /dev/null 2>&1; then
-              break
-            fi
-            sleep 1
-          done
-          go test -v ./test/integration/...
-          TEST_EXIT=$?
-          kill $CONTROLLER_PID 2>/dev/null || true
-          exit $TEST_EXIT
+      - name: Run conformance tests
+        run: test/conformance/run.sh go
 
   publish-docker:
     runs-on: ubuntu-latest
