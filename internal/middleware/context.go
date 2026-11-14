@@ -31,6 +31,8 @@ type SOAJSContext struct {
 	Roaming *urac.Roaming
 	// Idempotency is the Idempotency-Key lock the request holds.
 	Idempotency *IdempotencyContext
+	// Cache is the cache entry the service's answer fills.
+	Cache *CacheContext
 }
 
 // ControllerContext holds gateway-specific request data

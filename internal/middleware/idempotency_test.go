@@ -200,7 +200,7 @@ func TestMemoryIdempotency(t *testing.T) {
 	if e := m.Get(k); e == nil || e.Status != idempotencyInFlight {
 		t.Fatal("another lockId does not release it")
 	}
-	m.Complete(k, &IdempotencyResponse{StatusCode: 200}, time.Second)
+	m.Complete(k, &RecordedResponse{StatusCode: 200}, time.Second)
 	m.Unlock(k, "a")
 	if e := m.Get(k); e == nil || e.Status != idempotencyCompleted {
 		t.Fatal("a completed key is never released")
@@ -246,14 +246,14 @@ func TestMongoIdempotency(t *testing.T) {
 		t.Fatalf("in flight: %+v", e)
 	}
 	m.Unlock(k, "b")
-	m.Complete(k, &IdempotencyResponse{StatusCode: 201, Headers: map[string]interface{}{"set-cookie": []interface{}{"a=1"}, "x": "y"}, Body: "ok"}, time.Minute)
+	m.Complete(k, &RecordedResponse{StatusCode: 201, Headers: map[string]interface{}{"set-cookie": []interface{}{"a=1"}, "x": "y"}, Body: "ok"}, time.Minute)
 	m.Unlock(k, "a")
 	e := m.Get(k)
 	if e == nil || e.Status != idempotencyCompleted || e.Response == nil || e.Response.StatusCode != 201 || e.Response.Body != "ok" {
 		t.Fatalf("completed: %+v", e)
 	}
 	rec := httptest.NewRecorder()
-	replayIdempotent(rec, e.Response)
+	replayRecorded(rec, e.Response)
 	if rec.Header().Get("Set-Cookie") != "a=1" || rec.Header().Get("X") != "y" {
 		t.Errorf("replayed headers %v", rec.Header())
 	}
@@ -273,7 +273,7 @@ func TestMongoIdempotency(t *testing.T) {
 	// what is written matches the data schema
 	m.Lock(k, time.Minute, "d")
 	m.Lock(idempotencyKey{"t1", idemKey1}, time.Minute, "e")
-	m.Complete(idempotencyKey{"t1", idemKey1}, &IdempotencyResponse{StatusCode: 200, Headers: map[string]interface{}{}, Body: ""}, time.Minute)
+	m.Complete(idempotencyKey{"t1", idemKey1}, &RecordedResponse{StatusCode: 200, Headers: map[string]interface{}{}, Body: ""}, time.Minute)
 	schemas, err := dataschema.Embedded()
 	if err != nil {
 		t.Fatal(err)

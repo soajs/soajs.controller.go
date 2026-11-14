@@ -13,6 +13,7 @@ import (
 
 	"github.com/soajs/soajs.controller.go/internal/awareness"
 	"github.com/soajs/soajs.controller.go/internal/lib"
+	"github.com/soajs/soajs.controller.go/internal/middleware"
 	"github.com/soajs/soajs.controller.go/internal/registry"
 	"github.com/soajs/soajs.controller.go/pkg/types"
 	"github.com/soajs/soajs.controller.go/pkg/version"
@@ -26,6 +27,7 @@ type maintenanceResponse struct {
 	TS      int64       `json:"ts"`
 	Service serviceInfo `json:"service"`
 	Data    interface{} `json:"data,omitempty"`
+	Error   string      `json:"error,omitempty"`
 }
 
 type serviceInfo struct {
@@ -37,8 +39,7 @@ type serviceInfo struct {
 
 // NewMaintenanceServer is the maintenance port, as the Node.js gateway's (server/maintenance.js):
 // /favicon.ico, /reloadRegistry, /awarenessStat, /register, /loadProvision, /getRegistry, and the
-// heartbeat on any other path. /cache/invalidate comes with the cache; /proxySocket is not
-// ported (D7).
+// /cache/invalidate, and the heartbeat on any other path. /proxySocket is not ported (D7).
 func NewMaintenanceServer(port int, ctrl *Controller, serviceIP string, logger *zap.Logger) *http.Server {
 	h := &maintenanceHandler{ctrl: ctrl, logger: logger, serviceIP: serviceIP}
 	return &http.Server{
@@ -87,6 +88,8 @@ func (h *maintenanceHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.write(w, resp, false)
 	case "/getRegistry":
 		h.getRegistry(w, pathname, query)
+	case "/cache/invalidate":
+		h.cacheInvalidate(w, r, pathname)
 	default:
 		resp := h.response(pathname)
 		resp.Result = true
@@ -122,6 +125,64 @@ func (h *maintenanceHandler) write(w http.ResponseWriter, resp maintenanceRespon
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write(bytes.TrimRight(b.Bytes(), "\n"))
 }
+
+// cacheInvalidate removes cached answers (POST, a JSON body of at most 16384 bytes naming the
+// tenant, the service, and optionally the api and the user); any other method answers 405. A
+// larger body closes the connection without an answer.
+func (h *maintenanceHandler) cacheInvalidate(w http.ResponseWriter, r *http.Request, route string) {
+	resp := h.response(route)
+	reply := func(status int) {
+		var b bytes.Buffer
+		enc := json.NewEncoder(&b)
+		enc.SetEscapeHTML(false)
+		_ = enc.Encode(resp)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(status)
+		_, _ = w.Write(bytes.TrimRight(b.Bytes(), "\n"))
+	}
+	if r.Method != http.MethodPost {
+		resp.Error = "Use POST."
+		reply(http.StatusMethodNotAllowed)
+		return
+	}
+	raw, err := io.ReadAll(io.LimitReader(r.Body, maxInvalidateBody+1))
+	if len(raw) > maxInvalidateBody {
+		panic(http.ErrAbortHandler)
+	}
+	if err != nil {
+		h.logger.Error("Cache invalidate: " + err.Error())
+		return
+	}
+	var input interface{}
+	if len(raw) > 0 {
+		if err := json.Unmarshal(raw, &input); err != nil {
+			resp.Error = "The body is not valid JSON."
+			reply(http.StatusBadRequest)
+			return
+		}
+	}
+	status, removed, errText := middleware.InvalidateCache(h.ctrl.Registry().Get(), h.ctrl.CacheStore(), input, h.logger)
+	if status != http.StatusOK {
+		resp.Error = errText
+		reply(status)
+		return
+	}
+	body, _ := input.(map[string]interface{})
+	msg := fmt.Sprintf("Cache invalidated for tenant [%v] service [%v]", body["tenant"], body["service"])
+	if api, ok := body["api"]; ok {
+		msg += fmt.Sprintf(" api [%v]", api)
+	}
+	if user, ok := body["user"]; ok {
+		msg += fmt.Sprintf(" user [%v]", user)
+	}
+	h.logger.Info(msg + fmt.Sprintf(", removed [%d]", removed))
+	resp.Result = true
+	resp.Data = map[string]interface{}{"removed": removed}
+	reply(http.StatusOK)
+}
+
+// maxInvalidateBody is the largest /cache/invalidate body.
+const maxInvalidateBody = 16384
 
 func (h *maintenanceHandler) reloadRegistry(route string) maintenanceResponse {
 	resp := h.response(route)

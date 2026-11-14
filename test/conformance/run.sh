@@ -28,6 +28,7 @@ WORK="$(mktemp -d)"
 GATEWAY_PID=""
 DASHBOARD_PID=""
 MOCK_PID=""
+OTHER_PID=""
 
 stop() {
 	[ -n "$1" ] || return 0
@@ -43,12 +44,13 @@ cleanup() {
 	stop "$GATEWAY_PID"
 	stop "$DASHBOARD_PID"
 	stop "$MOCK_PID"
+	stop "$OTHER_PID"
 	rm -rf "$WORK"
 }
 trap cleanup EXIT
 
 cd "$ROOT"
-for port in $GATEWAY_PORT $MAINTENANCE_PORT $DASHBOARD_PORT $DASHBOARD_MAINTENANCE_PORT 24100 25100; do
+for port in $GATEWAY_PORT $MAINTENANCE_PORT $DASHBOARD_PORT $DASHBOARD_MAINTENANCE_PORT 24100 25100 24200 25200; do
 	if curl -s -o /dev/null "http://127.0.0.1:$port/"; then
 		echo "port $port is already in use" >&2
 		exit 1
@@ -59,6 +61,9 @@ go run ./test/conformance/cmd/fixture -uri="$MONGO_URI"
 go build -o "$WORK/mockservice" ./test/conformance/cmd/mockservice
 "$WORK/mockservice" -port 24100 -maintenance 25100 > "$WORK/mockservice.log" 2>&1 &
 MOCK_PID=$!
+# the other service, for the response cache
+"$WORK/mockservice" -port 24200 -maintenance 25200 > "$WORK/mockservice-other.log" 2>&1 &
+OTHER_PID=$!
 
 MONGO_HOSTPORT="${MONGO_URI#mongodb://}"
 MONGO_HOSTPORT="${MONGO_HOSTPORT%%/*}"
