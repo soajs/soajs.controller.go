@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/soajs/soajs.controller.go/internal/dataschema"
 	"github.com/soajs/soajs.controller.go/pkg/types"
 	"go.uber.org/zap"
 	corev1 "k8s.io/api/core/v1"
@@ -273,21 +274,55 @@ func TestHA(t *testing.T) {
 }
 
 func TestHAConfiguration(t *testing.T) {
+	conf := func(reg *types.RegistryData) map[string]interface{} {
+		return reg.Deployer["container"].(map[string]interface{})["kubernetes"].(map[string]interface{})["configuration"].(map[string]interface{})
+	}
+
+	// without a ca: url, port and protocol, the server certificate not verified (Node.js)
 	reg := haRegistry("soajs")
-	k8s := reg.Deployer["container"].(map[string]interface{})["kubernetes"].(map[string]interface{})
-	k8s["configuration"].(map[string]interface{})["ca"] = map[string]interface{}{}
-	if _, err := kubeConfig(reg); err == nil {
-		t.Error("a ca is data the gateway does not read")
+	cfg, err := kubeConfig(reg)
+	if err != nil || cfg.URL != "https://k8s.local:6443" || !cfg.Insecure || cfg.CAData != nil || cfg.Token != "t" {
+		t.Errorf("%+v %v", cfg, err)
 	}
-	if _, err := kubeConfig(&types.RegistryData{Deployer: map[string]interface{}{"type": "manual", "selected": "manual"}}); err == nil {
-		t.Error("a manual deployer has no cluster")
+	rc := restConfig(cfg)
+	if !rc.TLSClientConfig.Insecure || rc.BearerToken != "t" {
+		t.Errorf("rest config %+v", rc.TLSClientConfig)
 	}
-	reg = haRegistry("soajs")
-	k8s = reg.Deployer["container"].(map[string]interface{})["kubernetes"].(map[string]interface{})
-	k8s["configuration"].(map[string]interface{})["protocol"] = "http"
-	delete(k8s["configuration"].(map[string]interface{}), "port")
+	conf(reg)["protocol"] = "http"
+	delete(conf(reg), "port")
 	if cfg, err := kubeConfig(reg); err != nil || cfg.URL != "http://k8s.local" {
 		t.Errorf("%+v %v", cfg, err)
+	}
+
+	// with a ca: its request options, verified against its CA
+	reg = haRegistry("soajs")
+	conf(reg)["ca"] = map[string]interface{}{"requestOptions": map[string]interface{}{
+		"baseUrl": "https://api.cluster:443", "ca": "-----BEGIN CERTIFICATE-----\nX\n-----END CERTIFICATE-----",
+		"cert": "CERT", "key": "KEY",
+	}}
+	cfg, err = kubeConfig(reg)
+	if err != nil || cfg.URL != "https://api.cluster:443" || cfg.Insecure || string(cfg.CAData) == "" || cfg.Token != "t" ||
+		string(cfg.CertData) != "CERT" || string(cfg.KeyData) != "KEY" {
+		t.Errorf("%+v %v", cfg, err)
+	}
+	rc = restConfig(cfg)
+	if rc.TLSClientConfig.Insecure || string(rc.TLSClientConfig.CAData) != string(cfg.CAData) || rc.Host != "https://api.cluster:443" {
+		t.Errorf("rest config %+v", rc.TLSClientConfig)
+	}
+	// a list of CAs, its own token
+	conf(reg)["ca"].(map[string]interface{})["requestOptions"].(map[string]interface{})["ca"] = []interface{}{"A", "B"}
+	conf(reg)["ca"].(map[string]interface{})["requestOptions"].(map[string]interface{})["auth"] = map[string]interface{}{"bearer": "own"}
+	if cfg, err := kubeConfig(reg); err != nil || string(cfg.CAData) != "A\nB" || cfg.Token != "own" {
+		t.Errorf("%+v %v", cfg, err)
+	}
+	// strictSSL false: not verified, no CA passed (client-go refuses both)
+	conf(reg)["ca"].(map[string]interface{})["requestOptions"].(map[string]interface{})["strictSSL"] = false
+	if cfg, err := kubeConfig(reg); err != nil || !cfg.Insecure || cfg.CAData != nil {
+		t.Errorf("%+v %v", cfg, err)
+	}
+
+	if _, err := kubeConfig(&types.RegistryData{Deployer: map[string]interface{}{"type": "manual", "selected": "manual"}}); err == nil {
+		t.Error("a manual deployer has no cluster")
 	}
 }
 
@@ -444,5 +479,40 @@ func TestRegisterAndWriteDoc(t *testing.T) {
 	t.Setenv("SOAJS_DEPLOY_HA", "true")
 	if Register(reg, c, Gateway{Name: "controller"}, 4000, "10.0.0.1", zap.NewNop()) {
 		t.Error("no registration in HA mode")
+	}
+}
+
+// configuration.ca is optional; when present it holds the client's request options.
+func TestInfraSchemaCA(t *testing.T) {
+	schemas, err := dataschema.Embedded()
+	if err != nil {
+		t.Fatal(err)
+	}
+	infra := schemas["infra"]
+	doc := func(ca string) []byte {
+		c := ""
+		if ca != "" {
+			c = `,"ca":` + ca
+		}
+		return []byte(`{"_id":{"$oid":"6a0e000000000000000000f1"},"type":"kubernetes","configuration":{"url":"k8s.local","token":"t"` + c + `}}`)
+	}
+	for name, c := range map[string]struct {
+		ca    string
+		valid bool
+	}{
+		"no ca":           {"", true},
+		"request options": {`{"requestOptions":{"baseUrl":"https://k8s.local","ca":"PEM","strictSSL":true}}`, true},
+		"a list of CAs":   {`{"requestOptions":{"baseUrl":"https://k8s.local","ca":["A","B"]}}`, true},
+		"no baseUrl":      {`{"requestOptions":{"ca":"PEM"}}`, false},
+		"auth provider":   {`{"requestOptions":{"baseUrl":"https://k8s.local"},"authProvider":{"type":"cmd"}}`, false},
+		"a PEM string":    {`"PEM"`, false},
+	} {
+		problems, err := infra.ValidateJSON(doc(c.ca))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if (problems == nil) != c.valid {
+			t.Errorf("%s: valid %v, problems %v", name, c.valid, problems)
+		}
 	}
 }

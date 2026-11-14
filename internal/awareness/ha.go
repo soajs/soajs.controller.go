@@ -22,12 +22,17 @@ import (
 // kubeTimeout bounds one call to the Kubernetes API.
 const kubeTimeout = 10 * time.Second
 
-// KubeConfig is the cluster account of an environment's deployer: its API address, token and the
-// environment's namespace.
+// KubeConfig is the cluster account of an environment's deployer: its API address, token, TLS
+// settings and the environment's namespace.
 type KubeConfig struct {
 	URL       string
 	Token     string
 	Namespace string
+	// Insecure skips the server certificate check.
+	Insecure bool
+	CAData   []byte
+	CertData []byte
+	KeyData  []byte
 }
 
 // KubeClient is what awareness asks Kubernetes.
@@ -39,19 +44,27 @@ type KubeClient interface {
 // KubeConnect opens a client on a cluster.
 type KubeConnect func(cfg KubeConfig) (KubeClient, error)
 
-// connectKube connects with the account's token. Without a CA, as Node.js, the server certificate
-// is not verified.
+// connectKube connects with the account's token and TLS settings.
 func connectKube(cfg KubeConfig) (KubeClient, error) {
-	cs, err := kubernetes.NewForConfig(&rest.Config{
-		Host:            cfg.URL,
-		BearerToken:     cfg.Token,
-		TLSClientConfig: rest.TLSClientConfig{Insecure: true},
-		Timeout:         kubeTimeout,
-	})
+	cs, err := kubernetes.NewForConfig(restConfig(cfg))
 	if err != nil {
 		return nil, err
 	}
 	return clientset{cs}, nil
+}
+
+func restConfig(cfg KubeConfig) *rest.Config {
+	return &rest.Config{
+		Host:        cfg.URL,
+		BearerToken: cfg.Token,
+		TLSClientConfig: rest.TLSClientConfig{
+			Insecure: cfg.Insecure,
+			CAData:   cfg.CAData,
+			CertData: cfg.CertData,
+			KeyData:  cfg.KeyData,
+		},
+		Timeout: kubeTimeout,
+	}
 }
 
 type clientset struct{ kubernetes.Interface }
@@ -71,8 +84,12 @@ func (c clientset) GetService(ctx context.Context, namespace, name string) (*cor
 // NewKubeClient wraps a client-go clientset, real or fake.
 func NewKubeClient(cs kubernetes.Interface) KubeClient { return clientset{cs} }
 
-// kubeConfig is the deployer's cluster account (ha.js getInfraToken): deployer type container,
-// selected container.kubernetes, with the infra account's configuration the registry loaded.
+// kubeConfig is the deployer's cluster account (ha.js getInfraToken, driver kubernetes connect):
+// deployer type container, selected container.kubernetes, with the infra account's configuration
+// the registry loaded. Without configuration.ca, the API is at protocol://url:port and, as Node.js
+// does, the server certificate is not verified. With it, ca.requestOptions are the client's
+// request options: the API at baseUrl, verified against its ca unless strictSSL is false, with
+// its client certificate, and its auth.bearer token, else the account's token.
 func kubeConfig(reg *types.RegistryData) (KubeConfig, error) {
 	if reg == nil || reg.Deployer["type"] != "container" || reg.Deployer["selected"] != "container.kubernetes" {
 		return KubeConfig{}, errors.New("Unable to find healthy configuration in registry")
@@ -86,8 +103,39 @@ func kubeConfig(reg *types.RegistryData) (KubeConfig, error) {
 	if url == "" || token == "" || namespace == "" {
 		return KubeConfig{}, errors.New("Configuration requires namespace, token, and url")
 	}
-	if _, ok := conf["ca"]; ok {
-		return KubeConfig{}, errors.New("the infra account has a ca, which the gateway does not read")
+	if ca, ok := conf["ca"].(map[string]interface{}); ok {
+		opts, _ := ca["requestOptions"].(map[string]interface{})
+		cfg := KubeConfig{Token: token, Namespace: namespace}
+		cfg.URL, _ = opts["baseUrl"].(string)
+		if auth, ok := opts["auth"].(map[string]interface{}); ok {
+			cfg.Token, _ = auth["bearer"].(string)
+		}
+		if strict, ok := opts["strictSSL"].(bool); ok && !strict {
+			cfg.Insecure = true
+		} else {
+			switch c := opts["ca"].(type) {
+			case string:
+				cfg.CAData = []byte(c)
+			case []interface{}:
+				var pems []string
+				for _, p := range c {
+					if s, ok := p.(string); ok {
+						pems = append(pems, s)
+					}
+				}
+				cfg.CAData = []byte(strings.Join(pems, "\n"))
+			}
+		}
+		if cert, ok := opts["cert"].(string); ok {
+			cfg.CertData = []byte(cert)
+		}
+		if key, ok := opts["key"].(string); ok {
+			cfg.KeyData = []byte(key)
+		}
+		if cfg.URL == "" || cfg.Token == "" {
+			return KubeConfig{}, errors.New("Configuration requires namespace, token, and url")
+		}
+		return cfg, nil
 	}
 	protocol, _ := conf["protocol"].(string)
 	if protocol == "" {
@@ -97,7 +145,7 @@ func kubeConfig(reg *types.RegistryData) (KubeConfig, error) {
 	if p, ok := conf["port"].(float64); ok && p != 0 {
 		port = fmt.Sprintf(":%d", int(p))
 	}
-	return KubeConfig{URL: protocol + "://" + url + port, Token: token, Namespace: namespace}, nil
+	return KubeConfig{URL: protocol + "://" + url + port, Token: token, Namespace: namespace, Insecure: true}, nil
 }
 
 // namespaceOf is the environment's namespace: deployer.container.kubernetes.namespace.
