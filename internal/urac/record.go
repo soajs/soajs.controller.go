@@ -140,6 +140,8 @@ type Roaming struct {
 	ID   string
 	Code string
 	User map[string]interface{}
+	// TenantMetaDB is the tenantMetaDB of the token's environment.
+	TenantMetaDB interface{}
 }
 
 // GetRecord reads the user as soajs.urac.driver getRecord does: by email when the username looks

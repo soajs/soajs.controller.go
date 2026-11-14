@@ -49,11 +49,14 @@ func (s *Server) Run(ctx context.Context) error {
 
 	// Create HTTP server
 	s.httpServer = &http.Server{
-		Addr:         fmt.Sprintf(":%d", s.cfg.ServicePort),
-		Handler:      s.router,
-		ReadTimeout:  time.Duration(s.cfg.Server.ReadTimeout) * time.Second,
-		WriteTimeout: time.Duration(s.cfg.Server.WriteTimeout) * time.Second,
-		IdleTimeout:  time.Duration(s.cfg.Server.IdleTimeout) * time.Second,
+		Addr:    fmt.Sprintf(":%d", s.cfg.ServicePort),
+		Handler: s.router,
+		// Node.js's http server defaults: headers within 60 s, the whole request within 300 s,
+		// idle keep-alive connections closed after 5 s; no limit on writing the answer, which
+		// the request monitor of the proxy bounds
+		ReadHeaderTimeout: 60 * time.Second,
+		ReadTimeout:       300 * time.Second,
+		IdleTimeout:       5 * time.Second,
 	}
 
 	// Create maintenance server using registry values

@@ -33,9 +33,6 @@ type Config struct {
 
 // ServerConfig holds HTTP server settings
 type ServerConfig struct {
-	ReadTimeout     int `mapstructure:"read_timeout"`
-	WriteTimeout    int `mapstructure:"write_timeout"`
-	IdleTimeout     int `mapstructure:"idle_timeout"`
 	ShutdownTimeout int `mapstructure:"shutdown_timeout"`
 }
 
@@ -105,9 +102,6 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("log_level", "info")
 
 	// Server defaults
-	v.SetDefault("server.read_timeout", 30)
-	v.SetDefault("server.write_timeout", 30)
-	v.SetDefault("server.idle_timeout", 60)
 	v.SetDefault("server.shutdown_timeout", 10)
 
 	// Maintenance defaults (Node.js uses maintenanceInc = 1001)

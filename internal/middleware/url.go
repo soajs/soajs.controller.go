@@ -20,7 +20,11 @@ func URL(reg registry.Registry) Middleware {
 				next.ServeHTTP(w, r)
 				return
 			}
-			info := parseURL(r.URL.RequestURI())
+			uri := r.RequestURI
+			if uri == "" {
+				uri = r.URL.RequestURI()
+			}
+			info := parseURL(uri)
 			soajsCtx.Controller.ServiceParams.URLInfo = info
 			if info.ServiceName == "" {
 				WriteCode(w, 136)
@@ -96,6 +100,7 @@ func parseURL(uri string) *types.URLInfo {
 	if len(uri) > len(serviceNV)+1 {
 		rest = uri[len(serviceNV)+1:]
 	}
+	info.URL = rest
 	if i := strings.IndexByte(rest, '?'); i != -1 {
 		rest = rest[:i]
 		if j := strings.LastIndexByte(rest, '/'); j > 0 && j == len(rest)-1 {

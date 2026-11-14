@@ -3,5 +3,5 @@
   "headers": {
     "Content-Type": "application/json"
   },
-  "body": "{\"data\":{\"method\":\"GET\",\"path\":\"/public/hello\",\"query\":\"\"},\"result\":true}"
+  "body": "{\"data\":{\"inject\":{\"application\":{\"appId\":\"6a0e000000000000000000a2\",\"package\":\"CONF_DEFAULT\",\"product\":\"CONF\"},\"device\":\"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.6099.130 Safari/537.36\",\"geo\":{\"ip\":\"127.0.0.1\"},\"key\":{\"config\":{\"conform\":{}},\"eKey\":\"5bbf311a30f4acaec52b7472be854cc95259156275114822ad91615d02d27609856bbdf663aba70a17267c46c56626b7f5e73acfe511e279630c82efaadbaf3a0b55c38bbcdf702cd841312cdd2afa3dae8289de9bcc029f15090ef61841ec7e\",\"iKey\":\"0d1e2f3a4b5c6d7e8f90a1b2c3d4e5f6\"},\"package\":{},\"tenant\":{\"code\":\"CONF\",\"id\":\"6a0e00000000000000000001\",\"locked\":false,\"name\":\"Conformance tenant\",\"profile\":{},\"type\":\"product\"}},\"method\":\"GET\",\"path\":\"/public/hello\",\"query\":\"\"},\"result\":true}"
 }

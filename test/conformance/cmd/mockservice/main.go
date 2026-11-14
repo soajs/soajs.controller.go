@@ -1,5 +1,6 @@
 // Command mockservice is the conform service of the fixture: it answers every call on its service
-// port with the method and path it received, and /heartbeat on its maintenance port.
+// port with the method, path and query it received and the soajsinjectobj the gateway sent, and
+// /heartbeat on its maintenance port.
 package main
 
 import (
@@ -23,12 +24,20 @@ func main() {
 	}()
 	log.Fatal(http.ListenAndServe(fmt.Sprintf("127.0.0.1:%d", *port), http.HandlerFunc(
 		func(w http.ResponseWriter, r *http.Request) {
+			// the soajsinjectobj the gateway sent, parsed: written back in a canonical key order
+			var inject interface{}
+			if h := r.Header.Get("soajsinjectobj"); h != "" {
+				if err := json.Unmarshal([]byte(h), &inject); err != nil {
+					inject = "unparsable: " + h
+				}
+			}
 			write(w, map[string]interface{}{
 				"result": true,
 				"data": map[string]interface{}{
 					"method": r.Method,
 					"path":   r.URL.Path,
 					"query":  r.URL.RawQuery,
+					"inject": inject,
 				},
 			})
 		})))
