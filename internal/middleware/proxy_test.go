@@ -23,22 +23,14 @@ func (m *mockAwarenessProxy) GetHost(serviceName, version string) (*types.HostIn
 	if h, ok := m.hosts[key]; ok {
 		return h, nil
 	}
-	return nil, nil
+	return nil, awareness.ErrNoHost
 }
 
-func (m *mockAwarenessProxy) HealthCheck(serviceName, host string) (*awareness.HealthStatus, error) {
-	return nil, nil
-}
+func (m *mockAwarenessProxy) GetLatestVersion(string) string { return "" }
 
-func (m *mockAwarenessProxy) RegisterService(info types.ServiceInfo) error {
-	return nil
-}
+func (m *mockAwarenessProxy) GetLatestVersionFromCluster(string) (string, bool) { return "", false }
 
-func (m *mockAwarenessProxy) DeregisterService(info types.ServiceInfo) error {
-	return nil
-}
-
-func (m *mockAwarenessProxy) GetStats() *awareness.AwarenessStats {
+func (m *mockAwarenessProxy) Stats() map[string]map[string]map[string]*awareness.HostStat {
 	return nil
 }
 
@@ -699,6 +691,14 @@ func TestStripPrefix_Empty(t *testing.T) {
 	if result != "" {
 		t.Errorf("Result = %s, want empty", result)
 	}
+}
+
+func (m *mockRegistryProxy) OtherEnvControllerHosts(string) ([]types.HostRecord, error) {
+	return nil, nil
+}
+
+func (m *mockRegistryProxy) UpsertEnvController(string, string, int64, map[string]interface{}) error {
+	return nil
 }
 
 func (m *mockRegistryProxy) LoadByEnv(env string, reload bool) (*types.RegistryData, error) {

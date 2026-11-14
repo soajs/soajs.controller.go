@@ -25,6 +25,7 @@ const (
 	CollEnvironment    = "environment"
 	CollInfra          = "infra"
 	CollHosts          = "hosts"
+	CollControllers    = "controllers"
 	CollResources      = "resources"
 	CollCustomRegistry = "custom_registry"
 	CollMarketplace    = "marketplace"
@@ -337,6 +338,37 @@ func (r *MongoRegistry) skip(coll string, raw bson.Raw, problems []dataschema.Pr
 	}
 	r.logger.Error("document skipped, it does not match the data schema",
 		zap.String("collection", coll), zap.String("_id", id), zap.Any("problems", problems), zap.Error(err))
+}
+
+// OtherEnvControllerHosts reads the gateway's hosts of the other environments
+// (modules/registry/mongo.js loadOtherEnvHosts): name matching the gateway's name as a
+// case-insensitive pattern, env not the gateway's.
+func (r *MongoRegistry) OtherEnvControllerHosts(gatewayName string) ([]types.HostRecord, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	schemas, err := dataschema.Embedded()
+	if err != nil {
+		return nil, err
+	}
+	filter := bson.M{"name": primitive.Regex{Pattern: gatewayName, Options: "i"}, "env": bson.M{"$ne": r.GetEnvironment()}}
+	var hosts []types.HostRecord
+	err = r.each(ctx, schemas, CollHosts, filter, func(doc map[string]interface{}) {
+		var h types.HostRecord
+		if remarshal(doc, &h) == nil {
+			hosts = append(hosts, h)
+		}
+	})
+	return hosts, err
+}
+
+// UpsertEnvController writes the controllers document of the environment and IP
+// (modules/registry/mongo.js addUpdateEnvControllers): {$set: {data, ts}}, upserted.
+func (r *MongoRegistry) UpsertEnvController(env, ip string, ts int64, data map[string]interface{}) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	filter := bson.M{"env": strings.ToLower(env), "ip": ip}
+	_, err := r.db.Collection(CollControllers).UpdateOne(ctx, filter, bson.M{"$set": bson.M{"data": data, "ts": ts}}, options.Update().SetUpsert(true))
+	return err
 }
 
 // RegisterHost upserts a host as Node.js does (modules/registry/mongo.js:262-286) and adds it to
