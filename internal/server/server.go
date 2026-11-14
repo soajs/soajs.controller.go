@@ -5,12 +5,12 @@ import (
 	"fmt"
 	"net/http"
 	"os"
-	"strings"
+	"os/signal"
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/soajs/soajs.controller.go/internal/awareness"
 	"github.com/soajs/soajs.controller.go/internal/config"
-	"github.com/soajs/soajs.controller.go/pkg/types"
 	"go.uber.org/zap"
 )
 
@@ -82,53 +82,17 @@ func (s *Server) Run(ctx context.Context) error {
 		}
 	}()
 
-	// Self-register controller as healthy host after startup
-	// This enables other services (like oauth) to find the controller
+	// Register the gateway's host and its controllers document, as Node.js does without
+	// SOAJS_DEPLOY_HA (server/controller.js start); on SIGINT the document marks it stopping
+	serviceIP := awareness.ServiceIP()
+	registered := make(chan bool, 1)
 	go func() {
-		// Wait briefly for HTTP server to be ready
 		time.Sleep(100 * time.Millisecond)
-
-		// Check if autoRegisterService is enabled (defaults to true)
-		autoRegister := true
-		if regData != nil && regData.ServiceConfig != nil {
-			autoRegister = regData.ServiceConfig.Awareness.AutoRegisterService
-		}
-
-		if autoRegister {
-			controllerVersion := "1"
-			if regData != nil && regData.Services != nil {
-				if ctrlSvc, ok := regData.Services["controller"]; ok && ctrlSvc.Version != "" {
-					controllerVersion = ctrlSvc.Version
-				}
-			}
-
-			ip := os.Getenv("SOAJS_SRVIP")
-			if ip == "" {
-				ip = "127.0.0.1"
-			}
-			hostname, _ := os.Hostname()
-			hostInfo := types.HostRecord{
-				Env:      ctrl.Registry().GetEnvironment(),
-				Name:     "controller",
-				Version:  controllerVersion,
-				IP:       ip,
-				Port:     s.cfg.ServicePort,
-				Hostname: strings.ToLower(hostname),
-			}
-
-			if err := ctrl.Registry().RegisterHost(hostInfo); err != nil {
-				s.logger.Warn("failed to self-register controller host",
-					zap.Error(err),
-				)
-			} else {
-				s.logger.Info("controller self-registered as healthy host",
-					zap.String("host", hostInfo.IP),
-					zap.Int("port", hostInfo.Port),
-					zap.String("version", controllerVersion),
-				)
-			}
-		}
+		registered <- awareness.Register(ctrl.Registry(), ctrl.Awareness(), ctrl.Gateway(), s.cfg.ServicePort, serviceIP, s.logger)
 	}()
+	sigint := make(chan os.Signal, 1)
+	signal.Notify(sigint, os.Interrupt)
+	defer signal.Stop(sigint)
 
 	go func() {
 		s.logger.Info("starting maintenance server",
@@ -143,6 +107,16 @@ func (s *Server) Run(ctx context.Context) error {
 	select {
 	case <-ctx.Done():
 		s.logger.Info("shutdown signal received")
+		select {
+		case <-sigint:
+			if ok := <-registered; ok {
+				if err := awareness.WriteControllerDoc(ctrl.Registry(), ctrl.Awareness(), ctrl.Gateway(), serviceIP, true); err != nil {
+					s.logger.Error(err.Error())
+				}
+				s.logger.Warn("Service Terminated via interrupt signal.")
+			}
+		default:
+		}
 		return s.shutdown()
 	case err := <-errChan:
 		return err

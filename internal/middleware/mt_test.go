@@ -194,6 +194,14 @@ func TestCheckMTWhitelist_NoWhitelistConfig(t *testing.T) {
 	}
 }
 
+func (m *mockRegistryMT) OtherEnvControllerHosts(string) ([]types.HostRecord, error) {
+	return nil, nil
+}
+
+func (m *mockRegistryMT) UpsertEnvController(string, string, int64, map[string]interface{}) error {
+	return nil
+}
+
 func (m *mockRegistryMT) LoadByEnv(env string, reload bool) (*types.RegistryData, error) {
 	return m.Get(), nil
 }

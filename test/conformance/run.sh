@@ -86,7 +86,7 @@ start() {
 			NODE_ENV=production exec node index.js) > "$3" 2>&1 &
 	else
 		[ -x "$WORK/controller" ] || go build -o "$WORK/controller" ./cmd/controller
-		SOAJS_ENV=$1 SOAJS_PROFILE="$WORK/profile.js" \
+		SOAJS_ENV=$1 SOAJS_PROFILE="$WORK/profile.js" SOAJS_SRVIP=127.0.0.1 \
 			SOAJS_SERVICE_PORT=$2 SOAJS_MAINTENANCE_PORT_INCREMENT=1000 SOAJS_LOG_LEVEL=error \
 			"$WORK/controller" > "$3" 2>&1 &
 	fi

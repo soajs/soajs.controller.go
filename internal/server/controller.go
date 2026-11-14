@@ -1,9 +1,9 @@
 package server
 
 import (
+	"context"
 	"fmt"
 	"net/http"
-	"os"
 	"strings"
 	"sync"
 
@@ -25,12 +25,13 @@ import (
 
 // Controller manages the gateway components
 type Controller struct {
-	cfg       *config.Config
-	logger    *zap.Logger
-	registry  registry.Registry
-	provision provision.Provision
-	awareness awareness.Awareness
-	urac      *urac.Driver
+	cfg          *config.Config
+	logger       *zap.Logger
+	registry     registry.Registry
+	provision    provision.Provision
+	awareness    awareness.Awareness
+	awarenessEnv awareness.EnvAwareness
+	urac         *urac.Driver
 	// users reads the logged-in user from coreDB[masterDB] on key APIs
 	users *uracuser.Driver
 	mongo *mongo.Client // the provision database, from the profile
@@ -61,27 +62,6 @@ func NewController(cfg *config.Config, logger *zap.Logger) (*Controller, error) 
 	}
 
 	ctrl.registry = registry.NewMongoRegistry(ctrl.mongo.Database(), profile, logger)
-
-	// Initialize awareness
-	baseAwareness := awareness.NewAwareness(cfg.Awareness, ctrl.registry, logger)
-
-	// Check if running in HA mode (any value means HA is enabled, matching Node.js behavior)
-	deployHA := os.Getenv("SOAJS_DEPLOY_HA")
-	if deployHA != "" {
-		logger.Info("HA mode enabled, initializing HA awareness",
-			zap.String("SOAJS_DEPLOY_HA", deployHA))
-		haAwareness, err := awareness.NewHAAwareness(baseAwareness)
-		if err != nil {
-			logger.Warn("failed to initialize HA awareness, falling back to default",
-				zap.Error(err),
-			)
-			ctrl.awareness = baseAwareness
-		} else {
-			ctrl.awareness = haAwareness
-		}
-	} else {
-		ctrl.awareness = baseAwareness
-	}
 
 	// The urac database is set in Setup, from the registry's masterDB
 	ctrl.urac = urac.NewDriverWithConfig(ctrl.mongo, logger, urac.Config{
@@ -160,6 +140,16 @@ func (c *Controller) Setup(r *chi.Mux) error {
 
 	c.configureUrac(regData)
 
+	// Awareness of the environment's services and of the gateway in the other environments
+	c.awareness = awareness.New(c.registry, c.Gateway(), c.logger)
+	c.awarenessEnv = awareness.NewEnv(c.registry, c.Gateway(), c.logger)
+	if starter, ok := c.awareness.(interface{ Start(context.Context) }); ok {
+		starter.Start(context.Background())
+	}
+	if starter, ok := c.awarenessEnv.(interface{ Start(context.Context) }); ok {
+		starter.Start(context.Background())
+	}
+
 	// Initialize traffic model based on registry config
 	c.initTrafficModel(regData)
 
@@ -177,7 +167,7 @@ func (c *Controller) Setup(r *chi.Mux) error {
 	r.Use(middleware.MaintenanceMode(c.registry))
 	r.Use(middleware.URL(c.registry))
 	r.Use(middleware.Awareness(c.awareness))
-	r.Use(middleware.AwarenessEnv(c.awareness, c.registry, c.cfg.Environment))
+	r.Use(middleware.AwarenessEnv(c.awarenessEnv))
 	r.Use(middleware.Key(c.provision, c.registry, c.cfg.Environment))
 	r.Use(middleware.KeyACL())
 	r.Use(middleware.GotoService(c.provision, c.registry, c.awareness))
@@ -219,6 +209,11 @@ func (c *Controller) Registry() registry.Registry {
 // Provision returns the provision instance
 func (c *Controller) Provision() provision.Provision {
 	return c.provision
+}
+
+// Gateway names the gateway: service controller, version 1.
+func (c *Controller) Gateway() awareness.Gateway {
+	return awareness.Gateway{Name: "controller", Version: "1"}
 }
 
 // Awareness returns the awareness instance

@@ -3,6 +3,7 @@ package server
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/soajs/soajs.controller.go/internal/awareness"
 	"net/http"
 	"os"
 	"strings"
@@ -206,8 +207,7 @@ func (h *maintenanceHandler) awarenessStat(w http.ResponseWriter, r *http.Reques
 	regData := h.ctrl.Registry().Get()
 	data := map[string]interface{}{}
 	if regData != nil {
-		data["services"] = regData.Services
-		data["daemons"] = regData.Daemons
+		data["services"], data["daemons"] = awareness.RegistryWithStats(regData, h.ctrl.Awareness().Stats())
 	}
 	h.respondWithRoute(w, true, data, "/awarenessStat")
 }

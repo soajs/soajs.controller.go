@@ -496,24 +496,22 @@ func injectSOAJSHeaders(req *http.Request, soajsCtx *SOAJSContext, reg registry.
 		}
 	}
 
-	// Awareness info - controller host and port for service callbacks
-	awarenessObj := map[string]interface{}{
-		"host": "127.0.0.1",
-		"port": 4000,
-	}
-
-	// Get controller port from registry if available
-	if reg != nil {
-		regData := reg.Get()
-		if regData != nil && regData.ServiceConfig != nil {
-			if regData.ServiceConfig.Ports.Controller > 0 {
-				awarenessObj["port"] = regData.ServiceConfig.Ports.Controller
+	// Awareness: the gateway's host in this environment from awareness, with the controller port
+	// (mw/mt/index.js); without a host there is no awareness to inject
+	var awarenessObj map[string]interface{}
+	if aw != nil {
+		if gw, err := aw.GetHost("controller", ""); err == nil {
+			awarenessObj = map[string]interface{}{"host": gw.Host, "port": 0}
+			if reg != nil {
+				if regData := reg.Get(); regData != nil && regData.ServiceConfig != nil {
+					awarenessObj["port"] = regData.ServiceConfig.Ports.Controller
+				}
 			}
 		}
 	}
 
 	// Build interConnect array if service has interConnect configured
-	if serviceConfig != nil && len(serviceConfig.InterConnect) > 0 && reg != nil && aw != nil {
+	if awarenessObj != nil && serviceConfig != nil && len(serviceConfig.InterConnect) > 0 && reg != nil && aw != nil {
 		interConnectArr := make([]map[string]interface{}, 0)
 		regData := reg.Get()
 
@@ -577,7 +575,9 @@ func injectSOAJSHeaders(req *http.Request, soajsCtx *SOAJSContext, reg registry.
 		}
 	}
 
-	injectObj["awareness"] = awarenessObj
+	if awarenessObj != nil {
+		injectObj["awareness"] = awarenessObj
+	}
 
 	// Serialize to JSON
 	jsonBytes, err := json.Marshal(injectObj)

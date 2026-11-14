@@ -57,7 +57,68 @@
             "https"
           ]
         },
-        "ca": {}
+        "ca": {
+          "type": "object",
+          "properties": {
+            "requestOptions": {
+              "type": "object",
+              "properties": {
+                "baseUrl": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "ca": {
+                  "oneOf": [
+                    {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "minItems": 1
+                    }
+                  ]
+                },
+                "cert": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "key": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "strictSSL": {
+                  "type": "boolean"
+                },
+                "auth": {
+                  "type": "object",
+                  "properties": {
+                    "bearer": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  },
+                  "additionalProperties": false,
+                  "required": [
+                    "bearer"
+                  ]
+                }
+              },
+              "additionalProperties": false,
+              "required": [
+                "baseUrl"
+              ]
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "requestOptions"
+          ]
+        }
       },
       "additionalProperties": false,
       "required": [

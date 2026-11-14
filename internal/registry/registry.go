@@ -31,6 +31,14 @@ type Registry interface {
 	// is empty.
 	GetHost(serviceName, version string) (*types.HostInfo, error)
 
+	// OtherEnvControllerHosts returns the gateway's hosts in the other environments: hosts whose
+	// name matches the gateway's, case-insensitive, outside the gateway's environment.
+	OtherEnvControllerHosts(gatewayName string) ([]types.HostRecord, error)
+
+	// UpsertEnvController records the gateway's awareness in the controllers collection, one
+	// document per environment and IP.
+	UpsertEnvController(env, ip string, ts int64, data map[string]interface{}) error
+
 	// GetEnvironment returns the gateway's environment code, lowercase.
 	GetEnvironment() string
 
