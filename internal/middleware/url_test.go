@@ -3,145 +3,62 @@ package middleware
 import (
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
-	"github.com/soajs/soajs.controller.go/internal/config"
+	"github.com/soajs/soajs.controller.go/pkg/types"
 	"go.uber.org/zap"
 )
 
+// parseURL follows the Node.js lib/parseURL.js and extractBuildParameters.
 func TestParseURL(t *testing.T) {
 	tests := []struct {
-		name           string
-		path           string
-		wantService    string
-		wantVersion    string
-		wantPath       string
+		uri, service, version, path string
+		requested                   bool
 	}{
-		{
-			name:        "service only",
-			path:        "/urac",
-			wantService: "urac",
-			wantVersion: "", // Version resolved from registry later
-			wantPath:    "",
-		},
-		{
-			name:        "service with path",
-			path:        "/urac/user/get",
-			wantService: "urac",
-			wantVersion: "", // Version resolved from registry later
-			wantPath:    "/user/get",
-		},
-		{
-			name:        "service with version",
-			path:        "/urac/v2/user/get",
-			wantService: "urac",
-			wantVersion: "2",
-			wantPath:    "/user/get",
-		},
-		{
-			name:        "service with v1",
-			path:        "/api/v1/endpoint",
-			wantService: "api",
-			wantVersion: "1",
-			wantPath:    "/endpoint",
-		},
-		{
-			name:        "empty path",
-			path:        "/",
-			wantService: "",
-			wantVersion: "", // Version resolved from registry later
-			wantPath:    "",
-		},
-		{
-			name:        "deep path no version",
-			path:        "/dashboard/admin/settings/general",
-			wantService: "dashboard",
-			wantVersion: "", // Version resolved from registry later
-			wantPath:    "/admin/settings/general",
-		},
+		{"/orders/v1/list", "orders", "1", "/list", true},
+		{"/orders/v12/a/b?x=1", "orders", "12", "/a/b", true},
+		{"/orders/list", "orders", "", "/list", false},
+		{"/orders/v1", "orders", "", "/v1", false},
+		{"/orders/v1/", "orders", "1", "/", true},
+		{"/orders/x/v1/y", "orders", "", "/x/v1/y", false},
+		{"/orders:2/list", "orders", "2", "/list", true},
+		{"/orders/list/?x=1", "orders", "", "/list", false},
+		{"/orders/list/", "orders", "", "/list/", false},
+		{"/soajs/acl", "soajs", "", "/acl", false},
+		{"/", "", "", "", false},
 	}
-
 	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			info := parseURL(tt.path)
-
-			if info.ServiceName != tt.wantService {
-				t.Errorf("ServiceName = %q, want %q", info.ServiceName, tt.wantService)
-			}
-			if info.ServiceVersion != tt.wantVersion {
-				t.Errorf("ServiceVersion = %q, want %q", info.ServiceVersion, tt.wantVersion)
-			}
-			if info.ServicePath != tt.wantPath {
-				t.Errorf("ServicePath = %q, want %q", info.ServicePath, tt.wantPath)
-			}
-		})
-	}
-}
-
-func TestIsVersionPattern(t *testing.T) {
-	tests := []struct {
-		input string
-		want  bool
-	}{
-		{"v1", true},
-		{"v2", true},
-		{"v10", true},
-		{"v123", true},
-		{"V1", false},
-		{"1", false},
-		{"v", false},
-		{"va", false},
-		{"v1a", false},
-		{"version1", false},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.input, func(t *testing.T) {
-			if got := isVersionPattern(tt.input); got != tt.want {
-				t.Errorf("isVersionPattern(%q) = %v, want %v", tt.input, got, tt.want)
-			}
-		})
+		info := parseURL(tt.uri)
+		if info.ServiceName != tt.service || info.ServiceVersion != tt.version || info.ServicePath != tt.path || info.VersionRequested != tt.requested {
+			t.Errorf("%s: got %q %q %q %v, want %q %q %q %v", tt.uri, info.ServiceName, info.ServiceVersion, info.ServicePath, info.VersionRequested,
+				tt.service, tt.version, tt.path, tt.requested)
+		}
 	}
 }
 
 func TestURLMiddleware(t *testing.T) {
-	logger, _ := zap.NewDevelopment()
-
-	// Create context middleware first
-	contextMW := Context(logger, "test")
-	urlMW := URL()
-
-	handler := contextMW(urlMW(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ctx := r.Context()
-		soajsCtx := GetSOAJSContext(ctx)
-
-		if soajsCtx == nil || soajsCtx.Controller == nil || soajsCtx.Controller.ServiceParams == nil {
-			t.Error("SOAJS context not properly initialized")
-			return
-		}
-
-		urlInfo := soajsCtx.Controller.ServiceParams.URLInfo
-		if urlInfo == nil {
-			t.Error("URLInfo not set")
-			return
-		}
-
-		if urlInfo.ServiceName != "testservice" {
-			t.Errorf("ServiceName = %q, want %q", urlInfo.ServiceName, "testservice")
-		}
-
-		w.WriteHeader(http.StatusOK)
-	})))
-
-	req := httptest.NewRequest("GET", "/testservice/v1/action", nil)
-	rec := httptest.NewRecorder()
-
-	handler.ServeHTTP(rec, req)
-
-	if rec.Code != http.StatusOK {
-		t.Errorf("Status = %d, want %d", rec.Code, http.StatusOK)
+	reg := &mockRegistryMT{data: &types.RegistryData{Services: map[string]*types.ServiceConfig{"orders": {}}}}
+	run := func(uri string) *httptest.ResponseRecorder {
+		rec := httptest.NewRecorder()
+		Context(zap.NewNop(), "dev")(URL(reg)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.Header.Get("key") != "" {
+				w.Header().Set("X-Key", r.Header.Get("key"))
+			}
+			w.WriteHeader(200)
+		}))).ServeHTTP(rec, httptest.NewRequest("GET", uri, nil))
+		return rec
+	}
+	if rec := run("/"); rec.Code != 200 || !strings.Contains(rec.Body.String(), `"codes":[136]`) {
+		t.Errorf("root: %d %s", rec.Code, rec.Body.String())
+	}
+	if rec := run("/unknown/v1/x"); rec.Code != 404 || !strings.Contains(rec.Body.String(), `"codes":[130]`) {
+		t.Errorf("unknown service: %d %s", rec.Code, rec.Body.String())
+	}
+	if rec := run("/soajs/anything"); rec.Code != 200 {
+		t.Errorf("/soajs goes on to the gateway routes: %d", rec.Code)
+	}
+	if rec := run("/orders/v1/x?key=abc"); rec.Code != 200 || rec.Header().Get("X-Key") != "abc" {
+		t.Errorf("a query key becomes the key header: %v", rec.Header())
 	}
 }
-
-// Ensure config is imported
-var _ = config.HeaderSOAJSKey

@@ -1,9 +1,4 @@
 {
-  "root": "PR 5 (url): answer 136 for the root path",
-  "favicon": "PR 5 (favicon): answer 200 image/x-icon",
-  "unknown_service": "PR 5 (url): answer 130 for a service not in the registry",
-  "unknown_soajs_route": "PR 5 (gotoService): answer 130 for an unknown /soajs route",
-  "no_key": "PR 5 (key): answer 132 with 403",
   "service_not_in_package": "PR 5 (keyACL): answer 154 for a service the package does not grant",
   "api_not_in_package": "PR 6 (mt): refuse an api the package does not grant (S1)",
   "private_no_token": "PR 7 (oauth): oauth2-server texts and statuses",
@@ -14,8 +9,6 @@
   "maintenance_unknown_path": "PR 11 (maintenance): any unknown path answers the heartbeat",
   "maintenance_favicon": "PR 11 (maintenance): answer 200 image/x-icon",
   "public_head": "PR 9 (proxy): HEAD answers as Node.js does",
-  "cors_preflight": "PR 5 (cors): CORS from the registry's serviceConfig.cors",
-  "cors_simple_request": "PR 5 (cors): CORS from the registry's serviceConfig.cors",
   "soajs_acl_no_key": "PR 12 (/soajs/acl): key required, 132 with 403",
   "soajs_acl_key": "PR 12 (/soajs/acl): login required, oauth2-server texts",
   "soajs_acl_key_token": "PR 12 (/soajs/acl): finalACL as Node.js builds it",

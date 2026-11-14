@@ -69,7 +69,7 @@ func runMT(t *testing.T, prov *mockProvision, extKey string) (*httptest.Response
 	t.Helper()
 	reg := &mockRegistryMT{}
 	var captured *SOAJSContext
-	handler := Context(zap.NewNop(), "test")(URL()(Key(prov, reg, "test")(MT(prov, reg, nil, "test")(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := Context(zap.NewNop(), "test")(URL(nil)(Key(prov, reg, "test")(MT(prov, reg, nil, "test")(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		captured = GetSOAJSContext(r.Context())
 		w.WriteHeader(http.StatusOK)
 	})))))

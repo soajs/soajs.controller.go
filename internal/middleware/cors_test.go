@@ -4,160 +4,51 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"github.com/soajs/soajs.controller.go/pkg/types"
 )
 
-func TestDefaultCORSConfig(t *testing.T) {
-	cfg := DefaultCORSConfig()
+func corsRegistry(cors types.CORSConfig) *mockRegistryMT {
+	return &mockRegistryMT{data: &types.RegistryData{ServiceConfig: &types.GlobalServiceConfig{CORS: cors}}}
+}
 
-	if !cfg.Enabled {
-		t.Error("Expected CORS to be enabled by default")
+func TestCORSPreflight(t *testing.T) {
+	reg := corsRegistry(types.CORSConfig{Enabled: true, Origin: "https://app.example.com", Headers: "key,Content-Type", MaxAge: 600})
+	called := false
+	handler := CORS(reg)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { called = true }))
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, httptest.NewRequest("OPTIONS", "/svc/x", nil))
+	if called || rec.Code != 204 {
+		t.Fatalf("a preflight answers 204 without going on: %d", rec.Code)
 	}
-
-	if len(cfg.AllowedOrigins) == 0 {
-		t.Error("Expected allowed origins to be set")
+	want := map[string]string{
+		"Access-Control-Allow-Origin":      "https://app.example.com",
+		"Access-Control-Allow-Credentials": "true",
+		"Access-Control-Allow-Methods":     "GET,HEAD,PUT,PATCH,POST,DELETE",
+		"Access-Control-Allow-Headers":     "key,Content-Type",
+		"Access-Control-Max-Age":           "600",
+		"Access-Control-Expose-Headers":    "key,Content-Type",
 	}
-
-	if len(cfg.AllowedMethods) == 0 {
-		t.Error("Expected allowed methods to be set")
-	}
-
-	if len(cfg.AllowedHeaders) == 0 {
-		t.Error("Expected allowed headers to be set")
-	}
-
-	if cfg.MaxAge <= 0 {
-		t.Error("Expected MaxAge to be positive")
+	for k, v := range want {
+		if got := rec.Header().Get(k); got != v {
+			t.Errorf("%s = %q, want %q", k, got, v)
+		}
 	}
 }
 
-func TestCORS_Preflight(t *testing.T) {
-	handler := CORS()(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-	}))
-
-	req := httptest.NewRequest(http.MethodOptions, "/test", nil)
-	req.Header.Set("Origin", "http://example.com")
-	rr := httptest.NewRecorder()
-
-	handler.ServeHTTP(rr, req)
-
-	if rr.Code != http.StatusNoContent {
-		t.Errorf("Expected status %d, got %d", http.StatusNoContent, rr.Code)
+func TestCORSSimpleRequestAndDisabled(t *testing.T) {
+	reg := corsRegistry(types.CORSConfig{Enabled: true})
+	handler := CORS(reg)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) }))
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, httptest.NewRequest("GET", "/svc/x", nil))
+	if rec.Header().Get("Access-Control-Allow-Origin") != "*" || rec.Header().Get("Access-Control-Allow-Methods") != "" {
+		t.Errorf("simple request headers: %v", rec.Header())
 	}
 
-	// Check CORS headers
-	if origin := rr.Header().Get("Access-Control-Allow-Origin"); origin != "http://example.com" {
-		t.Errorf("Expected origin 'http://example.com', got '%s'", origin)
-	}
-
-	if methods := rr.Header().Get("Access-Control-Allow-Methods"); methods == "" {
-		t.Error("Expected Access-Control-Allow-Methods to be set")
-	}
-
-	if headers := rr.Header().Get("Access-Control-Allow-Headers"); headers == "" {
-		t.Error("Expected Access-Control-Allow-Headers to be set")
-	}
-
-	if maxAge := rr.Header().Get("Access-Control-Max-Age"); maxAge == "" {
-		t.Error("Expected Access-Control-Max-Age to be set")
-	}
-}
-
-func TestCORS_RegularRequest(t *testing.T) {
-	handler := CORS()(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("OK"))
-	}))
-
-	req := httptest.NewRequest(http.MethodGet, "/test", nil)
-	req.Header.Set("Origin", "http://example.com")
-	rr := httptest.NewRecorder()
-
-	handler.ServeHTTP(rr, req)
-
-	if rr.Code != http.StatusOK {
-		t.Errorf("Expected status %d, got %d", http.StatusOK, rr.Code)
-	}
-
-	// Check CORS headers
-	if origin := rr.Header().Get("Access-Control-Allow-Origin"); origin != "http://example.com" {
-		t.Errorf("Expected origin 'http://example.com', got '%s'", origin)
-	}
-
-	if credentials := rr.Header().Get("Access-Control-Allow-Credentials"); credentials != "true" {
-		t.Errorf("Expected credentials 'true', got '%s'", credentials)
-	}
-}
-
-func TestCORS_NoOrigin(t *testing.T) {
-	handler := CORS()(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-	}))
-
-	req := httptest.NewRequest(http.MethodGet, "/test", nil)
-	// No Origin header set
-	rr := httptest.NewRecorder()
-
-	handler.ServeHTTP(rr, req)
-
-	if rr.Code != http.StatusOK {
-		t.Errorf("Expected status %d, got %d", http.StatusOK, rr.Code)
-	}
-
-	// Should default to "*"
-	if origin := rr.Header().Get("Access-Control-Allow-Origin"); origin != "*" {
-		t.Errorf("Expected origin '*', got '%s'", origin)
-	}
-}
-
-func TestCORSWithConfig_Disabled(t *testing.T) {
-	cfg := CORSConfig{
-		Enabled: false,
-	}
-
-	handler := CORSWithConfig(cfg)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-	}))
-
-	req := httptest.NewRequest(http.MethodOptions, "/test", nil)
-	req.Header.Set("Origin", "http://example.com")
-	rr := httptest.NewRecorder()
-
-	handler.ServeHTTP(rr, req)
-
-	// Should pass through without setting CORS headers
-	if rr.Code != http.StatusOK {
-		t.Errorf("Expected status %d, got %d", http.StatusOK, rr.Code)
-	}
-
-	// CORS headers should not be set
-	if origin := rr.Header().Get("Access-Control-Allow-Origin"); origin != "" {
-		t.Errorf("Expected no origin header, got '%s'", origin)
-	}
-}
-
-func TestCORSWithConfig_CustomConfig(t *testing.T) {
-	cfg := CORSConfig{
-		Enabled:          true,
-		AllowedOrigins:   []string{"http://localhost:3000"},
-		AllowedMethods:   []string{"GET", "POST"},
-		AllowedHeaders:   []string{"Content-Type"},
-		ExposedHeaders:   []string{"X-Custom"},
-		AllowCredentials: false,
-		MaxAge:           3600,
-	}
-
-	handler := CORSWithConfig(cfg)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-	}))
-
-	req := httptest.NewRequest(http.MethodOptions, "/test", nil)
-	req.Header.Set("Origin", "http://localhost:3000")
-	rr := httptest.NewRecorder()
-
-	handler.ServeHTTP(rr, req)
-
-	if credentials := rr.Header().Get("Access-Control-Allow-Credentials"); credentials != "false" {
-		t.Errorf("Expected credentials 'false', got '%s'", credentials)
+	off := corsRegistry(types.CORSConfig{Enabled: false})
+	rec = httptest.NewRecorder()
+	CORS(off)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) })).ServeHTTP(rec, httptest.NewRequest("OPTIONS", "/svc/x", nil))
+	if rec.Code != 200 || rec.Header().Get("Access-Control-Allow-Origin") != "" {
+		t.Error("CORS disabled: no headers, the request goes on")
 	}
 }

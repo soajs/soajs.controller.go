@@ -115,7 +115,7 @@ func TestGotoService_SkipsSoajsRoutes(t *testing.T) {
 	aw := &mockAwarenessProxy{}
 
 	contextMW := Context(logger, "test")
-	urlMW := URL()
+	urlMW := URL(nil)
 	gotoMW := GotoService(prov, reg, aw)
 
 	called := false
@@ -144,7 +144,7 @@ func TestGotoService_ReturnsErrorWhenServiceNotFound(t *testing.T) {
 	aw := &mockAwarenessProxy{hosts: map[string]*types.HostInfo{}} // Empty
 
 	contextMW := Context(logger, "test")
-	urlMW := URL()
+	urlMW := URL(nil)
 	gotoMW := GotoService(prov, reg, aw)
 
 	// The inner handler must call Gotoservice to trigger service resolution
@@ -162,15 +162,24 @@ func TestGotoService_ReturnsErrorWhenServiceNotFound(t *testing.T) {
 
 	handler.ServeHTTP(rec, req)
 
-	if rec.Code != http.StatusBadGateway {
-		t.Errorf("Status = %d, want %d for service not found", rec.Code, http.StatusBadGateway)
+	if rec.Code != http.StatusNotFound || !strings.Contains(rec.Body.String(), `"codes":[130]`) {
+		t.Errorf("Status = %d %s, want 404 with 130 for a service the registry does not have", rec.Code, rec.Body.String())
 	}
+}
+
+func proxyTestRegistry(names ...string) *mockRegistryProxy {
+	services := map[string]*types.ServiceConfig{}
+	for _, n := range names {
+		services[n] = &types.ServiceConfig{Port: 4000, Hosts: &types.ServiceHosts{Latest: "1", ByVersion: map[string][]string{"1": {"127.0.0.1"}}},
+			Versions: map[string]*types.VersionInfo{"1": {}, "2": {}}}
+	}
+	return &mockRegistryProxy{data: &types.RegistryData{Services: services, ServiceConfig: &types.GlobalServiceConfig{}}}
 }
 
 func TestGotoService_SetsGotoserviceFunction(t *testing.T) {
 	logger, _ := zap.NewDevelopment()
 	prov := &mockProvision{}
-	reg := &mockRegistryProxy{}
+	reg := proxyTestRegistry("oauth")
 	aw := &mockAwarenessProxy{
 		hosts: map[string]*types.HostInfo{
 			"oauth:1": {Host: "localhost", Port: 4002},
@@ -178,7 +187,7 @@ func TestGotoService_SetsGotoserviceFunction(t *testing.T) {
 	}
 
 	contextMW := Context(logger, "test")
-	urlMW := URL()
+	urlMW := URL(nil)
 	gotoMW := GotoService(prov, reg, aw)
 
 	var gotGotoservice bool
@@ -203,7 +212,7 @@ func TestGotoService_SetsGotoserviceFunction(t *testing.T) {
 func TestGotoService_HandlesProxyRoute(t *testing.T) {
 	logger, _ := zap.NewDevelopment()
 	prov := &mockProvision{}
-	reg := &mockRegistryProxy{}
+	reg := proxyTestRegistry("urac")
 	aw := &mockAwarenessProxy{
 		hosts: map[string]*types.HostInfo{
 			"urac:1": {Host: "localhost", Port: 4001},
@@ -211,7 +220,7 @@ func TestGotoService_HandlesProxyRoute(t *testing.T) {
 	}
 
 	contextMW := Context(logger, "test")
-	urlMW := URL()
+	urlMW := URL(nil)
 	gotoMW := GotoService(prov, reg, aw)
 
 	var capturedService string
@@ -236,7 +245,7 @@ func TestGotoService_HandlesProxyRoute(t *testing.T) {
 func TestGotoService_ProxyRouteWithVersion(t *testing.T) {
 	logger, _ := zap.NewDevelopment()
 	prov := &mockProvision{}
-	reg := &mockRegistryProxy{}
+	reg := proxyTestRegistry("urac")
 	aw := &mockAwarenessProxy{
 		hosts: map[string]*types.HostInfo{
 			"urac:2": {Host: "localhost", Port: 4001},
@@ -244,7 +253,7 @@ func TestGotoService_ProxyRouteWithVersion(t *testing.T) {
 	}
 
 	contextMW := Context(logger, "test")
-	urlMW := URL()
+	urlMW := URL(nil)
 	gotoMW := GotoService(prov, reg, aw)
 
 	var capturedVersion string
@@ -273,7 +282,7 @@ func TestGotoService_RejectsEmptyProxyRoute(t *testing.T) {
 	aw := &mockAwarenessProxy{}
 
 	contextMW := Context(logger, "test")
-	urlMW := URL()
+	urlMW := URL(nil)
 	gotoMW := GotoService(prov, reg, aw)
 
 	handler := contextMW(urlMW(gotoMW(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

@@ -18,8 +18,8 @@ func TestFavicon_FaviconRequest(t *testing.T) {
 
 	handler.ServeHTTP(rr, req)
 
-	if rr.Code != http.StatusNoContent {
-		t.Errorf("Expected status %d for favicon, got %d", http.StatusNoContent, rr.Code)
+	if rr.Code != http.StatusOK {
+		t.Errorf("Expected status %d for favicon, got %d", http.StatusOK, rr.Code)
 	}
 
 	if nextCalled {
