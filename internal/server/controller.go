@@ -151,7 +151,7 @@ func (c *Controller) Setup(r *chi.Mux) error {
 	}
 
 	// Initialize traffic model based on registry config
-	c.initTrafficModel(regData)
+	trafficModels := c.trafficModels(regData)
 
 	// Setup base middleware (chi built-in)
 	r.Use(chimw.RequestID)
@@ -170,7 +170,7 @@ func (c *Controller) Setup(r *chi.Mux) error {
 	r.Use(middleware.AwarenessEnv(c.awarenessEnv))
 	r.Use(middleware.Key(c.provision, c.registry, c.cfg.Environment))
 	r.Use(middleware.KeyACL())
-	r.Use(middleware.GotoService(c.registry, c.awareness))
+	r.Use(middleware.GotoService(c.registry, c.awareness, middleware.NewMonitor(c.registry.Get, c.awareness, c.logger)))
 	r.Use(middleware.MT(c.provision, c.registry, c.cfg.Environment))
 	r.Use(middleware.SoajsRoutesSetup(c.urac)) // Setup /soajs/* routes to require OAuth
 	r.Use(middleware.OAuth(c.provision, c.registry))
@@ -178,9 +178,8 @@ func (c *Controller) Setup(r *chi.Mux) error {
 	r.Use(middleware.MTACL(c.registry))
 	r.Use(middleware.InjectObj(c.registry, c.awareness)) // the soajsinjectobj of key APIs, at the end of mt
 	r.Use(middleware.SoajsRoutes(c.provision))           // Handle /soajs/* routes after OAuth and Urac populate context
-	r.Use(middleware.Traffic(c.registry))
+	r.Use(middleware.Traffic(c.registry, trafficModels, c.logger))
 	r.Use(middleware.LastSeen(c.registry, c.awareness))
-	r.Use(middleware.Monitor(c.registry, c.awareness))
 
 	// Final handler - proxy to service
 	r.HandleFunc("/*", c.handleRequest)
@@ -256,24 +255,16 @@ func (c *Controller) configureUrac(regData *types.RegistryData) {
 	c.urac.SetDatabase(db.DatabaseName())
 }
 
-// initTrafficModel selects the throttling store: the custom registry gateway traffic.model, kept
-// in the environment's gateway database, else in provision.
-func (c *Controller) initTrafficModel(regData *types.RegistryData) {
-	gateway, _ := regData.CustomRegistry["gateway"].(map[string]interface{})
-	value, _ := gateway["value"].(map[string]interface{})
-	traffic, _ := value["traffic"].(map[string]interface{})
-	if model, _ := traffic["model"].(string); model != "mongo" {
-		return
-	}
+// trafficModels are the throttling stores (mw/traffic/model): memory, and mongo in the
+// environment's gateway database, else provision, both ready as in Node.js; the custom registry
+// gateway traffic.model picks one per request.
+func (c *Controller) trafficModels(regData *types.RegistryData) map[string]middleware.ThrottlingModel {
+	models := map[string]middleware.ThrottlingModel{"memory": middleware.NewMemoryThrottling(context.Background(), c.logger)}
 	client, err := c.coreClient(regData, "gateway")
 	if err != nil {
-		c.logger.Error("gateway database: throttling stays in memory", zap.Error(err))
-		return
+		c.logger.Error("gateway database: throttling with the mongo model is off", zap.Error(err))
+		return models
 	}
-	middleware.InitTrafficModel(middleware.TrafficConfig{
-		Model:       "mongo",
-		MongoClient: client,
-		Database:    "",
-		Logger:      c.logger,
-	})
+	models["mongo"] = middleware.NewMongoThrottling(client.Database(), c.logger)
+	return models
 }

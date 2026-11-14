@@ -1,0 +1,9 @@
+{
+  "status": 429,
+  "headers": {
+    "Content-Type": "application/json",
+    "X-Ratelimit-Limit": "0",
+    "X-Ratelimit-Remaining": "-1"
+  },
+  "body": "{\"status\":429,\"msg\":\"too many requests\"}"
+}

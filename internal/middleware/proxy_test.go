@@ -69,6 +69,7 @@ func boolPtr(b bool) *bool { return &b }
 
 // proxyEnv is a service on a test server, the registry and awareness that point to it.
 type proxyEnv struct {
+	mon      *Monitor
 	reg      *mockRegistryProxy
 	aw       *mockAwarenessProxy
 	port     int
@@ -121,7 +122,7 @@ func newProxyEnv(t *testing.T, handler http.HandlerFunc) *proxyEnv {
 
 // serve runs URL, GotoService, InjectObj and the gotoservice, as the gateway's chain does.
 func (e *proxyEnv) serve(req *http.Request) *httptest.ResponseRecorder {
-	handler := Context(zap.NewNop(), "test")(URL(nil)(GotoService(e.reg, e.aw)(InjectObj(e.reg, e.aw)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := Context(zap.NewNop(), "test")(URL(nil)(GotoService(e.reg, e.aw, e.monitor())(InjectObj(e.reg, e.aw)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := GetSOAJSContext(r.Context())
 		if ctx.Controller.Gotoservice == nil {
 			w.WriteHeader(299)
@@ -132,6 +133,13 @@ func (e *proxyEnv) serve(req *http.Request) *httptest.ResponseRecorder {
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 	return rec
+}
+
+func (e *proxyEnv) monitor() *Monitor {
+	if e.mon == nil {
+		e.mon = NewMonitor(e.reg.Get, e.aw, zap.NewNop())
+	}
+	return e.mon
 }
 
 func (e *proxyEnv) got() *http.Request {

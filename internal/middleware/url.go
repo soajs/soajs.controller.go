@@ -101,6 +101,10 @@ func parseURL(uri string) *types.URLInfo {
 		rest = uri[len(serviceNV)+1:]
 	}
 	info.URL = rest
+	info.FullPath = uri
+	if i := strings.IndexByte(info.FullPath, '?'); i != -1 {
+		info.FullPath = info.FullPath[:i]
+	}
 	if i := strings.IndexByte(rest, '?'); i != -1 {
 		rest = rest[:i]
 		if j := strings.LastIndexByte(rest, '/'); j > 0 && j == len(rest)-1 {
