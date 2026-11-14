@@ -446,3 +446,21 @@ func TestBuildInjectObj(t *testing.T) {
 		t.Error("larger than the limit")
 	}
 }
+
+// No middleware after Context sees a soajsinjectobj the request came with.
+func TestContext_RemovesInboundInjectObj(t *testing.T) {
+	seen := "unset"
+	handler := Context(zap.NewNop(), "test")(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		seen = r.Header.Get("soajsinjectobj")
+	}))
+	req := httptest.NewRequest("GET", "/svc/x", nil)
+	req.Header.Set("soajsinjectobj", `{"tenant":{"id":"sent"}}`)
+	req.Header.Set("key", "k")
+	handler.ServeHTTP(httptest.NewRecorder(), req)
+	if seen != "" {
+		t.Errorf("a middleware after Context saw %q", seen)
+	}
+	if req.Header.Get("key") != "k" {
+		t.Error("other headers are kept")
+	}
+}

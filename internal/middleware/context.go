@@ -52,6 +52,10 @@ type AwarenessEnvClient interface {
 func Context(logger *zap.Logger, env string) Middleware {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// The gateway only forwards the soajsinjectobj it builds: a header with that name that
+			// comes with the request is removed before any middleware reads the headers
+			r.Header.Del("soajsinjectobj")
+
 			// Generate request ID if not present
 			requestID := r.Header.Get("X-Request-ID")
 			if requestID == "" {
