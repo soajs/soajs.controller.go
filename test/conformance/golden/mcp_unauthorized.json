@@ -1,0 +1,10 @@
+{
+  "status": 401,
+  "headers": {
+    "Access-Control-Expose-Headers": "WWW-Authenticate",
+    "Cache-Control": "no-store",
+    "Content-Type": "application/json",
+    "Www-Authenticate": "Bearer resource_metadata=\"https://127.0.0.1:24000/.well-known/oauth-protected-resource/soajs/mcp\""
+  },
+  "body": "{\"error\":\"unauthorized\",\"error_description\":\"Authorization required.\"}"
+}

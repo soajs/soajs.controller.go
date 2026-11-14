@@ -1,0 +1,7 @@
+{
+  "status": 200,
+  "headers": {
+    "Content-Type": "application/json"
+  },
+  "body": "{\"resource\":\"https://127.0.0.1:24000/soajs/mcp?key=5bbf311a30f4acaec52b7472be854cc95259156275114822ad91615d02d27609ac1ebf7aecfdc2355849a594cc55d042d9906c2c0190a3b7d5f5935d8053a953ede02160a6f8429f1ba971b8d9d6fe6afe7c59af3462d188c4b1a08e9c07670e\",\"authorization_servers\":[\"https://127.0.0.1:24000/soajs/mcp/auth/product/CONF\"],\"bearer_methods_supported\":[\"header\"]}"
+}

@@ -44,11 +44,12 @@ var proxyTransport http.RoundTripper = &http.Transport{
 //   - the oauth passport login is passed through (simpleRTS), a soajsroaming request is answered
 //     with the injectObj (roaming), any other is redirected to the service.
 //
-// The gateway's own routes: /soajs/acl answers 132 without a key, else is checked as an API of
-// the gateway and answered with the caller's ACL; /soajs/proxy forwards the request to its
+// The gateway's own routes: /soajs/acl and /soajs/mcp answer 132 without a key, else are checked
+// as APIs of the gateway and answered with the caller's ACL, and MCP; /soajs/proxy forwards the request to its
 // proxyRoute, a key that is sent having to decrypt (else 132); any other /soajs route is not a
 // service (130).
 func GotoService(reg registry.Registry, aw awareness.Awareness, mon *Monitor, prov provision.Provision, gw GatewayService) Middleware {
+	mcp := NewMCP(reg, gw)
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			soajsCtx := GetSOAJSContext(r.Context())
@@ -71,6 +72,12 @@ func GotoService(reg registry.Registry, aw awareness.Awareness, mon *Monitor, pr
 					mimicGatewayAPI(serviceParams, gw, "/soajs/acl")
 					soajsCtx.Controller.Gotoservice = func(w http.ResponseWriter, r *http.Request) {
 						soajsACL(w, soajsCtx)
+					}
+					next.ServeHTTP(w, r)
+					return
+				case "mcp":
+					if !mcp.route(w, r, soajsCtx) {
+						return
 					}
 					next.ServeHTTP(w, r)
 					return

@@ -1,0 +1,7 @@
+{
+  "status": 200,
+  "headers": {
+    "Content-Type": "application/json"
+  },
+  "body": "{\"jsonrpc\":\"2.0\",\"id\":\"p-1\",\"result\":{}}"
+}

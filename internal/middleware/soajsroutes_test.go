@@ -31,7 +31,7 @@ func TestFinalACLOf(t *testing.T) {
 		// a version that is not an object is skipped; a service without one is left out
 		"c": map[string]interface{}{"access": true},
 	}
-	got := finalACLOf(acl, zap.NewNop())
+	got, restricted := finalACLOf(acl, zap.NewNop())
 	want := map[string]interface{}{
 		"a": map[string]interface{}{"version": "2", "get": []string{"/b", "/z"}, "post": []string{"/p", "/q"}},
 		"b": map[string]interface{}{"version": "1"},
@@ -39,7 +39,10 @@ func TestFinalACLOf(t *testing.T) {
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("finalACL\n got  %v\n want %v", got, want)
 	}
-	if finalACLOf(nil, zap.NewNop()) != nil {
+	if !restricted["a"] || restricted["b"] {
+		t.Errorf("restricted %v", restricted)
+	}
+	if f, _ := finalACLOf(nil, zap.NewNop()); f != nil {
 		t.Error("no ACL, no finalACL")
 	}
 }

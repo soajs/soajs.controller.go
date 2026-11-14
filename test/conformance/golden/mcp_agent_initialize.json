@@ -1,0 +1,7 @@
+{
+  "status": 200,
+  "headers": {
+    "Content-Type": "application/json"
+  },
+  "body": "{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{\"protocolVersion\":\"2025-03-26\",\"capabilities\":{\"tools\":{\"listChanged\":false}},\"serverInfo\":{\"name\":\"soajs-gateway\",\"version\":\"4.3.28\"},\"instructions\":\"The tools are the APIs this tenant's package and the signed-in user's ACL allow. A tool call is processed as the API call it stands for.\"}}"
+}

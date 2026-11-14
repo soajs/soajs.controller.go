@@ -36,20 +36,11 @@ func mimicGatewayAPI(params *types.ServiceParams, gw GatewayService, path string
 	params.GatewayAPI = true
 }
 
-// soajsACL answers /soajs/acl (mw/soajsRoutes/keyACL, lib/acl.js computeACL) with what the
-// caller may use: the user's ACL and packages, else the package's ACL and the key's package;
-// finalACL, per service, the latest version and, for a restricted one, its APIs per method; the
-// user's _id and the key's tenant.
-func soajsACL(w http.ResponseWriter, soajsCtx *SOAJSContext) {
+// computeACL is what the caller may use (lib/acl.js computeACL), shared by /soajs/acl and
+// /soajs/mcp: the user's ACL and allowed packages, else the package's ACL and the key's package,
+// and the user's _id ({_id}, nil without a user).
+func computeACL(soajsCtx *SOAJSContext) (acl map[string]interface{}, packages []interface{}, urac interface{}) {
 	params := soajsCtx.Controller.ServiceParams
-	key := soajsCtx.Key
-	if key == nil {
-		WriteCode(w, 132)
-		return
-	}
-	var acl map[string]interface{}
-	var packages []interface{}
-	var urac interface{}
 	if user := soajsCtx.Urac; user != nil {
 		acl = user.ACL()
 		packages = user.AllowedPackages()
@@ -57,19 +48,34 @@ func soajsACL(w http.ResponseWriter, soajsCtx *SOAJSContext) {
 			urac = map[string]interface{}{"_id": profile["_id"]}
 		}
 	}
-	if packages == nil && key.Application.Package != "" {
+	key := soajsCtx.Key
+	if packages == nil && key != nil && key.Application.Package != "" {
 		packages = []interface{}{key.Application.Package}
 	}
 	if acl == nil && params.Package != nil && params.Package.ACL != nil {
 		acl = deepCopyJSON(params.Package.ACL)
 	}
+	return acl, packages, urac
+}
+
+// soajsACL answers /soajs/acl (mw/soajsRoutes/keyACL) with what the caller may use: acl,
+// finalACL (per service, the latest version and, for a restricted one, its APIs per method),
+// packages, the user's _id and the key's tenant.
+func soajsACL(w http.ResponseWriter, soajsCtx *SOAJSContext) {
+	key := soajsCtx.Key
+	if key == nil {
+		WriteCode(w, 132)
+		return
+	}
+	acl, packages, urac := computeACL(soajsCtx)
 	var tenant interface{}
 	if key.Application.Package != "" {
 		tenant = map[string]interface{}{"id": key.Tenant.ID, "name": key.Tenant.Name, "code": key.Tenant.Code, "type": key.Tenant.Type}
 	}
+	final, _ := finalACLOf(acl, soajsCtx.Log)
 	body, err := json.Marshal(map[string]interface{}{
 		"acl":      acl,
-		"finalACL": finalACLOf(acl, soajsCtx.Log),
+		"finalACL": final,
 		"packages": packages,
 		"urac":     urac,
 		"tenant":   tenant,
@@ -86,10 +92,12 @@ func soajsACL(w http.ResponseWriter, soajsCtx *SOAJSContext) {
 
 // finalACLOf is, per service of an ACL, its latest version and, when that version is restricted,
 // the APIs listed under each method, in a {apis} entry or in grouped [{group, apis}] entries. The
-// APIs of a method are sorted. A version that is not an object is skipped.
-func finalACLOf(acl map[string]interface{}, log *zap.Logger) map[string]interface{} {
+// APIs of a method are sorted. A version that is not an object is skipped. restricted says, per
+// service, whether its latest version is restricted.
+func finalACLOf(acl map[string]interface{}, log *zap.Logger) (map[string]interface{}, map[string]bool) {
+	restricted := map[string]bool{}
 	if acl == nil {
-		return nil
+		return nil, restricted
 	}
 	final := map[string]interface{}{}
 	for service, s := range acl {
@@ -109,7 +117,8 @@ func finalACLOf(acl map[string]interface{}, log *zap.Logger) map[string]interfac
 		}
 		entry := map[string]interface{}{"version": latest}
 		version := versions[latest].(map[string]interface{})
-		if version["apisPermission"] == "restricted" {
+		restricted[service] = version["apisPermission"] == "restricted"
+		if restricted[service] {
 			for method, m := range version {
 				if method == "access" || method == "apisPermission" {
 					continue
@@ -138,7 +147,7 @@ func finalACLOf(acl map[string]interface{}, log *zap.Logger) map[string]interfac
 		}
 		final[service] = entry
 	}
-	return final
+	return final, restricted
 }
 
 // proxyRoute prepares /soajs/proxy (lib/extractBuildParameters.js): the service is the first

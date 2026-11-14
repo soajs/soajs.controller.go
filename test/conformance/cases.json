@@ -538,6 +538,361 @@
     }
   },
   {
+    "name": "mcp_unauthorized",
+    "about": "no key and no token: 401 pointing at the default metadata",
+    "method": "POST",
+    "path": "/soajs/mcp",
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "body": "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"ping\"}",
+    "compareHeaders": [
+      "WWW-Authenticate",
+      "Cache-Control",
+      "Access-Control-Expose-Headers"
+    ]
+  },
+  {
+    "name": "mcp_unauthorized_query_key",
+    "about": "the key in the url chooses the product's metadata and stays in its address",
+    "method": "POST",
+    "path": "/soajs/mcp?key=$KEY_DEFAULT",
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "body": "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"ping\"}",
+    "compareHeaders": [
+      "WWW-Authenticate",
+      "Cache-Control",
+      "Access-Control-Expose-Headers"
+    ]
+  },
+  {
+    "name": "mcp_invalid_token",
+    "about": "an unknown token",
+    "method": "POST",
+    "path": "/soajs/mcp",
+    "headers": {
+      "Content-Type": "application/json",
+      "key": "$KEY_DEFAULT",
+      "access_token": "ffff000000000000000000000000000000000000"
+    },
+    "body": "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"ping\"}",
+    "compareHeaders": [
+      "WWW-Authenticate",
+      "Cache-Control",
+      "Access-Control-Expose-Headers"
+    ]
+  },
+  {
+    "name": "mcp_expired_token",
+    "about": "an expired token as a bearer",
+    "method": "POST",
+    "path": "/soajs/mcp",
+    "headers": {
+      "Content-Type": "application/json",
+      "Authorization": "Bearer $TOKEN_EXPIRED"
+    },
+    "body": "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"ping\"}",
+    "compareHeaders": [
+      "WWW-Authenticate",
+      "Cache-Control",
+      "Access-Control-Expose-Headers"
+    ]
+  },
+  {
+    "name": "mcp_agent_initialize",
+    "about": "an agent token brings its key: initialize",
+    "method": "POST",
+    "path": "/soajs/mcp",
+    "headers": {
+      "Content-Type": "application/json",
+      "Authorization": "Bearer $TOKEN_AGENT_KEY"
+    },
+    "body": "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2025-03-26\",\"capabilities\":{},\"clientInfo\":{\"name\":\"conformance\",\"version\":\"1\"}}}",
+    "compareJSON": true,
+    "ignoreFields": [
+      "version"
+    ]
+  },
+  {
+    "name": "mcp_agent_key_list",
+    "about": "a token restricted to a list of one key",
+    "method": "POST",
+    "path": "/soajs/mcp",
+    "headers": {
+      "Content-Type": "application/json",
+      "Authorization": "Bearer $TOKEN_LIST_AGENT"
+    },
+    "body": "{\"jsonrpc\":\"2.0\",\"id\":\"p-1\",\"method\":\"ping\"}",
+    "compareJSON": true
+  },
+  {
+    "name": "mcp_agent_replaces_key",
+    "about": "a key of the same product is replaced by the token's (here a key of another environment, 144)",
+    "method": "POST",
+    "path": "/soajs/mcp",
+    "headers": {
+      "Content-Type": "application/json",
+      "key": "$KEY_DEFAULT",
+      "Authorization": "Bearer $TOKEN_STG_AGENT"
+    },
+    "body": "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"ping\"}"
+  },
+  {
+    "name": "mcp_tools_list",
+    "about": "the tools the caller may use: soajs tools, an OpenAPI document, the ACL, the idempotency argument",
+    "method": "POST",
+    "path": "/soajs/mcp",
+    "headers": {
+      "Content-Type": "application/json",
+      "Authorization": "Bearer $TOKEN_AGENT_KEY"
+    },
+    "body": "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/list\"}",
+    "compareJSON": true
+  },
+  {
+    "name": "mcp_tools_call_get",
+    "about": "a GET tool: query from its fields, the answer's data as the result",
+    "method": "POST",
+    "path": "/soajs/mcp",
+    "headers": {
+      "Content-Type": "application/json",
+      "Authorization": "Bearer $TOKEN_AGENT_KEY"
+    },
+    "body": "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"name\":\"conform_get_public_hello\",\"arguments\":{\"name\":\"agent\",\"tags\":[\"a\",\"b c\"]}}}",
+    "compareJSON": true
+  },
+  {
+    "name": "mcp_tools_call_post",
+    "about": "a POST tool: body from its fields, nested path",
+    "method": "POST",
+    "path": "/soajs/mcp",
+    "headers": {
+      "Content-Type": "application/json",
+      "Authorization": "Bearer $TOKEN_AGENT_KEY"
+    },
+    "body": "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"name\":\"conform_post_private_item\",\"arguments\":{\"name\":\"x\",\"size\":{\"w\":2}}}}",
+    "compareJSON": true
+  },
+  {
+    "name": "mcp_tools_call_patch",
+    "about": "an idempotent tool with its key",
+    "method": "POST",
+    "path": "/soajs/mcp",
+    "headers": {
+      "Content-Type": "application/json",
+      "Authorization": "Bearer $TOKEN_AGENT_KEY"
+    },
+    "body": "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"name\":\"conform_patch_private_item_id\",\"arguments\":{\"id\":\"5\",\"_idempotencyKey\":\"7c9e6679-7425-40de-944b-e07fc1f90ae7\"}}}",
+    "compareJSON": true
+  },
+  {
+    "name": "mcp_tools_call_bad_idempotency_key",
+    "about": "an _idempotencyKey that is not a UUID v4",
+    "method": "POST",
+    "path": "/soajs/mcp",
+    "headers": {
+      "Content-Type": "application/json",
+      "Authorization": "Bearer $TOKEN_AGENT_KEY"
+    },
+    "body": "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"name\":\"conform_patch_private_item_id\",\"arguments\":{\"id\":\"5\",\"_idempotencyKey\":\"nope\"}}}",
+    "compareJSON": true
+  },
+  {
+    "name": "mcp_tools_call_missing_param",
+    "about": "a path parameter missing",
+    "method": "POST",
+    "path": "/soajs/mcp",
+    "headers": {
+      "Content-Type": "application/json",
+      "Authorization": "Bearer $TOKEN_AGENT_KEY"
+    },
+    "body": "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"name\":\"conform_updateItem\",\"arguments\":{\"name\":\"y\"}}}",
+    "compareJSON": true
+  },
+  {
+    "name": "mcp_tools_call_delete",
+    "about": "a DELETE tool with a query field",
+    "method": "POST",
+    "path": "/soajs/mcp",
+    "headers": {
+      "Content-Type": "application/json",
+      "Authorization": "Bearer $TOKEN_AGENT_KEY"
+    },
+    "body": "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"name\":\"conform_delete_private_item_id\",\"arguments\":{\"id\":\"9\",\"force\":true}}}",
+    "compareJSON": true
+  },
+  {
+    "name": "mcp_tools_call_openapi",
+    "about": "a tool from the OpenAPI document",
+    "method": "POST",
+    "path": "/soajs/mcp",
+    "headers": {
+      "Content-Type": "application/json",
+      "Authorization": "Bearer $TOKEN_AGENT_KEY"
+    },
+    "body": "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"name\":\"other_get_hello\",\"arguments\":{\"polite\":true,\"lang\":\"en\"}}}",
+    "compareJSON": true
+  },
+  {
+    "name": "mcp_unknown_tool",
+    "about": "a tool the caller does not have",
+    "method": "POST",
+    "path": "/soajs/mcp",
+    "headers": {
+      "Content-Type": "application/json",
+      "Authorization": "Bearer $TOKEN_AGENT_KEY"
+    },
+    "body": "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"name\":\"conform_get_private_admin\",\"arguments\":{}}}",
+    "compareJSON": true
+  },
+  {
+    "name": "mcp_tools_call_no_name",
+    "about": "tools/call without a name",
+    "method": "POST",
+    "path": "/soajs/mcp",
+    "headers": {
+      "Content-Type": "application/json",
+      "Authorization": "Bearer $TOKEN_AGENT_KEY"
+    },
+    "body": "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{}}",
+    "compareJSON": true
+  },
+  {
+    "name": "mcp_method_not_found",
+    "about": "an unknown method",
+    "method": "POST",
+    "path": "/soajs/mcp",
+    "headers": {
+      "Content-Type": "application/json",
+      "Authorization": "Bearer $TOKEN_AGENT_KEY"
+    },
+    "body": "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"resources/list\"}",
+    "compareJSON": true
+  },
+  {
+    "name": "mcp_parse_error",
+    "about": "a body that is not JSON",
+    "method": "POST",
+    "path": "/soajs/mcp",
+    "headers": {
+      "Content-Type": "application/json",
+      "Authorization": "Bearer $TOKEN_AGENT_KEY"
+    },
+    "body": "{"
+  },
+  {
+    "name": "mcp_batch",
+    "about": "a batch",
+    "method": "POST",
+    "path": "/soajs/mcp",
+    "headers": {
+      "Content-Type": "application/json",
+      "Authorization": "Bearer $TOKEN_AGENT_KEY"
+    },
+    "body": "[]"
+  },
+  {
+    "name": "mcp_invalid_request",
+    "about": "not JSON-RPC 2.0",
+    "method": "POST",
+    "path": "/soajs/mcp",
+    "headers": {
+      "Content-Type": "application/json",
+      "Authorization": "Bearer $TOKEN_AGENT_KEY"
+    },
+    "body": "{\"jsonrpc\": \"1.0\", \"id\": 7, \"method\": \"ping\"}"
+  },
+  {
+    "name": "mcp_notification",
+    "about": "a notification has no answer",
+    "method": "POST",
+    "path": "/soajs/mcp",
+    "headers": {
+      "Content-Type": "application/json",
+      "Authorization": "Bearer $TOKEN_AGENT_KEY"
+    },
+    "body": "{\"jsonrpc\": \"2.0\", \"method\": \"notifications/initialized\"}",
+    "compareHeaders": [
+      "Content-Length"
+    ]
+  },
+  {
+    "name": "mcp_get",
+    "about": "only POST",
+    "method": "GET",
+    "path": "/soajs/mcp",
+    "headers": {
+      "Authorization": "Bearer $TOKEN_AGENT_KEY"
+    },
+    "compareHeaders": [
+      "Allow"
+    ]
+  },
+  {
+    "name": "mcp_disabled",
+    "about": "dashboard has no mcp: 404 (190)",
+    "method": "POST",
+    "path": "/soajs/mcp",
+    "headers": {
+      "Content-Type": "application/json",
+      "key": "$KEY_CONSOLE",
+      "access_token": "$TOKEN_U_OWNER"
+    },
+    "body": "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"ping\"}",
+    "env": "dashboard"
+  },
+  {
+    "name": "wellknown_protected_resource",
+    "about": "the protected resource metadata: the default entry",
+    "method": "GET",
+    "path": "/.well-known/oauth-protected-resource/soajs/mcp",
+    "compareHeaders": [
+      "Cache-Control"
+    ]
+  },
+  {
+    "name": "wellknown_protected_resource_key",
+    "about": "with a key: the product's entry",
+    "method": "GET",
+    "path": "/.well-known/oauth-protected-resource?key=$KEY_DEFAULT"
+  },
+  {
+    "name": "wellknown_protected_resource_host",
+    "about": "by the forwarded host",
+    "method": "GET",
+    "path": "/.well-known/oauth-protected-resource/soajs/mcp",
+    "headers": {
+      "X-Forwarded-Host": "MCP.conformance.invalid, other",
+      "X-Forwarded-Proto": "http"
+    }
+  },
+  {
+    "name": "wellknown_authorization_server",
+    "about": "the product's authorization server metadata",
+    "method": "GET",
+    "path": "/.well-known/oauth-authorization-server/soajs/mcp/auth/product%2FCONF"
+  },
+  {
+    "name": "wellknown_openid_configuration",
+    "about": "the default entry as openid-configuration",
+    "method": "GET",
+    "path": "/.well-known/openid-configuration/soajs/mcp/auth/default"
+  },
+  {
+    "name": "wellknown_unknown_issuer",
+    "about": "an issuer that names no entry is not served",
+    "method": "GET",
+    "path": "/.well-known/oauth-authorization-server/soajs/mcp/auth/product/NOPE"
+  },
+  {
+    "name": "wellknown_post",
+    "about": "only GET and HEAD",
+    "method": "POST",
+    "path": "/.well-known/oauth-protected-resource"
+  },
+  {
     "name": "oauth_passport_login",
     "about": "from integration OAuthPassport",
     "method": "GET",

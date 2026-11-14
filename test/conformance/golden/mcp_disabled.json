@@ -1,0 +1,7 @@
+{
+  "status": 404,
+  "headers": {
+    "Content-Type": "application/json"
+  },
+  "body": "{\"result\":false,\"errors\":{\"codes\":[190],\"details\":[{\"code\":190,\"message\":\"MCP is not enabled in this environment.\"}]}}"
+}

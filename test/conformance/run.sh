@@ -59,10 +59,10 @@ done
 
 go run ./test/conformance/cmd/fixture -uri="$MONGO_URI"
 go build -o "$WORK/mockservice" ./test/conformance/cmd/mockservice
-"$WORK/mockservice" -port 24100 -maintenance 25100 > "$WORK/mockservice.log" 2>&1 &
+"$WORK/mockservice" -port 24100 -maintenance 25100 -tools soajs > "$WORK/mockservice.log" 2>&1 &
 MOCK_PID=$!
-# the other service, for the response cache
-"$WORK/mockservice" -port 24200 -maintenance 25200 > "$WORK/mockservice-other.log" 2>&1 &
+# the other service, for the response cache and the MCP tools of an OpenAPI document
+"$WORK/mockservice" -port 24200 -maintenance 25200 -tools swagger > "$WORK/mockservice-other.log" 2>&1 &
 OTHER_PID=$!
 
 MONGO_HOSTPORT="${MONGO_URI#mongodb://}"

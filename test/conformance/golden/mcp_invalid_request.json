@@ -1,0 +1,7 @@
+{
+  "status": 400,
+  "headers": {
+    "Content-Type": "application/json"
+  },
+  "body": "{\"jsonrpc\":\"2.0\",\"id\":7,\"error\":{\"code\":-32600,\"message\":\"Invalid request\"}}"
+}
