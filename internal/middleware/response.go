@@ -1,10 +1,16 @@
 package middleware
 
 import (
+	"bytes"
 	"encoding/json"
 	"net/http"
+	"sort"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
+
+	"github.com/soajs/soajs.controller.go/internal/soajserr"
 )
 
 // ResponseWriter wraps http.ResponseWriter with additional functionality
@@ -58,17 +64,18 @@ func (rw *ResponseWriter) Written() bool {
 	return rw.written
 }
 
-// SOAJSResponse represents a standard SOAJS response
+// SOAJSResponse is the response body of the Node.js gateway (mw/response/response.js): result, then
+// data when there is any, then errors.
 type SOAJSResponse struct {
 	Result bool        `json:"result"`
 	Data   interface{} `json:"data,omitempty"`
 	Errors *SOAJSError `json:"errors,omitempty"`
 }
 
-// SOAJSError represents a SOAJS error
+// SOAJSError holds the error codes of a response and the details of those that have a message.
 type SOAJSError struct {
 	Codes   []int         `json:"codes"`
-	Details []ErrorDetail `json:"details"`
+	Details []ErrorDetail `json:"details,omitempty"`
 }
 
 // ErrorDetail holds a single error detail
@@ -79,31 +86,26 @@ type ErrorDetail struct {
 
 // NewSOAJSError creates a new SOAJS error
 func NewSOAJSError(code int, message string) *SOAJSError {
-	return &SOAJSError{
-		Codes: []int{code},
-		Details: []ErrorDetail{
-			{Code: code, Message: message},
-		},
-	}
+	e := &SOAJSError{Codes: []int{}}
+	e.AddError(code, message)
+	return e
 }
 
-// AddError adds an error to the SOAJS error
+// AddError adds an error as response.js addErrorCode does: a code already present is ignored, the
+// codes are kept sorted as JavaScript's default sort orders them (as text), and a detail is kept
+// only for a message that is not empty once trimmed.
 func (e *SOAJSError) AddError(code int, message string) {
-	e.Codes = append(e.Codes, code)
-	e.Details = append(e.Details, ErrorDetail{Code: code, Message: message})
-}
-
-// BuildResponse creates a SOAJS response from data or error
-func BuildResponse(data interface{}, err *SOAJSError) *SOAJSResponse {
-	if err != nil {
-		return &SOAJSResponse{
-			Result: false,
-			Errors: err,
+	for _, c := range e.Codes {
+		if c == code {
+			return
 		}
 	}
-	return &SOAJSResponse{
-		Result: true,
-		Data:   data,
+	e.Codes = append(e.Codes, code)
+	sort.SliceStable(e.Codes, func(i, j int) bool {
+		return strconv.Itoa(e.Codes[i]) < strconv.Itoa(e.Codes[j])
+	})
+	if message = strings.TrimSpace(message); message != "" {
+		e.Details = append(e.Details, ErrorDetail{Code: code, Message: message})
 	}
 }
 
@@ -119,21 +121,27 @@ func Response() Middleware {
 	}
 }
 
-// WriteJSON writes a JSON response
-func WriteJSON(w http.ResponseWriter, status int, data interface{}) error {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	return json.NewEncoder(w).Encode(data)
+// encodeJSON encodes as JSON.stringify does: no HTML escaping, no trailing newline.
+func encodeJSON(v interface{}) ([]byte, error) {
+	var buf bytes.Buffer
+	enc := json.NewEncoder(&buf)
+	enc.SetEscapeHTML(false)
+	if err := enc.Encode(v); err != nil {
+		return nil, err
+	}
+	return bytes.TrimSuffix(buf.Bytes(), []byte("\n")), nil
 }
 
-// WriteJSONWithHeaders writes a JSON response with custom headers
-func WriteJSONWithHeaders(w http.ResponseWriter, status int, headers map[string]string, data interface{}) error {
-	for k, v := range headers {
-		w.Header().Set(k, v)
+// WriteJSON writes a JSON response
+func WriteJSON(w http.ResponseWriter, status int, data interface{}) error {
+	body, err := encodeJSON(data)
+	if err != nil {
+		return err
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	return json.NewEncoder(w).Encode(data)
+	_, err = w.Write(body)
+	return err
 }
 
 // WriteSuccess writes a successful SOAJS response
@@ -152,40 +160,45 @@ func WriteError(w http.ResponseWriter, status int, code int, message string) err
 	})
 }
 
-// WriteErrors writes multiple errors in a SOAJS response
-func WriteErrors(w http.ResponseWriter, status int, errors []ErrorDetail) error {
-	soajsErr := &SOAJSError{
-		Codes:   make([]int, len(errors)),
-		Details: errors,
+// WriteCode answers with an error code as the Node.js gateway's error handler does: the message
+// and status of the code, 500 when the code has no status. A code without a message is answered
+// as the bare object {"code":...,"status":...}.
+func WriteCode(w http.ResponseWriter, code int) error {
+	e := soajserr.Get(code)
+	status := e.Status
+	if status == 0 {
+		status = http.StatusInternalServerError
 	}
-	for i, e := range errors {
-		soajsErr.Codes[i] = e.Code
+	if e.Msg == "" {
+		return WriteJSON(w, status, struct {
+			Code   int `json:"code"`
+			Status int `json:"status"`
+		}{code, status})
 	}
-	return WriteJSON(w, status, SOAJSResponse{
-		Result: false,
-		Errors: soajsErr,
-	})
+	return WriteError(w, status, code, e.Msg)
 }
 
-// ControllerResponse writes a controller-style response
-func ControllerResponse(w http.ResponseWriter, status int, data interface{}, headers map[string]string) error {
-	// Set custom headers first
-	for k, v := range headers {
+// WriteStatusMsg answers with a bare {"status":...,"msg":...} body, as the Node.js gateway does for
+// maintenance mode, a banned IP and throttling. headObj becomes response headers. A null headObj in
+// Node.js stays in the body as "headObj":null, which nullHeadObj reproduces.
+func WriteStatusMsg(w http.ResponseWriter, status int, msg string, headObj map[string]string, nullHeadObj bool) error {
+	for k, v := range headObj {
 		w.Header().Set(k, v)
 	}
-	w.Header().Set("Content-Type", "application/json")
-
-	// Check if data has code/msg fields (error case)
-	if errData, ok := data.(map[string]interface{}); ok {
-		if code, hasCode := errData["code"]; hasCode {
-			if msg, hasMsg := errData["msg"]; hasMsg {
-				return WriteError(w, status, int(code.(float64)), msg.(string))
-			}
-		}
+	if status == 0 {
+		status = http.StatusOK
 	}
-
-	w.WriteHeader(status)
-	return json.NewEncoder(w).Encode(data)
+	if nullHeadObj {
+		return WriteJSON(w, status, struct {
+			Status  int         `json:"status"`
+			Msg     string      `json:"msg"`
+			HeadObj interface{} `json:"headObj"`
+		}{status, msg, nil})
+	}
+	return WriteJSON(w, status, struct {
+		Status int    `json:"status"`
+		Msg    string `json:"msg"`
+	}{status, msg})
 }
 
 // ResponseMetrics holds response timing metrics

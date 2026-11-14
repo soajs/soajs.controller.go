@@ -6,7 +6,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/soajs/soajs.controller.go/internal/config"
 	"github.com/soajs/soajs.controller.go/internal/registry"
 	"github.com/soajs/soajs.controller.go/pkg/mongo"
 	"github.com/soajs/soajs.controller.go/pkg/types"
@@ -218,10 +217,7 @@ func Traffic(reg registry.Registry) Middleware {
 			}
 
 			if !result {
-				w.WriteHeader(http.StatusTooManyRequests)
-				WriteError(w, http.StatusTooManyRequests,
-					config.ErrCodeRateLimitExceeded,
-					"Too many requests")
+				WriteStatusMsg(w, http.StatusTooManyRequests, "too many requests", nil, false)
 				return
 			}
 

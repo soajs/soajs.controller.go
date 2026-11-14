@@ -1,0 +1,36 @@
+{
+  "oauth_token": [
+    {
+      "_id": {"$oid": "6a0e000000000000000000ee"},
+      "type": "accessToken",
+      "token": "c0f0000000000000000000000000000000000001",
+      "expires": {"$date": "2099-01-01T00:00:00Z"},
+      "clientId": "6a0e00000000000000000001",
+      "env": "dev",
+      "user": {
+        "_id": "6a0e000000000000000000ab",
+        "id": "6a0e000000000000000000ab",
+        "loginMode": "oauth",
+        "username": "conformance",
+        "groups": ["owner"],
+        "tenant": {"id": "6a0e00000000000000000001", "code": "CONF"}
+      }
+    },
+    {
+      "_id": {"$oid": "6a0e000000000000000000ef"},
+      "type": "accessToken",
+      "token": "c0f0000000000000000000000000000000000002",
+      "expires": {"$date": "2000-01-01T00:00:00Z"},
+      "clientId": "6a0e00000000000000000001",
+      "env": "dev",
+      "user": {
+        "_id": "6a0e000000000000000000ab",
+        "id": "6a0e000000000000000000ab",
+        "loginMode": "oauth",
+        "username": "conformance",
+        "groups": ["owner"],
+        "tenant": {"id": "6a0e00000000000000000001", "code": "CONF"}
+      }
+    }
+  ]
+}

@@ -1,0 +1,18 @@
+{
+  "root": "PR 5 (url): answer 136 for the root path",
+  "favicon": "PR 5 (favicon): answer 200 image/x-icon",
+  "unknown_service": "PR 5 (url): answer 130 for a service not in the registry",
+  "unknown_soajs_route": "PR 5 (gotoService): answer 130 for an unknown /soajs route",
+  "no_key": "PR 5 (key): answer 132 with 403",
+  "invalid_key": "PR 5 (key): answer 148 for a key that does not decrypt",
+  "service_not_in_package": "PR 5 (keyACL): answer 154 for a service the package does not grant",
+  "api_not_in_package": "PR 6 (mt): refuse an api the package does not grant (S1)",
+  "private_no_token": "PR 7 (oauth): oauth2-server texts and statuses",
+  "private_unknown_token": "PR 7 (oauth): oauth2-server texts and statuses",
+  "private_expired_token": "PR 7 (oauth): oauth2-server texts and statuses",
+  "private_basic_auth": "PR 7 (oauth): Malformed auth header",
+  "banned_ip": "PR 2 (registry): custom registry entries are kept as bson.M, which the middleware never reads as a map, so traffic.ip2ban is ignored",
+  "maintenance_heartbeat": "PR 11 (maintenance): heartbeat body and service block",
+  "maintenance_unknown_path": "PR 11 (maintenance): any unknown path answers the heartbeat",
+  "maintenance_favicon": "PR 11 (maintenance): answer 200 image/x-icon"
+}
