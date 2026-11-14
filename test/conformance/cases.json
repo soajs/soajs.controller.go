@@ -233,7 +233,56 @@
     "headers": {
       "key": "$KEY_DEFAULT",
       "access_token": "$TOKEN_VALID",
+      "Idempotency-Key": "3f1c2a9e-8b7d-4c6e-9a5f-1d2e3f4a5b6c",
       "Content-Type": "application/json"
+    },
+    "body": "{\"name\":\"conformance\"}"
+  },
+  {
+    "name": "idempotency_replay",
+    "about": "the same Idempotency-Key replays the answer of private_patch_ok, whatever the request",
+    "method": "PATCH",
+    "path": "/conform/v1/private/item/42?changed=1",
+    "headers": {
+      "key": "$KEY_DEFAULT",
+      "access_token": "$TOKEN_VALID",
+      "Content-Type": "application/json",
+      "Idempotency-Key": "3f1c2a9e-8b7d-4c6e-9a5f-1d2e3f4a5b6c"
+    },
+    "body": "{\"name\":\"other\"}"
+  },
+  {
+    "name": "idempotency_required",
+    "about": "an enforced API without an Idempotency-Key",
+    "method": "PATCH",
+    "path": "/conform/v1/private/item/7",
+    "headers": {
+      "key": "$KEY_DEFAULT",
+      "access_token": "$TOKEN_VALID",
+      "Content-Type": "application/json"
+    },
+    "body": "{\"name\":\"conformance\"}"
+  },
+  {
+    "name": "idempotency_invalid_key",
+    "about": "an Idempotency-Key that is not a UUID v4, on any request",
+    "method": "GET",
+    "path": "/conform/v1/public/hello",
+    "headers": {
+      "key": "$KEY_DEFAULT",
+      "Idempotency-Key": "not-a-uuid"
+    }
+  },
+  {
+    "name": "idempotency_unlisted_api",
+    "about": "an API the service does not list goes on with its key",
+    "method": "POST",
+    "path": "/conform/v1/private/item",
+    "headers": {
+      "key": "$KEY_DEFAULT",
+      "access_token": "$TOKEN_VALID",
+      "Content-Type": "application/json",
+      "Idempotency-Key": "9b2d4f6a-1c3e-4a5b-8d7f-0e1f2a3b4c5d"
     },
     "body": "{\"name\":\"conformance\"}"
   },

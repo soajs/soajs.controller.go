@@ -29,6 +29,8 @@ type SOAJSContext struct {
 	Urac *urac.User
 	// Roaming is set when the token comes from another, sensitive, environment.
 	Roaming *urac.Roaming
+	// Idempotency is the Idempotency-Key lock the request holds.
+	Idempotency *IdempotencyContext
 }
 
 // ControllerContext holds gateway-specific request data

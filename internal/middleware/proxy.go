@@ -463,24 +463,37 @@ func redirect(w http.ResponseWriter, r *http.Request, soajsCtx *SOAJSContext, re
 		authorize(r, out, regData)
 	}
 
+	// from here the service's answer completes or releases the Idempotency-Key (redirect only)
+	var idem *IdempotencyContext
+	if !simple && soajsCtx.Idempotency != nil {
+		idem = soajsCtx.Idempotency
+		idem.proxied = true
+	}
 	resp, err := proxyTransport.RoundTrip(out)
 	if err != nil {
 		if !m.isEnded() {
 			soajsCtx.Log.Error(err.Error() + " with [" + name + "@" + version + "]")
 		}
 		m.respond(135)
+		idem.release()
 		send()
 		return
 	}
 	defer resp.Body.Close()
 	if !m.writeHeader(resp.StatusCode, resp.Header) {
+		idem.release()
 		return
+	}
+	var answer *IdempotencyResponse
+	if idem != nil {
+		answer = &IdempotencyResponse{StatusCode: resp.StatusCode, Headers: idempotentHeaders(resp.Header)}
 	}
 	if rec.wantsResponse() {
 		rec.responseStart(resp.Header.Get("Content-Type"))
 	}
 	if r.Method == http.MethodHead {
 		m.end()
+		idem.finish(answer)
 		send()
 		return
 	}
@@ -488,14 +501,58 @@ func redirect(w http.ResponseWriter, r *http.Request, soajsCtx *SOAJSContext, re
 	if rec.wantsResponse() {
 		dst = capturingWriter{m, rec}
 	}
-	if _, err := io.Copy(dst, resp.Body); err != nil && !m.isEnded() {
+	var iw *idempotencyWriter
+	if idem != nil {
+		iw = &idempotencyWriter{w: dst, m: m}
+		dst = iw
+	}
+	_, err = io.Copy(dst, resp.Body)
+	switch {
+	case err != nil && !m.isEnded():
 		soajsCtx.Log.Error(err.Error() + " with [" + name + "@" + version + "]")
 		m.respond(135)
-		send()
-		return
+		idem.release()
+	case err != nil:
+		// the request was ended (request timeout): the service did not answer in full
+		idem.release()
+		m.end()
+	case iw != nil && iw.err != nil:
+		// the client is gone; the service answered in full, its answer is recorded
+		soajsCtx.Log.Error(iw.err.Error() + " with [" + name + "@" + version + "]")
+		m.respond(135)
+		answer.Body = utf8Body(iw.body)
+		idem.finish(answer)
+	default:
+		m.end()
+		if iw != nil {
+			answer.Body = utf8Body(iw.body)
+			idem.finish(answer)
+		}
 	}
-	m.end()
 	send()
+}
+
+// idempotencyWriter records the answer for the Idempotency-Key. When the client can no longer be
+// written to, it keeps reading the service's answer to record it, unless the request was ended.
+type idempotencyWriter struct {
+	w    io.Writer
+	m    *requestMonitor
+	body []byte
+	err  error
+}
+
+func (i *idempotencyWriter) Write(p []byte) (int, error) {
+	i.body = append(i.body, p...)
+	if i.err != nil {
+		return len(p), nil
+	}
+	if _, err := i.w.Write(p); err != nil {
+		if i.m.isEnded() {
+			return 0, err
+		}
+		i.err = err
+	}
+	return len(p), nil
 }
 
 // capturingWriter passes the answer on and records it for the monitor.
