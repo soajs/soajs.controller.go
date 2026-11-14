@@ -170,13 +170,14 @@ func (c *Controller) Setup(r *chi.Mux) error {
 	r.Use(middleware.AwarenessEnv(c.awarenessEnv))
 	r.Use(middleware.Key(c.provision, c.registry, c.cfg.Environment))
 	r.Use(middleware.KeyACL())
-	r.Use(middleware.GotoService(c.provision, c.registry, c.awareness))
+	r.Use(middleware.GotoService(c.registry, c.awareness))
 	r.Use(middleware.MT(c.provision, c.registry, c.cfg.Environment))
 	r.Use(middleware.SoajsRoutesSetup(c.urac)) // Setup /soajs/* routes to require OAuth
 	r.Use(middleware.OAuth(c.provision, c.registry))
 	r.Use(middleware.Urac(c.users, c.provision, c.registry, c.cfg.Environment))
 	r.Use(middleware.MTACL(c.registry))
-	r.Use(middleware.SoajsRoutes(c.provision)) // Handle /soajs/* routes after OAuth and Urac populate context
+	r.Use(middleware.InjectObj(c.registry, c.awareness)) // the soajsinjectobj of key APIs, at the end of mt
+	r.Use(middleware.SoajsRoutes(c.provision))           // Handle /soajs/* routes after OAuth and Urac populate context
 	r.Use(middleware.Traffic(c.registry))
 	r.Use(middleware.LastSeen(c.registry, c.awareness))
 	r.Use(middleware.Monitor(c.registry, c.awareness))

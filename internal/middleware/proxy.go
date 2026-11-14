@@ -8,81 +8,56 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
+	"regexp"
+	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/soajs/soajs.controller.go/internal/awareness"
 	"github.com/soajs/soajs.controller.go/internal/config"
-	"github.com/soajs/soajs.controller.go/internal/lib"
-	"github.com/soajs/soajs.controller.go/internal/provision"
 	"github.com/soajs/soajs.controller.go/internal/registry"
+	"github.com/soajs/soajs.controller.go/internal/soajserr"
 	"github.com/soajs/soajs.controller.go/pkg/security"
 	"github.com/soajs/soajs.controller.go/pkg/types"
 	"go.uber.org/zap"
 )
 
-// ProxyConfig holds proxy configuration
-type ProxyConfig struct {
-	Timeout         time.Duration
-	MaxIdleConns    int
-	IdleConnTimeout time.Duration
+// proxyTransport sends requests to services. There is no overall timeout: the request timeout is
+// the idle monitor of redirect.
+var proxyTransport http.RoundTripper = &http.Transport{
+	DialContext:         (&net.Dialer{Timeout: 30 * time.Second, KeepAlive: 30 * time.Second}).DialContext,
+	MaxIdleConns:        100,
+	MaxIdleConnsPerHost: 10,
+	IdleConnTimeout:     90 * time.Second,
 }
 
-// DefaultProxyConfig returns default proxy configuration
-func DefaultProxyConfig() ProxyConfig {
-	return ProxyConfig{
-		Timeout:         30 * time.Second,
-		MaxIdleConns:    100,
-		IdleConnTimeout: 90 * time.Second,
-	}
-}
-
-var proxyClient = &http.Client{
-	Timeout: 30 * time.Second,
-	Transport: &http.Transport{
-		MaxIdleConns:        100,
-		MaxIdleConnsPerHost: 10,
-		IdleConnTimeout:     90 * time.Second,
-	},
-}
-
-// GotoService middleware determines the target service and sets up proxying
-func GotoService(prov provision.Provision, reg registry.Registry, aw awareness.Awareness) Middleware {
+// GotoService finds the service of the request and how to call it, as the Node.js gotoService
+// does (mw/gotoService/index.js, lib/extractBuildParameters.js):
+//   - the service must be in the registry with a port, and with hosts unless in HA (else 130);
+//   - its version is the requested one, or the one keyACL took from the package, else the latest
+//     awareness knows, else in HA the latest in the cluster (else 130);
+//   - a version with extKeyRequired needs a key that decrypts (else 132);
+//   - the oauth passport login is passed through (simpleRTS), a soajsroaming request is answered
+//     with the injectObj (roaming), any other is redirected to the service.
+func GotoService(reg registry.Registry, aw awareness.Awareness) Middleware {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			ctx := r.Context()
-			soajsCtx := GetSOAJSContext(ctx)
-
-			if soajsCtx == nil || soajsCtx.Controller == nil {
+			soajsCtx := GetSOAJSContext(r.Context())
+			if soajsCtx == nil || soajsCtx.Controller == nil || soajsCtx.Controller.ServiceParams == nil ||
+				soajsCtx.Controller.ServiceParams.URLInfo == nil || soajsCtx.Controller.ServiceParams.URLInfo.ServiceName == "" {
 				next.ServeHTTP(w, r)
 				return
 			}
-
 			serviceParams := soajsCtx.Controller.ServiceParams
-			if serviceParams == nil || serviceParams.URLInfo == nil {
-				next.ServeHTTP(w, r)
-				return
-			}
-
-			// Check for roaming header - if present and valid, handle roaming
-			// This must happen before normal service routing
-			if HandleRoaming(w, r, soajsCtx, reg) {
-				// Roaming was handled (success or error)
-				return
-			}
-
 			serviceName := serviceParams.URLInfo.ServiceName
 			serviceVersion := serviceParams.URLInfo.ServiceVersion
 			servicePath := serviceParams.URLInfo.ServicePath
-
-			// Skip routing if no service name (e.g., root path "/")
-			if serviceName == "" {
-				next.ServeHTTP(w, r)
-				return
-			}
+			_ = serviceVersion
 
 			// Handle /soajs/proxy - extract proxyRoute query param and route to that service
 			// Note: URL middleware parses /soajs/proxy as ServiceName="soajs", ServicePath="/proxy"
@@ -130,7 +105,7 @@ func GotoService(prov provision.Provision, reg registry.Registry, aw awareness.A
 			}
 
 			// Gateway routes: /soajs/acl and /soajs/mcp are handled further on; any other /soajs
-			// route is not a service (Node.js extractBuildParameters finds no "soajs" service)
+			// route is not a service
 			if serviceName == "soajs" {
 				if servicePath == "/acl" || strings.HasPrefix(servicePath, "/acl/") || servicePath == "/mcp" {
 					next.ServeHTTP(w, r)
@@ -139,41 +114,34 @@ func GotoService(prov provision.Provision, reg registry.Registry, aw awareness.A
 				WriteCode(w, 130)
 				return
 			}
+			info := serviceParams.URLInfo
 
-			// The service must have a port, and hosts unless in HA; the version is the requested
-			// one (or the package's latest, set by keyACL), else the latest the hosts run
 			regData := reg.Get()
 			if regData == nil {
 				WriteCode(w, 130)
 				return
 			}
 			svc := regData.Services[serviceName]
-			isHA := os.Getenv("SOAJS_DEPLOY_HA") != ""
-			if svc == nil || svc.Port == 0 || (!isHA && svc.Hosts == nil) {
+			if svc == nil || svc.Port == 0 || (os.Getenv("SOAJS_DEPLOY_HA") == "" && svc.Hosts == nil) {
+				soajsCtx.Log.Error("Service [" + serviceName + "] couldn't be matched to a service or the service entry in registry is missing [port || hosts]")
 				WriteCode(w, 130)
 				return
 			}
-			if serviceVersion == "" {
-				if svc.Hosts != nil {
-					serviceVersion = svc.Hosts.Latest
-				} else {
-					for v := range svc.Versions {
-						if serviceVersion == "" || lib.IsLatest(v, serviceVersion) {
-							serviceVersion = v
-						}
+			version := info.ServiceVersion
+			if version == "" {
+				version = aw.GetLatestVersion(serviceName)
+				if version == "" {
+					if v, ok := aw.GetLatestVersionFromCluster(serviceName); ok {
+						version = v
 					}
 				}
-				if serviceVersion == "" {
+				if version == "" {
 					WriteCode(w, 130)
 					return
 				}
-				serviceParams.URLInfo.ServiceVersion = serviceVersion
+				info.ServiceVersion = version
 			}
-			extKeyRequired := false
-			if v := svc.Versions[serviceVersion]; v != nil {
-				extKeyRequired = v.ExtKeyRequired
-			}
-			if extKeyRequired {
+			if v := svc.Versions[version]; v != nil && v.ExtKeyRequired {
 				key := r.Header.Get("key")
 				if key == "" {
 					key = r.URL.Query().Get("key")
@@ -184,571 +152,431 @@ func GotoService(prov provision.Provision, reg registry.Registry, aw awareness.A
 				}
 				keyConfig := security.KeyConfig{Algorithm: regData.ServiceConfig.Key.Algorithm, Password: regData.ServiceConfig.Key.Password}
 				if _, err := security.DecryptKey(key, keyConfig); err != nil {
+					soajsCtx.Log.Warn(err.Error())
 					WriteCode(w, 132)
 					return
 				}
 			}
 
-			// Set the gotoservice function
-			// Note: Host resolution is deferred to execution time so MT middleware can
-			// resolve the correct version from finalACL when version wasn't in URL
-			soajsCtx.Controller.Gotoservice = func(w http.ResponseWriter, r *http.Request) {
-				// Get the service version (may have been updated by MT middleware from finalACL)
-				svcVersion := soajsCtx.Controller.ServiceParams.URLInfo.ServiceVersion
-
-				// If version is still empty and not requested in URL, default to "1"
-				// (This happens when finalACL didn't have version info)
-				if svcVersion == "" && !soajsCtx.Controller.ServiceParams.URLInfo.VersionRequested {
-					svcVersion = "1"
+			segments := strings.Split(info.OriginalPath, "/")
+			passportLogin := len(segments) > 3 && segments[1] == "oauth" && segments[2] == "passport" && segments[3] == "login"
+			switch {
+			case passportLogin:
+				soajsCtx.Controller.Gotoservice = func(w http.ResponseWriter, r *http.Request) {
+					redirect(w, r, soajsCtx, reg, aw, true)
 				}
-
-				// Get service host from awareness
-				hostInfo, err := aw.GetHost(serviceName, svcVersion)
-				if err != nil || hostInfo == nil {
-					WriteError(w, http.StatusBadGateway,
-						config.ErrCodeServiceNotFound,
-						config.DefaultErrors[config.ErrCodeServiceNotFound])
-					return
+			case r.Header.Get("soajsroaming") != "":
+				soajsCtx.Controller.Gotoservice = func(w http.ResponseWriter, r *http.Request) {
+					roaming(w, r, soajsCtx, reg)
 				}
-
-				// Build target URL
-				targetURL := buildTargetURL(hostInfo.Host, hostInfo.Port, soajsCtx.Controller.ServiceParams.URLInfo.ServicePath, r.URL.RawQuery)
-				proxyRequest(w, r, targetURL, soajsCtx, reg, aw)
+			default:
+				soajsCtx.Controller.Gotoservice = func(w http.ResponseWriter, r *http.Request) {
+					redirect(w, r, soajsCtx, reg, aw, false)
+				}
 			}
-
 			next.ServeHTTP(w, r)
 		})
 	}
 }
 
-func buildTargetURL(host string, port int, path string, query string) string {
-	u := &url.URL{
-		Scheme:   "http",
-		Host:     fmt.Sprintf("%s:%d", host, port),
-		Path:     path,
-		RawQuery: query,
+// InjectObj replaces any soajsinjectobj the request came with: on a key's API it is the one the
+// gateway builds (mw/mt/index.js), elsewhere there is none. A header larger than
+// SOAJS_MAX_INJECT_HEADER_SIZE answers 135.
+func InjectObj(reg registry.Registry, aw awareness.Awareness) Middleware {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			r.Header.Del("soajsinjectobj")
+			soajsCtx := GetSOAJSContext(r.Context())
+			if soajsCtx != nil && soajsCtx.Controller != nil && soajsCtx.Controller.ServiceParams != nil &&
+				soajsCtx.Controller.ServiceParams.KeyAPI && soajsCtx.Key != nil && soajsCtx.Controller.ServiceParams.URLInfo != nil {
+				h, ok := BuildInjectObj(soajsCtx, reg, aw, &httpRequestInfo{userAgent: r.Header.Get("User-Agent"), clientIP: getClientIP(r)})
+				if !ok {
+					WriteCode(w, 135)
+					return
+				}
+				r.Header.Set("soajsinjectobj", h)
+			}
+			next.ServeHTTP(w, r)
+		})
 	}
-	return u.String()
 }
 
-func proxyRequest(w http.ResponseWriter, r *http.Request, targetURL string, soajsCtx *SOAJSContext, reg registry.Registry, aw awareness.Awareness) {
-	// Get request timeout from service params (with default fallback)
-	requestTimeout := 30 * time.Second
-	if soajsCtx.Controller != nil && soajsCtx.Controller.ServiceParams != nil {
-		// Check if service has custom timeout
-		// TODO: Read from registry.services[name].requestTimeout
+// roaming answers a soajsroaming request (mw/gotoService/roaming.js): when the custom registry
+// oauth value.roaming.services.<service>.whitelistips holds the client IP, 200 with the
+// request's soajsinjectobj as a header and {"result":true,"data":true}; else 165.
+func roaming(w http.ResponseWriter, r *http.Request, soajsCtx *SOAJSContext, reg registry.Registry) {
+	service := soajsCtx.Controller.ServiceParams.URLInfo.ServiceName
+	var custom map[string]interface{}
+	if regData := reg.Get(); regData != nil {
+		custom = regData.CustomRegistry
 	}
+	oauth, _ := custom["oauth"].(map[string]interface{})
+	value, _ := oauth["value"].(map[string]interface{})
+	roamingConfig, _ := value["roaming"].(map[string]interface{})
+	services, _ := roamingConfig["services"].(map[string]interface{})
+	if config, ok := services[service].(map[string]interface{}); ok {
+		ip := getClientIP(r)
+		if list, ok := config["whitelistips"].([]interface{}); ok {
+			for _, e := range list {
+				if e == ip {
+					if h := r.Header.Get("soajsinjectobj"); h != "" {
+						w.Header().Set("soajsinjectobj", h)
+					}
+					w.Header().Set("Content-Type", "application/json")
+					w.WriteHeader(http.StatusOK)
+					_, _ = w.Write([]byte(`{"result":true,"data":true}`))
+					return
+				}
+			}
+		}
+		soajsCtx.Log.Debug("Detected soajsroaming but the client IP is not in whitelistips", zap.String("service", service))
+	} else {
+		soajsCtx.Log.Debug("Detected soajsroaming but the service is not under custom registry oauth.roaming.services", zap.String("service", service))
+	}
+	WriteCode(w, 165)
+}
 
-	// Create context with timeout for the request
-	ctx, cancel := context.WithTimeout(r.Context(), requestTimeout)
-	defer cancel()
+// requestMonitor is the request timeout of redirect (lib/preRedirect.js): after
+// requestTimeout*100 ms without traffic on the client connection, the service's heartbeat is
+// checked; a healthy service renews the wait, until requestTimeoutRenewal timeouts, then 134; a
+// heartbeat that fails answers 133. A streamed response does not count its timeouts. Node.js adds
+// a listener on each renewal, so its renewals run out sooner; here each timeout counts once.
+type requestMonitor struct {
+	mu       sync.Mutex
+	w        http.ResponseWriter
+	last     time.Time
+	ended    bool
+	headers  bool
+	stream   bool
+	renewals int
+	cancel   context.CancelFunc
+	done     chan struct{}
+}
 
-	// Create proxy request with timeout context
-	proxyReq, err := http.NewRequestWithContext(ctx, r.Method, targetURL, r.Body)
-	if err != nil {
-		soajsCtx.Log.Error("failed to create proxy request")
-		WriteError(w, http.StatusBadGateway, config.ErrCodeServiceNotFound, "Failed to proxy request")
+func (m *requestMonitor) touch() {
+	m.mu.Lock()
+	m.last = time.Now()
+	m.mu.Unlock()
+}
+
+func (m *requestMonitor) isEnded() bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.ended
+}
+
+func (m *requestMonitor) end() {
+	m.mu.Lock()
+	m.ended = true
+	m.mu.Unlock()
+}
+
+// respond answers with a code once (controllerResponse): with its status when nothing was sent
+// yet, else as the end of the body already sent.
+func (m *requestMonitor) respond(code int) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.ended {
 		return
 	}
-
-	// Copy headers
-	copyHeaders(proxyReq.Header, r.Header)
-
-	// Parse target URL to get hostname for Host header
-	targetURLParsed, _ := url.Parse(targetURL)
-	if targetURLParsed != nil && targetURLParsed.Host != "" {
-		// Set Host header to match target hostname (matches Node.js behavior)
-		// This is critical - the target service expects Host to match its hostname
-		proxyReq.Host = targetURLParsed.Host
-		proxyReq.Header.Set("Host", targetURLParsed.Host)
+	m.ended = true
+	if !m.headers {
+		m.headers = true
+		_ = WriteCode(m.w, code)
+		return
 	}
+	_, _ = m.w.Write(codeBody(code))
+}
 
-	// Add/modify proxy headers
-	proxyReq.Header.Set("X-Forwarded-For", getClientIP(r))
-	proxyReq.Header.Set("X-Forwarded-Host", r.Host)
-	proxyReq.Header.Set("X-Forwarded-Proto", getScheme(r))
+// codeBody is the body WriteCode answers for a code.
+func codeBody(code int) []byte {
+	e := soajserr.Get(code)
+	if e.Msg == "" {
+		status := e.Status
+		if status == 0 {
+			status = http.StatusInternalServerError
+		}
+		raw, _ := json.Marshal(struct {
+			Code   int `json:"code"`
+			Status int `json:"status"`
+		}{code, status})
+		return raw
+	}
+	raw, _ := encodeJSON(SOAJSResponse{Result: false, Errors: NewSOAJSError(code, e.Msg)})
+	return raw
+}
 
-	// Handle soajsauth header - convert to session cookie
-	handleSoajsAuth(r, proxyReq, soajsCtx)
+var streamRe = regexp.MustCompile(`(?i)stream`)
 
-	// Inject SOAJS context if configured
-	if soajsCtx.Tenant != nil {
-		if err := injectSOAJSHeaders(proxyReq, soajsCtx, reg, aw); err != nil {
-			soajsCtx.Log.Error("failed to inject SOAJS headers", zap.Error(err))
-			WriteError(w, http.StatusRequestHeaderFieldsTooLarge, config.ErrCodeHeaderTooLarge,
-				config.DefaultErrors[config.ErrCodeHeaderTooLarge])
+// writeHeader sends the service's status and headers as they come.
+func (m *requestMonitor) writeHeader(status int, h http.Header) bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.ended {
+		return false
+	}
+	dst := m.w.Header()
+	for k, vv := range h {
+		dst[k] = append([]string(nil), vv...)
+	}
+	m.stream = streamRe.MatchString(h.Get("Content-Type"))
+	m.headers = true
+	m.w.WriteHeader(status)
+	m.last = time.Now()
+	return true
+}
+
+// Write passes the service's body on as it comes, flushed.
+func (m *requestMonitor) Write(p []byte) (int, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.ended {
+		return 0, io.ErrClosedPipe
+	}
+	n, err := m.w.Write(p)
+	if f, ok := m.w.(http.Flusher); ok {
+		f.Flush()
+	}
+	m.last = time.Now()
+	return n, err
+}
+
+type monitoredBody struct {
+	io.ReadCloser
+	m *requestMonitor
+}
+
+func (b monitoredBody) Read(p []byte) (int, error) {
+	n, err := b.ReadCloser.Read(p)
+	if n > 0 {
+		b.m.touch()
+	}
+	return n, err
+}
+
+func (m *requestMonitor) run(log *zap.Logger, idle time.Duration, renewals int, heartbeat func() bool) {
+	for {
+		m.mu.Lock()
+		wait := idle - time.Since(m.last)
+		m.mu.Unlock()
+		if wait > 0 {
+			select {
+			case <-m.done:
+				return
+			case <-time.After(wait):
+			}
+			continue
+		}
+		if m.isEnded() {
 			return
 		}
+		m.mu.Lock()
+		m.renewals++
+		count := m.renewals
+		m.mu.Unlock()
+		log.Warn("Request is taking too much time ...")
+		if count >= renewals {
+			log.Error("Request time exceeded the requestTimeoutRenewal")
+			m.cancel()
+			m.respond(134)
+			return
+		}
+		if !heartbeat() {
+			log.Error("Service heartbeat is not responding")
+			m.cancel()
+			m.respond(133)
+			return
+		}
+		m.mu.Lock()
+		if m.stream {
+			m.renewals--
+		}
+		m.last = time.Now()
+		m.mu.Unlock()
+	}
+}
+
+// redirect calls the service (lib/preRedirect.js, redirectToService.js; simpleRTS.js when
+// simple): a healthy host from awareness (else 133); the request as received, with the raw path
+// and query after the service and the request's headers, the gateway's soajsinjectobj among them,
+// and the soajsauth session cookie when the gateway authorizes; the service's status, headers and
+// body as they come. A call that fails answers 135. simpleRTS sets Host to the service's host.
+func redirect(w http.ResponseWriter, r *http.Request, soajsCtx *SOAJSContext, reg registry.Registry, aw awareness.Awareness, simple bool) {
+	regData := reg.Get()
+	params := soajsCtx.Controller.ServiceParams
+	name, version := params.URLInfo.ServiceName, params.URLInfo.ServiceVersion
+	gw := regData.Services["controller"]
+	if gw == nil {
+		WriteCode(w, 131)
+		return
+	}
+	svc := regData.Services[name]
+	hostInfo, err := aw.GetHost(name, version)
+	if err != nil {
+		soajsCtx.Log.Error("Unable to find any healthy host for service [" + name + "@" + version + "]")
+		WriteCode(w, 133)
+		return
+	}
+	host := hostInfo.Host
+
+	ctx, cancel := context.WithCancel(r.Context())
+	defer cancel()
+	m := &requestMonitor{w: w, cancel: cancel, done: make(chan struct{}), last: time.Now()}
+	defer close(m.done)
+	if !renewReqMonitorOff(regData) {
+		requestTO := svc.RequestTimeout
+		if requestTO == 0 {
+			requestTO = gw.RequestTimeout
+		}
+		requestTOR := svc.RequestTimeoutRenewal
+		if requestTOR == 0 {
+			requestTOR = gw.RequestTimeoutRenewal
+		}
+		go m.run(soajsCtx.Log, time.Duration(requestTO)*100*time.Millisecond, requestTOR, func() bool {
+			return serviceHeartbeat(regData, svc, host)
+		})
 	}
 
-	soajsCtx.Log.Debug("proxy request starting", zap.String("targetURL", targetURL))
-
-	resp, err := proxyClient.Do(proxyReq)
+	target := "http://" + net.JoinHostPort(host, strconv.Itoa(svc.Port)) + params.URLInfo.URL
+	var body io.Reader = http.NoBody
+	if r.Body != nil && r.Body != http.NoBody {
+		body = monitoredBody{r.Body, m}
+	}
+	out, err := http.NewRequestWithContext(ctx, r.Method, target, body)
 	if err != nil {
-		soajsCtx.Log.Error("proxy request failed", zap.Error(err), zap.String("targetURL", targetURL))
-		WriteError(w, http.StatusBadGateway, config.ErrCodeServiceNotFound, "Service unavailable")
+		soajsCtx.Log.Error(err.Error())
+		m.respond(135)
+		return
+	}
+	out.ContentLength = r.ContentLength
+	out.Header = r.Header.Clone()
+	out.Host = r.Host
+	if simple {
+		out.Host = host
+	}
+	if gw.Authorization != nil && *gw.Authorization {
+		authorize(r, out, regData)
+	}
+
+	resp, err := proxyTransport.RoundTrip(out)
+	if err != nil {
+		if !m.isEnded() {
+			soajsCtx.Log.Error(err.Error() + " with [" + name + "@" + version + "]")
+		}
+		m.respond(135)
 		return
 	}
 	defer resp.Body.Close()
-
-	soajsCtx.Log.Debug("proxy response received", zap.Int("statusCode", resp.StatusCode))
-
-	// Copy response headers
-	copyHeaders(w.Header(), resp.Header)
-
-	// Write status code
-	w.WriteHeader(resp.StatusCode)
-
-	// Copy response body
-	io.Copy(w, resp.Body)
+	if !m.writeHeader(resp.StatusCode, resp.Header) {
+		return
+	}
+	if r.Method == http.MethodHead {
+		m.end()
+		return
+	}
+	if _, err := io.Copy(m, resp.Body); err != nil && !m.isEnded() {
+		soajsCtx.Log.Error(err.Error() + " with [" + name + "@" + version + "]")
+		m.respond(135)
+		return
+	}
+	m.end()
 }
 
-func copyHeaders(dst, src http.Header) {
-	for k, vv := range src {
-		for _, v := range vv {
-			dst.Add(k, v)
-		}
-	}
+func renewReqMonitorOff(reg *types.RegistryData) bool {
+	gateway, _ := reg.CustomRegistry["gateway"].(map[string]interface{})
+	value, _ := gateway["value"].(map[string]interface{})
+	gotoService, _ := value["gotoService"].(map[string]interface{})
+	return truthy(gotoService["renewReqMonitorOff"])
 }
 
-func getScheme(r *http.Request) string {
-	if r.TLS != nil {
-		return "https"
+// serviceHeartbeat checks the service on its maintenance readiness when it declares one, else on
+// /heartbeat at the maintenance port: healthy on a 200 within 5 seconds.
+func serviceHeartbeat(reg *types.RegistryData, svc *types.ServiceConfig, host string) bool {
+	inc := 0
+	if reg.ServiceConfig != nil {
+		inc = reg.ServiceConfig.Ports.MaintenanceInc
 	}
-	if scheme := r.Header.Get("X-Forwarded-Proto"); scheme != "" {
-		return scheme
-	}
-	return "http"
-}
-
-func injectSOAJSHeaders(req *http.Request, soajsCtx *SOAJSContext, reg registry.Registry, aw awareness.Awareness) error {
-	// Build the soajsinjectobj - this is the JSON object that SOAJS services expect
-	// Matches Node.js mw/mt/index.js behavior exactly
-	injectObj := make(map[string]interface{})
-
-	// Get service version config to determine what to include
-	var serviceConfig *types.VersionInfo
-	serviceName := ""
-	serviceVersion := ""
-	if soajsCtx.Controller != nil && soajsCtx.Controller.ServiceParams != nil && reg != nil {
-		regData := reg.Get()
-		if regData != nil && regData.Services != nil {
-			if soajsCtx.Controller.ServiceParams.URLInfo != nil {
-				serviceName = soajsCtx.Controller.ServiceParams.URLInfo.ServiceName
-				serviceVersion = soajsCtx.Controller.ServiceParams.URLInfo.ServiceVersion
-			}
-			if svc, ok := regData.Services[serviceName]; ok && svc.Versions != nil {
-				if vInfo, vok := svc.Versions[serviceVersion]; vok {
-					serviceConfig = vInfo
-				}
-			}
+	port, path := svc.Port+inc, "/heartbeat"
+	if mt := svc.Maintenance; mt != nil && mt.Readiness != "" && mt.Port.Type != "" {
+		path = mt.Readiness
+		if mt.Port.Type != "maintenance" {
+			port = svc.Port
 		}
 	}
-
-	// Service parameter flags - all false unless service explicitly requests (Node.js line 58)
-	provisionACL := false
-	urac := false
-	uracProfile := false
-	uracACL := false
-	uracConfig := false
-	uracGroupConfig := false
-	tenantProfile := false
-
-	if serviceConfig != nil {
-		provisionACL = serviceConfig.ProvisionACL
-		urac = serviceConfig.Urac
-		uracProfile = serviceConfig.UracProfile
-		uracACL = serviceConfig.UracACL
-		uracConfig = serviceConfig.UracConfig
-		uracGroupConfig = serviceConfig.UracGroupConfig
-		tenantProfile = serviceConfig.TenantProfile
-	}
-
-	// Tenant info (Node.js builds full tenant object)
-	if soajsCtx.Tenant != nil {
-		tenantObj := map[string]interface{}{
-			"id":     soajsCtx.Tenant.ID,
-			"code":   soajsCtx.Tenant.Code,
-			"name":   soajsCtx.Tenant.Name,
-			"type":   soajsCtx.Tenant.Type,
-			"locked": soajsCtx.Tenant.Locked,
-		}
-		// Add main if present
-		if soajsCtx.Tenant.Main != nil {
-			tenantObj["main"] = soajsCtx.Tenant.Main
-		}
-		// Only include tenant profile if service requests it
-		if tenantProfile && soajsCtx.Tenant.Profile != nil {
-			tenantObj["profile"] = soajsCtx.Tenant.Profile
-		}
-		injectObj["tenant"] = tenantObj
-	}
-
-	// Key info - only include service-specific config, not full config
-	if soajsCtx.Key != nil {
-		// Build minimal config with only commonFields and service-specific config
-		keyConfig := make(map[string]interface{})
-		if soajsCtx.Key.Config != nil {
-			if commonFields, exists := soajsCtx.Key.Config["commonFields"]; exists {
-				keyConfig["commonFields"] = commonFields
-			}
-			if serviceName != "" {
-				if svcConfig, exists := soajsCtx.Key.Config[serviceName]; exists {
-					keyConfig[serviceName] = svcConfig
-				}
-			}
-		}
-
-		injectObj["key"] = map[string]interface{}{
-			"iKey":   soajsCtx.Key.InternalKey,
-			"eKey":   soajsCtx.Key.ExtKey,
-			"config": keyConfig,
-		}
-	}
-
-	// Application info - build with ACL initially (Node.js includes then deletes)
-	if soajsCtx.Key != nil {
-		appObj := map[string]interface{}{
-			"product": soajsCtx.Key.Application.Product,
-			"package": soajsCtx.Key.Application.Package,
-			"appId":   soajsCtx.Key.Application.AppID,
-		}
-		// The latest data schema has no application ACL
-		appObj["acl"] = nil
-		appObj["acl_all_env"] = nil
-		injectObj["application"] = appObj
-	}
-
-	// Package info - build with ACL initially (Node.js includes then deletes)
-	pkgObj := make(map[string]interface{})
-	if soajsCtx.Controller != nil && soajsCtx.Controller.ServiceParams != nil {
-		pkg := soajsCtx.Controller.ServiceParams.Package
-		if pkg != nil {
-			pkgObj["acl"] = pkg.ACL
-			pkgObj["acl_all_env"] = pkg.ACLAllEnv
-		}
-	}
-	injectObj["package"] = pkgObj
-
-	// Device and Geo info - always included
-	if soajsCtx.Device != nil {
-		injectObj["device"] = soajsCtx.Device
-	} else {
-		injectObj["device"] = map[string]interface{}{}
-	}
-	if soajsCtx.Geo != nil {
-		injectObj["geo"] = soajsCtx.Geo
-	} else {
-		injectObj["geo"] = map[string]interface{}{}
-	}
-
-	// Urac info - only if service requests it (Node.js line ~193)
-	if urac && soajsCtx.Controller != nil && soajsCtx.Controller.ServiceParams != nil && soajsCtx.Controller.ServiceParams.UserInfo != nil {
-		userMap := soajsCtx.Controller.ServiceParams.UserInfo
-		// Build urac object with base fields
-		uracObj := map[string]interface{}{
-			"_id":         userMap["_id"],
-			"username":    userMap["username"],
-			"firstName":   encodeHeaderValue(getString(userMap, "firstName")),
-			"lastName":    encodeHeaderValue(getString(userMap, "lastName")),
-			"email":       userMap["email"],
-			"groups":      userMap["groups"],
-			"socialLogin": userMap["socialLogin"],
-		}
-		if tenant, ok := userMap["tenant"].(map[string]interface{}); ok {
-			uracObj["tenant"] = map[string]interface{}{
-				"id":   tenant["id"],
-				"code": tenant["code"],
-			}
-		}
-
-		// Add param to indicate what was included
-		injectObj["param"] = map[string]interface{}{
-			"urac_Profile": uracProfile,
-			"urac_ACL":     uracACL,
-		}
-
-		if uracProfile {
-			uracObj["profile"] = userMap["profile"]
-		}
-		if uracACL {
-			uracObj["acl"] = userMap["acl"]
-			uracObj["acl_AllEnv"] = userMap["acl_AllEnv"]
-		}
-		if uracConfig {
-			uracObj["config"] = userMap["config"]
-		}
-		if uracGroupConfig {
-			uracObj["groupsConfig"] = userMap["groupsConfig"]
-		}
-		injectObj["urac"] = uracObj
-	}
-
-	// Delete ACL data if not requested (Node.js line ~286)
-	if !provisionACL {
-		if appObj, ok := injectObj["application"].(map[string]interface{}); ok {
-			delete(appObj, "acl")
-			delete(appObj, "acl_all_env")
-		}
-		if pkgObj, ok := injectObj["package"].(map[string]interface{}); ok {
-			delete(pkgObj, "acl")
-			delete(pkgObj, "acl_all_env")
-		}
-	}
-
-	// Awareness: the gateway's host in this environment from awareness, with the controller port
-	// (mw/mt/index.js); without a host there is no awareness to inject
-	var awarenessObj map[string]interface{}
-	if aw != nil {
-		if gw, err := aw.GetHost("controller", ""); err == nil {
-			awarenessObj = map[string]interface{}{"host": gw.Host, "port": 0}
-			if reg != nil {
-				if regData := reg.Get(); regData != nil && regData.ServiceConfig != nil {
-					awarenessObj["port"] = regData.ServiceConfig.Ports.Controller
-				}
-			}
-		}
-	}
-
-	// Build interConnect array if service has interConnect configured
-	if awarenessObj != nil && serviceConfig != nil && len(serviceConfig.InterConnect) > 0 && reg != nil && aw != nil {
-		interConnectArr := make([]map[string]interface{}, 0)
-		regData := reg.Get()
-
-		for _, ic := range serviceConfig.InterConnect {
-			if ic.Name == "" {
-				continue
-			}
-			// Check if service exists in registry
-			icSvc, icExists := regData.Services[ic.Name]
-			if !icExists || icSvc.Port == 0 {
-				soajsCtx.Log.Debug("interConnect service not found in registry",
-					zap.String("service", ic.Name))
-				continue
-			}
-
-			// Add service config for interConnect service if available
-			if soajsCtx.Key != nil && soajsCtx.Key.Config != nil {
-				if keyObj, ok := injectObj["key"].(map[string]interface{}); ok {
-					if keyConfig, ok := keyObj["config"].(map[string]interface{}); ok {
-						if icConfig, exists := soajsCtx.Key.Config[ic.Name]; exists {
-							keyConfig[ic.Name] = icConfig
-						}
-					}
-				}
-			}
-
-			// Get host from awareness
-			icVersion := ic.Version
-			hostInfo, err := aw.GetHost(ic.Name, icVersion)
-			if err != nil || hostInfo == nil {
-				soajsCtx.Log.Debug("interConnect failed to get host",
-					zap.String("service", ic.Name),
-					zap.String("version", icVersion))
-				continue
-			}
-
-			// Get latest version
-			latestVersion := ""
-			if icSvc.Hosts != nil && icSvc.Hosts.Latest != "" {
-				latestVersion = icSvc.Hosts.Latest
-			} else if icSvc.Versions != nil {
-				for v := range icSvc.Versions {
-					if latestVersion == "" || v > latestVersion {
-						latestVersion = v
-					}
-				}
-			}
-
-			icItem := map[string]interface{}{
-				"name":    ic.Name,
-				"version": hostInfo.Version,
-				"host":    hostInfo.Host,
-				"port":    icSvc.Port,
-				"latest":  latestVersion,
-			}
-			interConnectArr = append(interConnectArr, icItem)
-		}
-
-		if len(interConnectArr) > 0 {
-			awarenessObj["interConnect"] = interConnectArr
-		}
-	}
-
-	if awarenessObj != nil {
-		injectObj["awareness"] = awarenessObj
-	}
-
-	// Serialize to JSON
-	jsonBytes, err := json.Marshal(injectObj)
+	client := http.Client{Timeout: 5 * time.Second}
+	resp, err := client.Get("http://" + net.JoinHostPort(host, strconv.Itoa(port)) + path)
 	if err != nil {
-		soajsCtx.Log.Error("failed to serialize soajsinjectobj")
-		return fmt.Errorf("failed to serialize soajsinjectobj: %w", err)
+		return false
 	}
-
-	// Security: Validate and limit soajsinjectobj header size (Node.js line ~318)
-	maxHeaderSize := 65536 // 64KB default
-	if len(jsonBytes) > maxHeaderSize {
-		soajsCtx.Log.Error("soajsinjectobj header exceeds maximum size",
-			zap.Int("size", len(jsonBytes)),
-			zap.Int("maxSize", maxHeaderSize))
-		return fmt.Errorf("soajsinjectobj header exceeds maximum size: %d > %d", len(jsonBytes), maxHeaderSize)
-	}
-
-	// Log the soajsinjectobj content (DEBUG level)
-	soajsCtx.Log.Debug("soajsinjectobj header",
-		zap.Int("size", len(jsonBytes)),
-		zap.String("content", string(jsonBytes)))
-
-	// Set the header
-	req.Header.Set("soajsinjectobj", string(jsonBytes))
-	return nil
+	resp.Body.Close()
+	return resp.StatusCode == http.StatusOK
 }
 
-// encodeHeaderValue encodes a string value for safe HTTP header inclusion
-func encodeHeaderValue(val string) string {
-	// URL encode the value to handle special characters
-	return url.QueryEscape(val)
-}
-
-// getString safely extracts a string from a map
-func getString(m map[string]interface{}, key string) string {
-	if v, ok := m[key]; ok {
-		if s, ok := v.(string); ok {
-			return s
-		}
+// authorize is lib/isRequestAuthorized.js: the cookie header is always sent, and a soajsauth
+// header, else query parameter, becomes the session cookie.
+func authorize(r, out *http.Request, reg *types.RegistryData) {
+	cookie := out.Header.Get("Cookie")
+	out.Header.Set("Cookie", cookie)
+	auth := r.Header.Get("soajsauth")
+	if auth == "" {
+		auth = r.URL.Query().Get("soajsauth")
 	}
-	return ""
-}
-
-// stripPrefix removes a prefix from the path
-func stripPrefix(path, prefix string) string {
-	return strings.TrimPrefix(path, prefix)
-}
-
-// handleSoajsAuth checks for soajsauth header/query and converts to session cookie
-// Note: Session config should be obtained from registry.serviceConfig.session
-// Currently uses defaults - will be enhanced when registry is available in context
-func handleSoajsAuth(r, proxyReq *http.Request, soajsCtx *SOAJSContext) {
-	// Check for soajsauth header
-	soajsauth := r.Header.Get("soajsauth")
-	if soajsauth == "" {
-		// Check query params
-		soajsauth = r.URL.Query().Get("soajsauth")
-	}
-
-	if soajsauth == "" {
+	if auth == "" || reg.ServiceConfig == nil {
 		return
 	}
-
-	// TODO: Get session config from registry.serviceConfig.session
-	// For now, use ServicesConfig if available
-	sessionSecret := ""
-	sessionName := "soajs.sid"
-
-	if soajsCtx.ServicesConfig != nil {
-		if session, ok := soajsCtx.ServicesConfig["session"].(map[string]interface{}); ok {
-			if secret, ok := session["secret"].(string); ok && secret != "" {
-				sessionSecret = secret
-			}
-			if name, ok := session["name"].(string); ok && name != "" {
-				sessionName = name
-			}
-		}
+	session := reg.ServiceConfig.Session
+	if c := sessionCookie(auth, session.Secret, session.Name); c != "" {
+		out.Header.Set("Cookie", strings.Join(append(strings.Split(cookie, ";"), c), ";"))
 	}
-
-	// If no session secret, we can't create the cookie
-	if sessionSecret == "" {
-		if soajsCtx.Log != nil {
-			soajsCtx.Log.Debug("soajsauth found but no session secret configured")
-		}
-		return
-	}
-
-	// Convert soajsauth to session cookie
-	cookie := setSessionCookie(soajsauth, sessionSecret, sessionName)
-	if cookie == "" {
-		return
-	}
-
-	// Get existing cookies and append
-	cookies := proxyReq.Header.Get("Cookie")
-	if cookies != "" {
-		cookies = cookies + "; " + cookie
-	} else {
-		cookies = cookie
-	}
-	proxyReq.Header.Set("Cookie", cookies)
 }
 
-// setSessionCookie converts soajsauth to a signed session cookie
-// soajsauth format: "Basic BASE64(soajs:MASKED_SESSION_ID)"
-func setSessionCookie(auth, secret, cookieName string) string {
-	// Decode Base64 - format is "Basic BASE64(...)"
-	auth = strings.TrimSpace(auth)
-	parts := strings.Split(auth, "Basic ")
-	if len(parts) < 2 {
-		return ""
-	}
-
-	decoded, err := base64.StdEncoding.DecodeString(parts[1])
+// sessionCookie is soajs.core security authorization.setCookie: soajsauth is
+// "Basic base64(soajs:<masked session id>)", the unmasked id signed as express-session does.
+func sessionCookie(auth, secret, name string) string {
+	decoded, err := url.PathUnescape(auth)
 	if err != nil {
 		return ""
 	}
-
-	// Format is "soajs:MASKED_SESSION_ID"
-	ascii := string(decoded)
+	parts := strings.Split(decoded, "Basic ")
+	if len(parts) < 2 || parts[1] == "" {
+		return ""
+	}
+	raw, err := base64.StdEncoding.DecodeString(parts[1])
+	if err != nil {
+		if raw, err = base64.RawStdEncoding.DecodeString(strings.TrimRight(parts[1], "=")); err != nil {
+			return ""
+		}
+	}
+	ascii := string(raw)
 	if !strings.HasPrefix(ascii, "soajs:") {
 		return ""
 	}
-
-	masked := strings.TrimPrefix(ascii, "soajs:")
-
-	// Unmask the session ID
-	sessionID := umaskSessionID(masked)
-	if sessionID == "" {
+	id, ok := umask(strings.Split(ascii, "soajs:")[1])
+	if !ok || id == "" {
 		return ""
 	}
-
-	// Sign the session ID with HMAC-SHA256
-	signed := "s:" + signCookie(sessionID, secret)
-
-	return cookieName + "=" + signed
+	mac := hmac.New(sha256.New, []byte(secret))
+	mac.Write([]byte(id))
+	return name + "=s:" + id + "." + strings.TrimRight(base64.StdEncoding.EncodeToString(mac.Sum(nil)), "=")
 }
 
-// umaskSessionID decyphers the session ID using the cypher code prefix
-func umaskSessionID(masked string) string {
+// umask is authorization.umask: a known cypher style decyphers a 32-character id, an unknown style
+// is only dropped from the id.
+func umask(masked string) (string, bool) {
 	if len(masked) < 3 {
-		return ""
+		return "", false
 	}
-
-	styleCode := masked[0:3]
-	sid := masked[3:]
-
+	style, sid := masked[:3], masked[3:]
+	swaps := map[string][4]int{"C01": {3, 11, 7, 15}, "C02": {4, 12, 9, 15}, "C03": {5, 13, 11, 15}}
+	p, ok := swaps[style]
+	if !ok {
+		return sid, true
+	}
 	if len(sid) != 32 {
-		return sid // Return as-is if not expected length
+		return "", false
 	}
-
-	// Apply decypher based on style code
-	switch styleCode {
-	case "C01":
-		// Swap positions: 0-2, 11, 4-6, 15, 8-10, 3, 12-14, 7, 16+
-		return sid[0:3] + string(sid[11]) + sid[4:7] + string(sid[15]) + sid[8:11] + string(sid[3]) + sid[12:15] + string(sid[7]) + sid[16:]
-	case "C02":
-		return sid[0:4] + string(sid[12]) + sid[5:9] + string(sid[15]) + sid[10:12] + string(sid[4]) + sid[13:15] + string(sid[9]) + sid[16:]
-	case "C03":
-		return sid[0:5] + string(sid[13]) + sid[6:11] + string(sid[15]) + sid[12:13] + string(sid[5]) + sid[14:15] + string(sid[11]) + sid[16:]
-	default:
-		return sid
-	}
-}
-
-// signCookie creates HMAC-SHA256 signature for session cookie
-func signCookie(val, secret string) string {
-	h := hmac.New(sha256.New, []byte(secret))
-	h.Write([]byte(val))
-	signature := base64.StdEncoding.EncodeToString(h.Sum(nil))
-	// Remove trailing = signs like Node.js does
-	signature = strings.TrimRight(signature, "=")
-	return val + "." + signature
+	b := []byte(sid)
+	b[p[0]], b[p[1]] = sid[p[1]], sid[p[0]]
+	b[p[2]], b[p[3]] = sid[p[3]], sid[p[2]]
+	return string(b), true
 }

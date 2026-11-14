@@ -1,12 +1,16 @@
 package middleware
 
 import (
-	"encoding/base64"
+	"encoding/json"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/soajs/soajs.controller.go/internal/awareness"
 	"github.com/soajs/soajs.controller.go/pkg/types"
@@ -15,7 +19,8 @@ import (
 
 // mockAwarenessProxy implements awareness.Awareness for proxy tests
 type mockAwarenessProxy struct {
-	hosts map[string]*types.HostInfo
+	hosts  map[string]*types.HostInfo
+	latest map[string]string
 }
 
 func (m *mockAwarenessProxy) GetHost(serviceName, version string) (*types.HostInfo, error) {
@@ -26,7 +31,7 @@ func (m *mockAwarenessProxy) GetHost(serviceName, version string) (*types.HostIn
 	return nil, awareness.ErrNoHost
 }
 
-func (m *mockAwarenessProxy) GetLatestVersion(string) string { return "" }
+func (m *mockAwarenessProxy) GetLatestVersion(name string) string { return m.latest[name] }
 
 func (m *mockAwarenessProxy) GetLatestVersionFromCluster(string) (string, bool) { return "", false }
 
@@ -47,662 +52,415 @@ func (m *mockRegistryProxy) GetHost(serviceName, version string) (*types.HostInf
 	return nil, nil
 }
 func (m *mockRegistryProxy) GetEnvironment() string { return "test" }
-
-// =============================================================================
-// GotoService Middleware Tests
-// =============================================================================
-
-func TestGotoService_SkipsWhenNoContext(t *testing.T) {
-	prov := &mockProvision{}
-	reg := &mockRegistryProxy{}
-	aw := &mockAwarenessProxy{}
-
-	gotoMW := GotoService(prov, reg, aw)
-
-	called := false
-	handler := gotoMW(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		called = true
-		w.WriteHeader(http.StatusOK)
-	}))
-
-	req := httptest.NewRequest("GET", "/test", nil)
-	rec := httptest.NewRecorder()
-	handler.ServeHTTP(rec, req)
-
-	if !called {
-		t.Error("Handler should be called when no context")
-	}
-}
-
-func TestGotoService_SkipsWhenNoServiceParams(t *testing.T) {
-	logger, _ := zap.NewDevelopment()
-	prov := &mockProvision{}
-	reg := &mockRegistryProxy{}
-	aw := &mockAwarenessProxy{}
-
-	// Only Context middleware - no URL middleware to set service params
-	contextMW := Context(logger, "test")
-	gotoMW := GotoService(prov, reg, aw)
-
-	called := false
-	handler := contextMW(gotoMW(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		called = true
-		w.WriteHeader(http.StatusOK)
-	})))
-
-	req := httptest.NewRequest("GET", "/test", nil)
-	rec := httptest.NewRecorder()
-	handler.ServeHTTP(rec, req)
-
-	// Should pass through since URL middleware wasn't used
-	if !called {
-		t.Error("Handler should be called when no URL info")
-	}
-}
-
-func TestGotoService_SkipsSoajsRoutes(t *testing.T) {
-	logger, _ := zap.NewDevelopment()
-	prov := &mockProvision{}
-	reg := &mockRegistryProxy{}
-	aw := &mockAwarenessProxy{}
-
-	contextMW := Context(logger, "test")
-	urlMW := URL(nil)
-	gotoMW := GotoService(prov, reg, aw)
-
-	called := false
-	handler := contextMW(urlMW(gotoMW(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		called = true
-		w.WriteHeader(http.StatusOK)
-	}))))
-
-	req := httptest.NewRequest("GET", "/soajs/acl", nil)
-	rec := httptest.NewRecorder()
-
-	handler.ServeHTTP(rec, req)
-
-	if !called {
-		t.Error("Handler should be called for /soajs/* routes")
-	}
-	if rec.Code != http.StatusOK {
-		t.Errorf("Status = %d, want %d", rec.Code, http.StatusOK)
-	}
-}
-
-func TestGotoService_ReturnsErrorWhenServiceNotFound(t *testing.T) {
-	logger, _ := zap.NewDevelopment()
-	prov := &mockProvision{}
-	reg := &mockRegistryProxy{}
-	aw := &mockAwarenessProxy{hosts: map[string]*types.HostInfo{}} // Empty
-
-	contextMW := Context(logger, "test")
-	urlMW := URL(nil)
-	gotoMW := GotoService(prov, reg, aw)
-
-	// The inner handler must call Gotoservice to trigger service resolution
-	handler := contextMW(urlMW(gotoMW(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		soajsCtx := GetSOAJSContext(r.Context())
-		if soajsCtx != nil && soajsCtx.Controller != nil && soajsCtx.Controller.Gotoservice != nil {
-			soajsCtx.Controller.Gotoservice(w, r)
-			return
-		}
-		w.WriteHeader(http.StatusOK)
-	}))))
-
-	req := httptest.NewRequest("GET", "/oauth/token", nil)
-	rec := httptest.NewRecorder()
-
-	handler.ServeHTTP(rec, req)
-
-	if rec.Code != http.StatusNotFound || !strings.Contains(rec.Body.String(), `"codes":[130]`) {
-		t.Errorf("Status = %d %s, want 404 with 130 for a service the registry does not have", rec.Code, rec.Body.String())
-	}
-}
-
-func proxyTestRegistry(names ...string) *mockRegistryProxy {
-	services := map[string]*types.ServiceConfig{}
-	for _, n := range names {
-		services[n] = &types.ServiceConfig{Port: 4000, Hosts: &types.ServiceHosts{Latest: "1", ByVersion: map[string][]string{"1": {"127.0.0.1"}}},
-			Versions: map[string]*types.VersionInfo{"1": {}, "2": {}}}
-	}
-	return &mockRegistryProxy{data: &types.RegistryData{Services: services, ServiceConfig: &types.GlobalServiceConfig{}}}
-}
-
-func TestGotoService_SetsGotoserviceFunction(t *testing.T) {
-	logger, _ := zap.NewDevelopment()
-	prov := &mockProvision{}
-	reg := proxyTestRegistry("oauth")
-	aw := &mockAwarenessProxy{
-		hosts: map[string]*types.HostInfo{
-			"oauth:1": {Host: "localhost", Port: 4002},
-		},
-	}
-
-	contextMW := Context(logger, "test")
-	urlMW := URL(nil)
-	gotoMW := GotoService(prov, reg, aw)
-
-	var gotGotoservice bool
-	handler := contextMW(urlMW(gotoMW(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		soajsCtx := GetSOAJSContext(r.Context())
-		if soajsCtx != nil && soajsCtx.Controller != nil && soajsCtx.Controller.Gotoservice != nil {
-			gotGotoservice = true
-		}
-		w.WriteHeader(http.StatusOK)
-	}))))
-
-	req := httptest.NewRequest("GET", "/oauth/token", nil)
-	rec := httptest.NewRecorder()
-
-	handler.ServeHTTP(rec, req)
-
-	if !gotGotoservice {
-		t.Error("Gotoservice function should be set when service is found")
-	}
-}
-
-func TestGotoService_HandlesProxyRoute(t *testing.T) {
-	logger, _ := zap.NewDevelopment()
-	prov := &mockProvision{}
-	reg := proxyTestRegistry("urac")
-	aw := &mockAwarenessProxy{
-		hosts: map[string]*types.HostInfo{
-			"urac:1": {Host: "localhost", Port: 4001},
-		},
-	}
-
-	contextMW := Context(logger, "test")
-	urlMW := URL(nil)
-	gotoMW := GotoService(prov, reg, aw)
-
-	var capturedService string
-	handler := contextMW(urlMW(gotoMW(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		soajsCtx := GetSOAJSContext(r.Context())
-		if soajsCtx != nil && soajsCtx.Controller != nil && soajsCtx.Controller.ServiceParams != nil && soajsCtx.Controller.ServiceParams.URLInfo != nil {
-			capturedService = soajsCtx.Controller.ServiceParams.URLInfo.ServiceName
-		}
-		w.WriteHeader(http.StatusOK)
-	}))))
-
-	req := httptest.NewRequest("GET", "/soajs/proxy?proxyRoute=/urac/user", nil)
-	rec := httptest.NewRecorder()
-
-	handler.ServeHTTP(rec, req)
-
-	if capturedService != "urac" {
-		t.Errorf("Service = %s, want urac", capturedService)
-	}
-}
-
-func TestGotoService_ProxyRouteWithVersion(t *testing.T) {
-	logger, _ := zap.NewDevelopment()
-	prov := &mockProvision{}
-	reg := proxyTestRegistry("urac")
-	aw := &mockAwarenessProxy{
-		hosts: map[string]*types.HostInfo{
-			"urac:2": {Host: "localhost", Port: 4001},
-		},
-	}
-
-	contextMW := Context(logger, "test")
-	urlMW := URL(nil)
-	gotoMW := GotoService(prov, reg, aw)
-
-	var capturedVersion string
-	handler := contextMW(urlMW(gotoMW(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		soajsCtx := GetSOAJSContext(r.Context())
-		if soajsCtx != nil && soajsCtx.Controller != nil && soajsCtx.Controller.ServiceParams != nil && soajsCtx.Controller.ServiceParams.URLInfo != nil {
-			capturedVersion = soajsCtx.Controller.ServiceParams.URLInfo.ServiceVersion
-		}
-		w.WriteHeader(http.StatusOK)
-	}))))
-
-	req := httptest.NewRequest("GET", "/soajs/proxy?proxyRoute=/urac/2/user", nil)
-	rec := httptest.NewRecorder()
-
-	handler.ServeHTTP(rec, req)
-
-	if capturedVersion != "2" {
-		t.Errorf("Version = %s, want 2", capturedVersion)
-	}
-}
-
-func TestGotoService_RejectsEmptyProxyRoute(t *testing.T) {
-	logger, _ := zap.NewDevelopment()
-	prov := &mockProvision{}
-	reg := &mockRegistryProxy{}
-	aw := &mockAwarenessProxy{}
-
-	contextMW := Context(logger, "test")
-	urlMW := URL(nil)
-	gotoMW := GotoService(prov, reg, aw)
-
-	handler := contextMW(urlMW(gotoMW(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-	}))))
-
-	req := httptest.NewRequest("GET", "/soajs/proxy", nil) // No proxyRoute param
-	rec := httptest.NewRecorder()
-
-	handler.ServeHTTP(rec, req)
-
-	if rec.Code != http.StatusBadRequest {
-		t.Errorf("Status = %d, want %d for empty proxyRoute", rec.Code, http.StatusBadRequest)
-	}
-}
-
-// =============================================================================
-// buildTargetURL Tests
-// =============================================================================
-
-func TestBuildTargetURL_Basic(t *testing.T) {
-	url := buildTargetURL("localhost", 4002, "/token", "")
-	expected := "http://localhost:4002/token"
-	if url != expected {
-		t.Errorf("URL = %s, want %s", url, expected)
-	}
-}
-
-func TestBuildTargetURL_WithQuery(t *testing.T) {
-	url := buildTargetURL("localhost", 4002, "/token", "grant_type=password")
-	expected := "http://localhost:4002/token?grant_type=password"
-	if url != expected {
-		t.Errorf("URL = %s, want %s", url, expected)
-	}
-}
-
-func TestBuildTargetURL_WithPath(t *testing.T) {
-	url := buildTargetURL("10.0.0.1", 8080, "/api/v1/users", "limit=10&offset=0")
-	expected := "http://10.0.0.1:8080/api/v1/users?limit=10&offset=0"
-	if url != expected {
-		t.Errorf("URL = %s, want %s", url, expected)
-	}
-}
-
-// =============================================================================
-// copyHeaders Tests
-// =============================================================================
-
-func TestCopyHeaders_Basic(t *testing.T) {
-	src := http.Header{}
-	src.Set("Content-Type", "application/json")
-	src.Set("Authorization", "Bearer token")
-
-	dst := http.Header{}
-	copyHeaders(dst, src)
-
-	if dst.Get("Content-Type") != "application/json" {
-		t.Error("Content-Type not copied")
-	}
-	if dst.Get("Authorization") != "Bearer token" {
-		t.Error("Authorization not copied")
-	}
-}
-
-func TestCopyHeaders_MultipleValues(t *testing.T) {
-	src := http.Header{}
-	src.Add("Set-Cookie", "a=1")
-	src.Add("Set-Cookie", "b=2")
-
-	dst := http.Header{}
-	copyHeaders(dst, src)
-
-	cookies := dst.Values("Set-Cookie")
-	if len(cookies) != 2 {
-		t.Errorf("Expected 2 cookies, got %d", len(cookies))
-	}
-}
-
-// =============================================================================
-// getScheme Tests
-// =============================================================================
-
-func TestGetScheme_HTTP(t *testing.T) {
-	req := httptest.NewRequest("GET", "http://example.com/test", nil)
-	scheme := getScheme(req)
-	if scheme != "http" {
-		t.Errorf("Scheme = %s, want http", scheme)
-	}
-}
-
-func TestGetScheme_XForwardedProto(t *testing.T) {
-	req := httptest.NewRequest("GET", "http://example.com/test", nil)
-	req.Header.Set("X-Forwarded-Proto", "https")
-	scheme := getScheme(req)
-	if scheme != "https" {
-		t.Errorf("Scheme = %s, want https", scheme)
-	}
-}
-
-// =============================================================================
-// injectSOAJSHeaders Tests
-// =============================================================================
-
-func TestInjectSOAJSHeaders_Basic(t *testing.T) {
-	logger, _ := zap.NewDevelopment()
-	req := httptest.NewRequest("GET", "/test", nil)
-
-	soajsCtx := &SOAJSContext{
-		Log: logger,
-		Tenant: &types.Tenant{
-			ID:   "tenant123",
-			Code: "TEST",
-			Name: "Test Tenant",
-		},
-		Key: &types.Key{
-			InternalKey: "ikey123",
-			ExtKey:      "ekey123",
-			Application: types.KeyApplication{Product: "PROD", Package: "PKG"},
-		},
-	}
-
-	injectSOAJSHeaders(req, soajsCtx, nil, nil)
-
-	header := req.Header.Get("soajsinjectobj")
-	if header == "" {
-		t.Error("soajsinjectobj header not set")
-	}
-
-	// Verify it contains tenant info
-	if !strings.Contains(header, "tenant123") {
-		t.Error("Header should contain tenant ID")
-	}
-	if !strings.Contains(header, "TEST") {
-		t.Error("Header should contain tenant code")
-	}
-}
-
-func TestInjectSOAJSHeaders_WithNilKey(t *testing.T) {
-	logger, _ := zap.NewDevelopment()
-	req := httptest.NewRequest("GET", "/test", nil)
-
-	soajsCtx := &SOAJSContext{
-		Log: logger,
-		Tenant: &types.Tenant{
-			ID:   "tenant123",
-			Code: "TEST",
-		},
-		Key: nil, // No key
-	}
-
-	injectSOAJSHeaders(req, soajsCtx, nil, nil)
-
-	header := req.Header.Get("soajsinjectobj")
-	if header == "" {
-		t.Error("soajsinjectobj header should still be set")
-	}
-}
-
-// =============================================================================
-// handleSoajsAuth Tests
-// =============================================================================
-
-func TestHandleSoajsAuth_NoAuth(t *testing.T) {
-	logger, _ := zap.NewDevelopment()
-	req := httptest.NewRequest("GET", "/test", nil)
-	proxyReq := httptest.NewRequest("GET", "/test", nil)
-
-	soajsCtx := &SOAJSContext{Log: logger}
-
-	handleSoajsAuth(req, proxyReq, soajsCtx)
-
-	// No cookie should be added
-	if proxyReq.Header.Get("Cookie") != "" {
-		t.Error("No cookie should be added when no soajsauth")
-	}
-}
-
-func TestHandleSoajsAuth_WithHeader(t *testing.T) {
-	logger, _ := zap.NewDevelopment()
-
-	// Create soajsauth header value
-	sessionID := "C01" + "12345678901234567890123456789012" // 3 + 32 chars
-	encoded := base64.StdEncoding.EncodeToString([]byte("soajs:" + sessionID))
-	authHeader := "Basic " + encoded
-
-	req := httptest.NewRequest("GET", "/test", nil)
-	req.Header.Set("soajsauth", authHeader)
-
-	proxyReq := httptest.NewRequest("GET", "/test", nil)
-
-	soajsCtx := &SOAJSContext{
-		Log: logger,
-		ServicesConfig: map[string]interface{}{
-			"session": map[string]interface{}{
-				"secret": "test-secret",
-				"name":   "soajs.sid",
-			},
-		},
-	}
-
-	handleSoajsAuth(req, proxyReq, soajsCtx)
-
-	cookie := proxyReq.Header.Get("Cookie")
-	if cookie == "" {
-		t.Error("Cookie should be set when soajsauth is present")
-	}
-	if !strings.HasPrefix(cookie, "soajs.sid=") {
-		t.Errorf("Cookie should start with soajs.sid=, got %s", cookie)
-	}
-}
-
-func TestHandleSoajsAuth_FromQueryParam(t *testing.T) {
-	logger, _ := zap.NewDevelopment()
-
-	sessionID := "C01" + "12345678901234567890123456789012"
-	encoded := base64.StdEncoding.EncodeToString([]byte("soajs:" + sessionID))
-	authValue := "Basic " + encoded
-
-	// Create request and set query param manually to avoid URL encoding issues
-	req := httptest.NewRequest("GET", "/test", nil)
-	q := req.URL.Query()
-	q.Set("soajsauth", authValue)
-	req.URL.RawQuery = q.Encode()
-
-	proxyReq := httptest.NewRequest("GET", "/test", nil)
-
-	soajsCtx := &SOAJSContext{
-		Log: logger,
-		ServicesConfig: map[string]interface{}{
-			"session": map[string]interface{}{
-				"secret": "test-secret",
-			},
-		},
-	}
-
-	handleSoajsAuth(req, proxyReq, soajsCtx)
-
-	if proxyReq.Header.Get("Cookie") == "" {
-		t.Error("Cookie should be set from query param")
-	}
-}
-
-// =============================================================================
-// setSessionCookie Tests
-// =============================================================================
-
-func TestSetSessionCookie_InvalidFormat(t *testing.T) {
-	result := setSessionCookie("invalid", "secret", "soajs.sid")
-	if result != "" {
-		t.Error("Invalid format should return empty string")
-	}
-}
-
-func TestSetSessionCookie_NotSoajsPrefix(t *testing.T) {
-	encoded := base64.StdEncoding.EncodeToString([]byte("other:value"))
-	result := setSessionCookie("Basic "+encoded, "secret", "soajs.sid")
-	if result != "" {
-		t.Error("Non-soajs prefix should return empty string")
-	}
-}
-
-func TestSetSessionCookie_Valid(t *testing.T) {
-	sessionID := "C01" + "12345678901234567890123456789012"
-	encoded := base64.StdEncoding.EncodeToString([]byte("soajs:" + sessionID))
-	result := setSessionCookie("Basic "+encoded, "secret", "soajs.sid")
-
-	if result == "" {
-		t.Error("Valid auth should return cookie")
-	}
-	if !strings.HasPrefix(result, "soajs.sid=s:") {
-		t.Errorf("Cookie should be signed, got %s", result)
-	}
-}
-
-// =============================================================================
-// umaskSessionID Tests
-// =============================================================================
-
-func TestUmaskSessionID_TooShort(t *testing.T) {
-	result := umaskSessionID("AB")
-	if result != "" {
-		t.Error("Too short input should return empty")
-	}
-}
-
-func TestUmaskSessionID_NonStandardLength(t *testing.T) {
-	result := umaskSessionID("C01short")
-	if result != "short" {
-		t.Errorf("Non-32 char should return as-is, got %s", result)
-	}
-}
-
-func TestUmaskSessionID_C01Style(t *testing.T) {
-	// Test C01 decypher pattern - session ID must be 32 chars
-	input := "C01" + "ABCDEFGHIJKLMNOPabcdefghijklmnop" // exactly 32 chars
-	result := umaskSessionID(input)
-	if len(result) != 32 {
-		t.Errorf("Result should be 32 chars, got %d", len(result))
-	}
-}
-
-func TestUmaskSessionID_C02Style(t *testing.T) {
-	input := "C02" + "ABCDEFGHIJKLMNOPabcdefghijklmnop" // exactly 32 chars
-	result := umaskSessionID(input)
-	if len(result) != 32 {
-		t.Errorf("Result should be 32 chars, got %d", len(result))
-	}
-}
-
-func TestUmaskSessionID_C03Style(t *testing.T) {
-	input := "C03" + "ABCDEFGHIJKLMNOPabcdefghijklmnop" // exactly 32 chars
-	result := umaskSessionID(input)
-	if len(result) != 32 {
-		t.Errorf("Result should be 32 chars, got %d", len(result))
-	}
-}
-
-func TestUmaskSessionID_UnknownStyle(t *testing.T) {
-	input := "XXX" + "ABCDEFGHIJKLMNOPabcdefghijklmnop" // exactly 32 chars
-	result := umaskSessionID(input)
-	// Unknown style returns as-is (without prefix)
-	if result != "ABCDEFGHIJKLMNOPabcdefghijklmnop" {
-		t.Errorf("Unknown style should return session part, got %s", result)
-	}
-}
-
-// =============================================================================
-// signCookie Tests
-// =============================================================================
-
-func TestSignCookie_Basic(t *testing.T) {
-	result := signCookie("session123", "secret")
-	if !strings.HasPrefix(result, "session123.") {
-		t.Error("Signed cookie should start with original value")
-	}
-	if strings.HasSuffix(result, "=") {
-		t.Error("Signature should not end with =")
-	}
-}
-
-func TestSignCookie_Deterministic(t *testing.T) {
-	result1 := signCookie("session123", "secret")
-	result2 := signCookie("session123", "secret")
-	if result1 != result2 {
-		t.Error("Same input should produce same output")
-	}
-}
-
-func TestSignCookie_DifferentSecrets(t *testing.T) {
-	result1 := signCookie("session123", "secret1")
-	result2 := signCookie("session123", "secret2")
-	if result1 == result2 {
-		t.Error("Different secrets should produce different signatures")
-	}
-}
-
-// =============================================================================
-// Proxy Integration Tests
-// =============================================================================
-
-func TestProxy_BuildsCorrectTargetURL(t *testing.T) {
-	// Test that we can build target URL correctly
-	targetURL := buildTargetURL("localhost", 8080, "/api/test", "foo=bar")
-	expected := "http://localhost:8080/api/test?foo=bar"
-	if targetURL != expected {
-		t.Errorf("Target URL = %s, want %s", targetURL, expected)
-	}
-}
-
-func TestProxy_ForwardsToBackend(t *testing.T) {
-	// Create a test backend server
-	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("X-Backend", "true")
-		w.WriteHeader(http.StatusOK)
-		io.WriteString(w, `{"status":"ok"}`)
-	}))
-	defer backend.Close()
-
-	// This test verifies the backend server works
-	resp, err := http.Get(backend.URL)
-	if err != nil {
-		t.Fatalf("Failed to reach backend: %v", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		t.Errorf("Backend status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
-	if resp.Header.Get("X-Backend") != "true" {
-		t.Error("Backend header not set")
-	}
-}
-
-// =============================================================================
-// stripPrefix Tests
-// =============================================================================
-
-func TestStripPrefix_Basic(t *testing.T) {
-	result := stripPrefix("/api/v1/users", "/api")
-	if result != "/v1/users" {
-		t.Errorf("Result = %s, want /v1/users", result)
-	}
-}
-
-func TestStripPrefix_NoMatch(t *testing.T) {
-	result := stripPrefix("/api/v1/users", "/other")
-	if result != "/api/v1/users" {
-		t.Errorf("Result = %s, want /api/v1/users", result)
-	}
-}
-
-func TestStripPrefix_Empty(t *testing.T) {
-	result := stripPrefix("/api", "/api")
-	if result != "" {
-		t.Errorf("Result = %s, want empty", result)
-	}
-}
-
 func (m *mockRegistryProxy) OtherEnvControllerHosts(string) ([]types.HostRecord, error) {
 	return nil, nil
 }
-
 func (m *mockRegistryProxy) UpsertEnvController(string, string, int64, map[string]interface{}) error {
 	return nil
 }
-
 func (m *mockRegistryProxy) LoadByEnv(env string, reload bool) (*types.RegistryData, error) {
 	return m.Get(), nil
 }
-
 func (m *mockRegistryProxy) Close() {}
+
+const testExtKey = "5bbf311a30f4acaec52b7472be854cc95259156275114822ad91615d02d27609ac1ebf7aecfdc2355849a594cc55d042d9906c2c0190a3b7d5f5935d8053a953ede02160a6f8429f1ba971b8d9d6fe6afe7c59af3462d188c4b1a08e9c07670e"
+
+func boolPtr(b bool) *bool { return &b }
+
+// proxyEnv is a service on a test server, the registry and awareness that point to it.
+type proxyEnv struct {
+	reg      *mockRegistryProxy
+	aw       *mockAwarenessProxy
+	port     int
+	received atomic.Value
+	body     atomic.Value
+}
+
+func newProxyEnv(t *testing.T, handler http.HandlerFunc) *proxyEnv {
+	t.Helper()
+	e := &proxyEnv{}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		raw, _ := io.ReadAll(r.Body)
+		e.received.Store(r.Clone(r.Context()))
+		e.body.Store(string(raw))
+		if handler != nil {
+			handler(w, r)
+			return
+		}
+		w.Header().Set("X-Service", "yes")
+		w.WriteHeader(http.StatusTeapot)
+		_, _ = w.Write([]byte("from the service"))
+	}))
+	t.Cleanup(srv.Close)
+	_, p, _ := net.SplitHostPort(srv.Listener.Addr().String())
+	e.port, _ = strconv.Atoi(p)
+	e.reg = &mockRegistryProxy{data: &types.RegistryData{
+		ServiceConfig: &types.GlobalServiceConfig{
+			Key:   types.KeyEncryptionConfig{Algorithm: "aes256", Password: "conformance fixture key"},
+			Ports: types.PortsConfig{Controller: 4000, MaintenanceInc: 1000},
+		},
+		Services: map[string]*types.ServiceConfig{
+			"controller": {Port: 4000, RequestTimeout: 30, RequestTimeoutRenewal: 0},
+			"svc": {Port: e.port, RequestTimeout: 30, RequestTimeoutRenewal: 5, Hosts: &types.ServiceHosts{Latest: "2", ByVersion: map[string][]string{"2": {"127.0.0.1"}}},
+				Versions: map[string]*types.VersionInfo{"1": {ExtKeyRequired: true}, "2": {}}},
+			"oauth": {Port: e.port, Hosts: &types.ServiceHosts{Latest: "1", ByVersion: map[string][]string{"1": {"127.0.0.1"}}},
+				Versions: map[string]*types.VersionInfo{"1": {}}},
+		},
+		CustomRegistry: map[string]interface{}{},
+	}}
+	e.aw = &mockAwarenessProxy{
+		hosts: map[string]*types.HostInfo{
+			"svc:2":   {Name: "svc", Version: "2", Host: "127.0.0.1", Port: e.port},
+			"svc:1":   {Name: "svc", Version: "1", Host: "127.0.0.1", Port: e.port},
+			"oauth:1": {Name: "oauth", Version: "1", Host: "127.0.0.1", Port: e.port},
+		},
+		latest: map[string]string{"svc": "2", "oauth": "1"},
+	}
+	return e
+}
+
+// serve runs URL, GotoService, InjectObj and the gotoservice, as the gateway's chain does.
+func (e *proxyEnv) serve(req *http.Request) *httptest.ResponseRecorder {
+	handler := Context(zap.NewNop(), "test")(URL(nil)(GotoService(e.reg, e.aw)(InjectObj(e.reg, e.aw)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := GetSOAJSContext(r.Context())
+		if ctx.Controller.Gotoservice == nil {
+			w.WriteHeader(299)
+			return
+		}
+		ctx.Controller.Gotoservice(w, r)
+	})))))
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	return rec
+}
+
+func (e *proxyEnv) got() *http.Request {
+	r, _ := e.received.Load().(*http.Request)
+	return r
+}
+
+func TestGotoService_Resolution(t *testing.T) {
+	e := newProxyEnv(t, nil)
+	cases := []struct {
+		name, path string
+		headers    map[string]string
+		code       string
+		status     int
+	}{
+		{"unknown service", "/nope/x", nil, `"code":130`, 0},
+		{"unknown soajs route", "/soajs/other", nil, `"code":130`, 0},
+		{"extKeyRequired without key", "/svc/v1/x", nil, `"code":132`, 0},
+		{"extKeyRequired with a bad key", "/svc/v1/x", map[string]string{"key": "bad"}, `"code":132`, 0},
+		{"soajs acl goes on", "/soajs/acl", nil, "", 299},
+	}
+	for _, c := range cases {
+		req := httptest.NewRequest("GET", c.path, nil)
+		for k, v := range c.headers {
+			req.Header.Set(k, v)
+		}
+		rec := e.serve(req)
+		if c.status != 0 {
+			if rec.Code != c.status {
+				t.Errorf("%s: %d", c.name, rec.Code)
+			}
+			continue
+		}
+		if !strings.Contains(rec.Body.String(), c.code) {
+			t.Errorf("%s: %d %s", c.name, rec.Code, rec.Body.String())
+		}
+	}
+
+	// a key that decrypts passes
+	req := httptest.NewRequest("GET", "/svc/v1/x?key="+testExtKey, nil)
+	if rec := e.serve(req); rec.Code != http.StatusTeapot {
+		t.Errorf("key in the query: %d %s", rec.Code, rec.Body.String())
+	}
+	// no service hosts outside HA
+	e.reg.data.Services["svc"].Hosts = nil
+	if rec := e.serve(httptest.NewRequest("GET", "/svc/x", nil)); !strings.Contains(rec.Body.String(), `"code":130`) {
+		t.Errorf("no hosts: %s", rec.Body.String())
+	}
+	// no version known
+	e.reg.data.Services["svc"].Hosts = &types.ServiceHosts{}
+	e.aw.latest = map[string]string{}
+	if rec := e.serve(httptest.NewRequest("GET", "/svc/x", nil)); !strings.Contains(rec.Body.String(), `"code":130`) {
+		t.Errorf("no version: %s", rec.Body.String())
+	}
+}
+
+func TestRedirect_PassesTheRequestAndTheAnswerAsTheyAre(t *testing.T) {
+	e := newProxyEnv(t, nil)
+	req := httptest.NewRequest("POST", "/svc/a%2Fb/c/?x=1&y=%20", strings.NewReader("payload"))
+	req.Host = "gateway.example"
+	req.Header.Set("X-Custom", "v")
+	req.Header.Set("soajsinjectobj", `{"forged":true}`)
+	rec := e.serve(req)
+	if rec.Code != http.StatusTeapot || rec.Body.String() != "from the service" || rec.Header().Get("X-Service") != "yes" {
+		t.Fatalf("%d %q %v", rec.Code, rec.Body.String(), rec.Header())
+	}
+	got := e.got()
+	if got.RequestURI != "/a%2Fb/c/?x=1&y=%20" {
+		t.Errorf("raw path and query: %q", got.RequestURI)
+	}
+	if got.Host != "gateway.example" || got.Header.Get("X-Custom") != "v" || e.body.Load() != "payload" {
+		t.Errorf("host %q headers %v body %v", got.Host, got.Header, e.body.Load())
+	}
+	if got.Header.Get("soajsinjectobj") != "" {
+		t.Error("only the soajsinjectobj the gateway builds is sent")
+	}
+
+	// HEAD: the status and headers, no body
+	rec = e.serve(httptest.NewRequest("HEAD", "/svc/x", nil))
+	if rec.Code != http.StatusTeapot || rec.Body.Len() != 0 {
+		t.Errorf("HEAD: %d %q", rec.Code, rec.Body.String())
+	}
+}
+
+func TestRedirect_SimpleRTSAndErrors(t *testing.T) {
+	e := newProxyEnv(t, nil)
+	req := httptest.NewRequest("GET", "/oauth/passport/login/github", nil)
+	req.Host = "gateway.example"
+	if rec := e.serve(req); rec.Code != http.StatusTeapot {
+		t.Fatalf("%d %s", rec.Code, rec.Body.String())
+	}
+	if e.got().Host != "127.0.0.1" {
+		t.Errorf("simpleRTS sets Host to the service's host: %q", e.got().Host)
+	}
+
+	// no host: 133; a service that does not answer: 135; no controller entry: 131
+	delete(e.aw.hosts, "svc:2")
+	if rec := e.serve(httptest.NewRequest("GET", "/svc/x", nil)); !strings.Contains(rec.Body.String(), `"code":133`) {
+		t.Errorf("no host: %d %s", rec.Code, rec.Body.String())
+	}
+	e.aw.hosts["svc:2"] = &types.HostInfo{Host: "127.0.0.1"}
+	e.reg.data.Services["svc"].Port = 1
+	if rec := e.serve(httptest.NewRequest("GET", "/svc/x", nil)); !strings.Contains(rec.Body.String(), `"code":135`) {
+		t.Errorf("refused: %d %s", rec.Code, rec.Body.String())
+	}
+	delete(e.reg.data.Services, "controller")
+	if rec := e.serve(httptest.NewRequest("GET", "/svc/x", nil)); !strings.Contains(rec.Body.String(), `"code":131`) {
+		t.Errorf("no controller: %d %s", rec.Code, rec.Body.String())
+	}
+}
+
+// heartbeatServer answers /heartbeat with status, on the service's maintenance port.
+func heartbeatServer(t *testing.T, e *proxyEnv, status int) {
+	t.Helper()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(status) }))
+	t.Cleanup(srv.Close)
+	_, p, _ := net.SplitHostPort(srv.Listener.Addr().String())
+	hb, _ := strconv.Atoi(p)
+	e.reg.data.ServiceConfig.Ports.MaintenanceInc = hb - e.port
+}
+
+func TestRedirect_RequestTimeout(t *testing.T) {
+	slow := func(d time.Duration) http.HandlerFunc {
+		return func(w http.ResponseWriter, r *http.Request) {
+			select {
+			case <-time.After(d):
+				_, _ = w.Write([]byte("late"))
+			case <-r.Context().Done():
+			}
+		}
+	}
+	// requestTimeout 1: an idle wait of 100 ms; requestTimeoutRenewal 3: 134 at the third timeout
+	e := newProxyEnv(t, slow(5*time.Second))
+	heartbeatServer(t, e, 200)
+	e.reg.data.Services["svc"].RequestTimeout = 1
+	e.reg.data.Services["svc"].RequestTimeoutRenewal = 3
+	start := time.Now()
+	rec := e.serve(httptest.NewRequest("GET", "/svc/x", nil))
+	if !strings.Contains(rec.Body.String(), `"code":134`) {
+		t.Errorf("renewals exhausted: %d %s", rec.Code, rec.Body.String())
+	}
+	if d := time.Since(start); d < 250*time.Millisecond || d > 3*time.Second {
+		t.Errorf("134 after %s, want about 300 ms", d)
+	}
+
+	// a heartbeat that fails: 133
+	e = newProxyEnv(t, slow(5*time.Second))
+	heartbeatServer(t, e, 500)
+	e.reg.data.Services["svc"].RequestTimeout = 1
+	if rec := e.serve(httptest.NewRequest("GET", "/svc/x", nil)); !strings.Contains(rec.Body.String(), `"code":133`) {
+		t.Errorf("heartbeat down: %d %s", rec.Code, rec.Body.String())
+	}
+
+	// renewReqMonitorOff: no monitor
+	e = newProxyEnv(t, slow(400*time.Millisecond))
+	e.reg.data.Services["svc"].RequestTimeout = 1
+	e.reg.data.CustomRegistry["gateway"] = map[string]interface{}{"value": map[string]interface{}{"gotoService": map[string]interface{}{"renewReqMonitorOff": true}}}
+	if rec := e.serve(httptest.NewRequest("GET", "/svc/x", nil)); rec.Body.String() != "late" {
+		t.Errorf("monitor off: %d %s", rec.Code, rec.Body.String())
+	}
+
+	// a stream that pauses longer than the idle wait is not cut while its service is healthy
+	e = newProxyEnv(t, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		for i := 0; i < 4; i++ {
+			_, _ = w.Write([]byte("tick\n"))
+			w.(http.Flusher).Flush()
+			time.Sleep(250 * time.Millisecond)
+		}
+	})
+	heartbeatServer(t, e, 200)
+	e.reg.data.Services["svc"].RequestTimeout = 1
+	e.reg.data.Services["svc"].RequestTimeoutRenewal = 2
+	if rec := e.serve(httptest.NewRequest("GET", "/svc/x", nil)); rec.Body.String() != "tick\ntick\ntick\ntick\n" {
+		t.Errorf("stream: %q", rec.Body.String())
+	}
+}
+
+func TestAuthorizeAndSessionCookie(t *testing.T) {
+	// recorded from soajs.core security authorization.setCookie
+	for _, c := range [][2]string{
+		{"Basic c29hanM6QzAxMDEyYjQ1NmY4OWEzY2RlN2doaWprbG1ub3BxcnN0dXY=", "soajsID=s:0123456789abcdefghijklmnopqrstuv.zbXaiV5R4Htro583InOaaXFzN6lBOMjHxCWxFtDQIxo"},
+		{"Basic c29hanM6QzAyMDEyM2M1Njc4ZmFiNGRlOWdoaWprbG1ub3BxcnN0dXY=", "soajsID=s:0123456789abcdefghijklmnopqrstuv.zbXaiV5R4Htro583InOaaXFzN6lBOMjHxCWxFtDQIxo"},
+		{"Basic c29hanM6QzAzMDEyMzRkNjc4OWFmYzVlYmdoaWprbG1ub3BxcnN0dXY=", "soajsID=s:0123456789abcdefghijklmnopqrstuv.zbXaiV5R4Htro583InOaaXFzN6lBOMjHxCWxFtDQIxo"},
+		{"Basic c29hanM6WFlac2hvcnQ=", "soajsID=s:short.yqkCWTXpnH9W5X480CotBJ0BHTrAYvjJNujJDv24+kM"},
+		{"Bearer x", ""},
+		{"Basic bm90c29hanM=", ""},
+	} {
+		if got := sessionCookie(c[0], "s3cret", "soajsID"); got != c[1] {
+			t.Errorf("%s: %q, want %q", c[0], got, c[1])
+		}
+	}
+	if _, ok := umask("C01short"); ok {
+		t.Error("a known style needs a 32-character id")
+	}
+
+	e := newProxyEnv(t, nil)
+	e.reg.data.Services["controller"].Authorization = boolPtr(true)
+	e.reg.data.ServiceConfig.Session = types.SessionConfig{Name: "soajsID", Secret: "s3cret"}
+	req := httptest.NewRequest("GET", "/svc/x", nil)
+	req.Header.Set("Cookie", "a=1")
+	req.Header.Set("soajsauth", "Basic c29hanM6WFlac2hvcnQ=")
+	e.serve(req)
+	if got := e.got().Header.Get("Cookie"); got != "a=1;soajsID=s:short.yqkCWTXpnH9W5X480CotBJ0BHTrAYvjJNujJDv24+kM" {
+		t.Errorf("cookie %q", got)
+	}
+	e.serve(httptest.NewRequest("GET", "/svc/x?soajsauth=Basic%20c29hanM6WFlac2hvcnQ%3D", nil))
+	if got := e.got().Header.Get("Cookie"); got != ";soajsID=s:short.yqkCWTXpnH9W5X480CotBJ0BHTrAYvjJNujJDv24+kM" {
+		t.Errorf("from the query, without a cookie: %q", got)
+	}
+}
+
+func TestRoaming(t *testing.T) {
+	e := newProxyEnv(t, nil)
+	req := func() *http.Request {
+		r := httptest.NewRequest("GET", "/svc/x", nil)
+		r.Header.Set("soajsroaming", "1")
+		r.RemoteAddr = "10.0.0.9:1234"
+		return r
+	}
+	if rec := e.serve(req()); !strings.Contains(rec.Body.String(), `"code":165`) {
+		t.Errorf("not configured: %d %s", rec.Code, rec.Body.String())
+	}
+	e.reg.data.CustomRegistry["oauth"] = map[string]interface{}{"value": map[string]interface{}{"roaming": map[string]interface{}{
+		"services": map[string]interface{}{"svc": map[string]interface{}{"whitelistips": []interface{}{"10.0.0.9"}}},
+	}}}
+	if rec := e.serve(req()); rec.Code != 200 || rec.Body.String() != `{"result":true,"data":true}` {
+		t.Errorf("whitelisted: %d %s", rec.Code, rec.Body.String())
+	}
+	r := req()
+	r.RemoteAddr = "10.0.0.8:1234"
+	if rec := e.serve(r); !strings.Contains(rec.Body.String(), `"code":165`) {
+		t.Errorf("other IP: %d %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestEncodeURIComponent(t *testing.T) {
+	// recorded from encodeURIComponent in Node.js
+	if got := encodeURIComponent("Jean-Luc Picard é ✓ !*()~ & %"); got != "Jean-Luc%20Picard%20%C3%A9%20%E2%9C%93%20!*()~%20%26%20%25" {
+		t.Errorf("%q", got)
+	}
+	if encodeHeaderValue(nil) != "" {
+		t.Error("none is empty")
+	}
+}
+
+func injectCtx() *SOAJSContext {
+	params := &types.ServiceParams{
+		URLInfo: &types.URLInfo{ServiceName: "svc", ServiceVersion: "2"},
+		KeyAPI:  true,
+		Package: &types.Package{ACL: map[string]interface{}{"svc": map[string]interface{}{}}, ACLAllEnv: map[string]interface{}{"dev": map[string]interface{}{}}},
+	}
+	key := &types.Key{
+		InternalKey: "ik", ExtKey: "ek",
+		Tenant:      types.KeyTenant{ID: "t1", Code: "TC", Name: "Tenant", Type: "product", Profile: map[string]interface{}{"p": 1}},
+		Application: types.KeyApplication{Product: "PROD", Package: "PROD_PACK", AppID: "app"},
+		Config:      map[string]interface{}{"svc": map[string]interface{}{"a": 1}, "peer": map[string]interface{}{"b": 2}, "commonFields": map[string]interface{}{"c": 3}},
+	}
+	return &SOAJSContext{Log: zap.NewNop(), Key: key, ServicesConfig: key.Config, Controller: &ControllerContext{ServiceParams: params}}
+}
+
+func TestBuildInjectObj(t *testing.T) {
+	e := newProxyEnv(t, nil)
+	e.aw.hosts["controller:"] = &types.HostInfo{Host: "10.0.0.1"}
+	ctx := injectCtx()
+	h, ok := BuildInjectObj(ctx, e.reg, e.aw, &httpRequestInfo{userAgent: "curl/8", clientIP: "1.2.3.4"})
+	if !ok {
+		t.Fatal("too large")
+	}
+	want := `{"tenant":{"id":"t1","name":"Tenant","code":"TC","locked":false,"type":"product"},` +
+		`"key":{"config":{"c":3,"svc":{"a":1}},"iKey":"ik","eKey":"ek"},` +
+		`"application":{"product":"PROD","package":"PROD_PACK","appId":"app"},"package":{},` +
+		`"device":"curl/8","geo":{"ip":"1.2.3.4"},"awareness":{"host":"10.0.0.1","port":4000}}`
+	if h != want {
+		t.Errorf("\n got  %s\n want %s", h, want)
+	}
+
+	// provision_ACL, tenant_Profile, interConnect (the peer's config joins key.config)
+	e.reg.data.Services["svc"].Versions["2"] = &types.VersionInfo{ProvisionACL: true, TenantProfile: true,
+		InterConnect: []types.InterConnectItem{{Name: "oauth", Version: "1"}, {Name: "missing"}, {Name: "oauth"}}}
+	ctx.ServicesConfig["oauth"] = map[string]interface{}{"o": 1}
+	ctx.Controller.ServiceParams.SkipACL = true
+	h, _ = BuildInjectObj(ctx, e.reg, e.aw, &httpRequestInfo{userAgent: "curl/8", clientIP: "1.2.3.4"})
+	var got map[string]interface{}
+	if err := json.Unmarshal([]byte(h), &got); err != nil {
+		t.Fatal(err)
+	}
+	if got["tenant"].(map[string]interface{})["profile"] == nil || got["package"].(map[string]interface{})["acl"] == nil {
+		t.Errorf("profile and ACL: %s", h)
+	}
+	if _, ok := got["device"]; ok {
+		t.Error("no device or geo when the ACL is skipped")
+	}
+	peers := got["awareness"].(map[string]interface{})["interConnect"].([]interface{})
+	if len(peers) != 1 || peers[0].(map[string]interface{})["latest"] != "1" || peers[0].(map[string]interface{})["port"] != float64(e.port) {
+		t.Errorf("interConnect: oauth@1 only, oauth latest has no host here: %v", peers)
+	}
+	if got["key"].(map[string]interface{})["config"].(map[string]interface{})["oauth"] == nil {
+		t.Error("the peer's config joins key.config")
+	}
+
+	// without a controller host: no awareness, no interConnect
+	delete(e.aw.hosts, "controller:")
+	h, _ = BuildInjectObj(ctx, e.reg, e.aw, &httpRequestInfo{})
+	if strings.Contains(h, "awareness") {
+		t.Errorf("no awareness: %s", h)
+	}
+
+	// the size limit
+	t.Setenv("SOAJS_MAX_INJECT_HEADER_SIZE", "50")
+	if _, ok := BuildInjectObj(ctx, e.reg, e.aw, &httpRequestInfo{}); ok {
+		t.Error("larger than the limit")
+	}
+}
+
+// No middleware after Context sees a soajsinjectobj the request came with.
+func TestContext_RemovesInboundInjectObj(t *testing.T) {
+	seen := "unset"
+	handler := Context(zap.NewNop(), "test")(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		seen = r.Header.Get("soajsinjectobj")
+	}))
+	req := httptest.NewRequest("GET", "/svc/x", nil)
+	req.Header.Set("soajsinjectobj", `{"tenant":{"id":"sent"}}`)
+	req.Header.Set("key", "k")
+	handler.ServeHTTP(httptest.NewRecorder(), req)
+	if seen != "" {
+		t.Errorf("a middleware after Context saw %q", seen)
+	}
+	if req.Header.Get("key") != "k" {
+		t.Error("other headers are kept")
+	}
+}

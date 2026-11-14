@@ -57,12 +57,16 @@ func Urac(driver *urac.Driver, prov provision.Provision, reg registry.Registry, 
 					}
 					code = c
 				}
-				if data, err := reg.LoadByEnv(token.Env, false); err != nil || data == nil {
+				data, err := reg.LoadByEnv(token.Env, false)
+				if err != nil || data == nil {
 					soajsCtx.Log.Error("roaming: registry not found", zap.String("env", token.Env), zap.Error(err))
 					WriteCode(w, 170)
 					return
 				}
-				roaming = &urac.Roaming{TID: token.ClientID, ID: token.ClientID, User: token.User, Code: code}
+				roaming = &urac.Roaming{TID: token.ClientID, ID: token.ClientID, User: token.User, Code: code, TenantMetaDB: map[string]interface{}{}}
+				if data.TenantMetaDB != nil {
+					roaming.TenantMetaDB = data.TenantMetaDB
+				}
 				soajsCtx.Roaming = roaming
 			}
 
