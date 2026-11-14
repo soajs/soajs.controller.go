@@ -2,357 +2,190 @@ package middleware
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
-	"fmt"
+	"io"
+	"net"
 	"net/http"
-	"regexp"
+	"strconv"
 	"strings"
-	"sync"
+	"time"
 
 	"github.com/soajs/soajs.controller.go/internal/awareness"
+	"github.com/soajs/soajs.controller.go/internal/lib"
 	"github.com/soajs/soajs.controller.go/internal/registry"
-	"go.mongodb.org/mongo-driver/bson"
-	"go.uber.org/zap"
+	"github.com/soajs/soajs.controller.go/pkg/types"
 )
 
-// LastSeenConfig holds lastSeen configuration from custom registry
-type LastSeenConfig struct {
-	Active         bool                   `json:"active"`
-	ServiceName    string                 `json:"serviceName"`
-	ServiceVersion string                 `json:"serviceVersion"`
-	API            string                 `json:"api"`
-	Network        string                 `json:"network"`
-	Include        map[string]interface{} `json:"include"`
-}
+// lastSeenTimeout is the timeout of a notification (lib/request.js httpRequest).
+const lastSeenTimeout = 8 * time.Second
 
-// regexpCache caches compiled regex patterns for route matching
-var (
-	regexpCache   = make(map[string]*regexp.Regexp)
-	regexpCacheMu sync.RWMutex
-	maxCacheSize  = 100
-)
+var lastSeenClient = &http.Client{Timeout: lastSeenTimeout}
 
-// LastSeen middleware updates user's last seen timestamp after request completion
+// LastSeen notifies that a logged-in user was active, as the Node.js lastSeen middleware does
+// (mw/lastSeen): after the request is passed on, when the custom registry gateway lastSeen is
+// active and its include filter takes the request, the user's service (serviceName, default
+// urac, version 3, api /user/last/seen) and each of its targets is called, without waiting, with
+// the request's soajsinjectobj and, when lastSeen has a network, {"network": ...}.
 func LastSeen(reg registry.Registry, aw awareness.Awareness) Middleware {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			// Call next first - lastSeen runs after response
+			// the request's soajsinjectobj, as set before the service is called
+			inject := r.Header.Get("soajsinjectobj")
 			next.ServeHTTP(w, r)
 
-			// Run lastSeen check asynchronously
-			ctx := r.Context()
-			soajsCtx := GetSOAJSContext(ctx)
-			if soajsCtx == nil {
+			soajsCtx := GetSOAJSContext(r.Context())
+			if soajsCtx == nil || soajsCtx.Urac == nil || soajsCtx.Controller == nil || soajsCtx.Controller.ServiceParams == nil {
 				return
 			}
-
-			// Check for authenticated user (UserInfo is set by OAuth middleware when token is valid)
-			if soajsCtx.Controller == nil || soajsCtx.Controller.ServiceParams == nil {
-				return
-			}
-			// UserInfo indicates an authenticated user - check this instead of UracDriver
-			// because UracDriver is only set when OAuth is required by ACL
-			if soajsCtx.Controller.ServiceParams.UserInfo == nil {
-				return
-			}
-
-			// Get lastSeen config from custom registry
 			regData := reg.Get()
 			if regData == nil {
-				soajsCtx.Log.Debug("lastSeen skipped - no registry data")
 				return
 			}
-
-			lastSeenConfig := getLastSeenConfig(regData.CustomRegistry)
-			if lastSeenConfig == nil {
-				soajsCtx.Log.Debug("lastSeen skipped - no config")
+			gateway, _ := regData.CustomRegistry["gateway"].(map[string]interface{})
+			value, _ := gateway["value"].(map[string]interface{})
+			config, _ := value["lastSeen"].(map[string]interface{})
+			if !truthy(config["active"]) {
 				return
 			}
-			if !lastSeenConfig.Active {
-				soajsCtx.Log.Debug("lastSeen skipped - not active")
+			info := soajsCtx.Controller.ServiceParams.URLInfo
+			var service, api, fullPath string
+			if info != nil {
+				service, api, fullPath = info.ServiceName, info.ServicePath, info.FullPath
+			}
+			include, _ := config["include"].(map[string]interface{})
+			if _, has := config["include"]; has && truthy(config["include"]) && !lastSeenIncludes(include, service, api, fullPath, r.Method) {
+				soajsCtx.Log.Debug("lastSeen skipped for [" + service + " " + r.Method + " " + api + "]")
 				return
 			}
-
-			// Get service info
-			serviceName := soajsCtx.Controller.ServiceParams.ServiceName
-			if serviceName == "" && soajsCtx.Controller.ServiceParams.URLInfo != nil {
-				serviceName = soajsCtx.Controller.ServiceParams.URLInfo.ServiceName
-			}
-			apiPath := ""
-			if soajsCtx.Controller.ServiceParams.URLInfo != nil {
-				apiPath = soajsCtx.Controller.ServiceParams.URLInfo.ServicePath
-			}
-			method := r.Method
-
-			// Check include filter
-			if !shouldTriggerLastSeenCheck(lastSeenConfig.Include, serviceName, apiPath, method, soajsCtx.Log) {
-				soajsCtx.Log.Debug("lastSeen skipped - include filter not matched",
-					zap.String("service", serviceName),
-					zap.String("method", method),
-					zap.String("api", apiPath),
-					zap.Any("includeFilter", lastSeenConfig.Include))
+			profile := soajsCtx.Urac.Profile(false)
+			if profile == nil || !truthy(profile["_id"]) {
+				soajsCtx.Log.Debug("lastSeen failed with no userId")
 				return
 			}
-
-			// Get user ID from UserInfo (set by OAuth middleware)
-			userId := ""
-			if soajsCtx.Controller.ServiceParams.UserInfo != nil {
-				if id, ok := soajsCtx.Controller.ServiceParams.UserInfo["_id"].(string); ok {
-					userId = id
+			item := lastSeenItem{name: "urac", version: "3", api: "/user/last/seen"}
+			if s, ok := config["serviceName"].(string); ok && s != "" {
+				item.name = s
+			}
+			if s, ok := config["serviceVersion"].(string); ok && s != "" {
+				item.version = s
+			}
+			if s, ok := config["api"].(string); ok && s != "" {
+				item.api = s
+			}
+			network := config["network"]
+			go notifyLastSeen(regData, aw, item, network, inject)
+			if targets, ok := config["targets"].([]interface{}); ok {
+				for _, t := range targets {
+					target, _ := t.(map[string]interface{})
+					name, _ := target["serviceName"].(string)
+					path, _ := target["api"].(string)
+					if name == "" || path == "" {
+						soajsCtx.Log.Debug("lastSeen target skipped, serviceName and api are required")
+						continue
+					}
+					version, _ := target["serviceVersion"].(string)
+					method, _ := target["method"].(string)
+					go notifyLastSeen(regData, aw, lastSeenItem{name: name, version: version, api: path, method: method}, network, inject)
 				}
 			}
-			if userId == "" {
-				soajsCtx.Log.Debug("lastSeen skipped - no userId")
-				return
-			}
-
-			// Make async call to update last seen
-			go updateLastSeenAsync(soajsCtx.Log, reg, aw, lastSeenConfig, r.Header.Get("soajsinjectobj"))
 		})
 	}
 }
 
-// getLastSeenConfig extracts lastSeen config from custom registry
-func getLastSeenConfig(customRegistry map[string]interface{}) *LastSeenConfig {
-	if customRegistry == nil {
-		return nil
-	}
-
-	// Get gateway entry
-	gatewayEntry, ok := customRegistry["gateway"]
-	if !ok {
-		return nil
-	}
-
-	// Handle both map[string]interface{} and bson.M
-	var gatewayValue map[string]interface{}
-	switch v := gatewayEntry.(type) {
-	case map[string]interface{}:
-		if val, exists := v["value"]; exists {
-			gatewayValue = toMap(val)
-		} else {
-			gatewayValue = v
-		}
-	case bson.M:
-		if val, exists := v["value"]; exists {
-			gatewayValue = toMap(val)
-		} else {
-			gatewayValue = v
-		}
-	default:
-		return nil
-	}
-
-	if gatewayValue == nil {
-		return nil
-	}
-
-	lastSeenData := gatewayValue["lastSeen"]
-	if lastSeenData == nil {
-		return nil
-	}
-
-	lastSeenMap := toMap(lastSeenData)
-	if lastSeenMap == nil {
-		return nil
-	}
-
-	config := &LastSeenConfig{
-		ServiceName:    "urac",
-		ServiceVersion: "3",
-		API:            "/user/last/seen",
-	}
-
-	if active, ok := lastSeenMap["active"].(bool); ok {
-		config.Active = active
-	}
-	if sn, ok := lastSeenMap["serviceName"].(string); ok && sn != "" {
-		config.ServiceName = sn
-	}
-	if sv, ok := lastSeenMap["serviceVersion"].(string); ok && sv != "" {
-		config.ServiceVersion = sv
-	}
-	if api, ok := lastSeenMap["api"].(string); ok && api != "" {
-		config.API = api
-	}
-	if network, ok := lastSeenMap["network"].(string); ok {
-		config.Network = network
-	}
-	if include := toMap(lastSeenMap["include"]); include != nil {
-		config.Include = include
-	}
-
-	return config
+type lastSeenItem struct {
+	name, version, api, method string
 }
 
-// shouldTriggerLastSeenCheck checks if lastSeen should be triggered
-func shouldTriggerLastSeenCheck(include map[string]interface{}, serviceName, apiPath, method string, log *zap.Logger) bool {
-	// No include filter = trigger for all (backward compatible)
-	if include == nil || len(include) == 0 {
-		return true
+// notifyLastSeen calls one target, without anyone waiting for the answer.
+func notifyLastSeen(reg *types.RegistryData, aw awareness.Awareness, item lastSeenItem, network interface{}, inject string) {
+	svc := reg.Services[item.name]
+	if svc == nil || svc.Port == 0 {
+		return
 	}
-
-	// Service not in whitelist
-	serviceConfig, ok := include[serviceName]
-	if !ok {
-		return false
+	host, err := aw.GetHost(item.name, item.version)
+	if err != nil {
+		return
 	}
-
-	// Service-level match (all APIs, all methods)
-	if serviceBool, ok := serviceConfig.(bool); ok && serviceBool {
-		return true
+	method := item.method
+	if method == "" {
+		method = "POST"
 	}
-
-	// API-level match - handle both map[string]interface{} and bson.M
-	serviceMap := toMap(serviceConfig)
-	if serviceMap == nil {
-		return false
+	var body io.Reader = http.NoBody
+	if truthy(network) {
+		raw, _ := json.Marshal(map[string]interface{}{"network": network})
+		body = bytes.NewReader(raw)
 	}
-
-	apisConfig, ok := serviceMap["apis"]
-	if !ok {
-		return false
+	ctx, cancel := context.WithTimeout(context.Background(), lastSeenTimeout)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, strings.ToUpper(method), "http://"+net.JoinHostPort(host.Host, strconv.Itoa(svc.Port))+item.api, body)
+	if err != nil {
+		return
 	}
-
-	apis := toMap(apisConfig)
-	if apis == nil {
-		return false
+	req.Header.Set("Content-Type", "application/json")
+	if inject != "" {
+		req.Header.Set("soajsinjectobj", inject)
 	}
-
-	return isLastSeenApiMethodMatch(apis, apiPath, method)
+	resp, err := lastSeenClient.Do(req)
+	if err != nil {
+		return
+	}
+	resp.Body.Close()
 }
 
-// isLastSeenApiMethodMatch checks if API path and method match
-func isLastSeenApiMethodMatch(apis map[string]interface{}, apiPath, method string) bool {
-	// Check for wildcard first
-	if methodConfig, ok := apis["*"]; ok {
-		return isLastSeenMethodMatch(methodConfig, method)
+// lastSeenIncludes is shouldTriggerLastSeen: the service set to true, or its apis (the path
+// relative to the service, else the full path; "*", an exact route, or a route with parameters)
+// with true or a list of methods.
+func lastSeenIncludes(include map[string]interface{}, service, api, fullPath, method string) bool {
+	config, ok := include[service]
+	if !ok || !truthy(config) {
+		return false
 	}
-
-	// Check exact match
-	if methodConfig, ok := apis[apiPath]; ok {
-		return isLastSeenMethodMatch(methodConfig, method)
+	if config == true {
+		return true
 	}
+	c, ok := config.(map[string]interface{})
+	if !ok {
+		return false
+	}
+	apis, ok := c["apis"].(map[string]interface{})
+	if !ok || !truthy(c["apis"]) {
+		return false
+	}
+	if api != "" && lastSeenAPIMatch(apis, api, method) {
+		return true
+	}
+	return fullPath != "" && fullPath != api && lastSeenAPIMatch(apis, fullPath, method)
+}
 
-	// Check pattern matching for routes with path params
-	for routePattern, methodConfig := range apis {
-		if strings.Contains(routePattern, "/:") {
-			re := getLastSeenRouteRegExp(routePattern)
-			if re != nil && re.MatchString(apiPath) {
-				return isLastSeenMethodMatch(methodConfig, method)
-			}
+func lastSeenAPIMatch(apis map[string]interface{}, path, method string) bool {
+	if v, ok := apis["*"]; ok && truthy(v) {
+		return lastSeenMethodMatch(v, method)
+	}
+	if v, ok := apis[path]; ok && truthy(v) {
+		return lastSeenMethodMatch(v, method)
+	}
+	for _, route := range sortedMapKeys(apis) {
+		if !strings.Contains(route, "/:") {
+			continue
+		}
+		if re, err := lib.PathToRegexp(route); err == nil && re.MatchString(path) {
+			return lastSeenMethodMatch(apis[route], method)
 		}
 	}
-
 	return false
 }
 
-// isLastSeenMethodMatch checks if method matches
-func isLastSeenMethodMatch(methodConfig interface{}, method string) bool {
-	// true = all methods
-	if boolVal, ok := methodConfig.(bool); ok && boolVal {
+func lastSeenMethodMatch(v interface{}, method string) bool {
+	if v == true {
 		return true
 	}
-
-	// Array of methods - handle both []interface{} and bson.A
-	methods := toSlice(methodConfig)
-	if methods != nil {
-		lowerMethod := strings.ToLower(method)
-		for _, m := range methods {
-			if mStr, ok := m.(string); ok && strings.ToLower(mStr) == lowerMethod {
+	if list, ok := v.([]interface{}); ok {
+		for _, m := range list {
+			if s, ok := m.(string); ok && strings.EqualFold(s, method) {
 				return true
 			}
 		}
 	}
-
 	return false
-}
-
-// getLastSeenRouteRegExp gets or creates a cached RegExp
-func getLastSeenRouteRegExp(route string) *regexp.Regexp {
-	regexpCacheMu.RLock()
-	if re, ok := regexpCache[route]; ok {
-		regexpCacheMu.RUnlock()
-		return re
-	}
-	regexpCacheMu.RUnlock()
-
-	// Convert Express-style route to regex
-	pattern := "^" + regexp.QuoteMeta(route)
-	pattern = strings.ReplaceAll(pattern, "\\:", ":")
-	re := regexp.MustCompile(`:(\w+)`)
-	pattern = re.ReplaceAllString(pattern, `[^/]+`)
-	pattern += "$"
-
-	compiled, err := regexp.Compile(pattern)
-	if err != nil {
-		return nil
-	}
-
-	regexpCacheMu.Lock()
-	if len(regexpCache) >= maxCacheSize {
-		count := 0
-		for k := range regexpCache {
-			delete(regexpCache, k)
-			count++
-			if count >= maxCacheSize/4 {
-				break
-			}
-		}
-	}
-	regexpCache[route] = compiled
-	regexpCacheMu.Unlock()
-
-	return compiled
-}
-
-// updateLastSeenAsync makes async call to update last seen
-func updateLastSeenAsync(log *zap.Logger, reg registry.Registry, aw awareness.Awareness, config *LastSeenConfig, injectObj string) {
-	// Get host for the service
-	hostInfo, err := aw.GetHost(config.ServiceName, config.ServiceVersion)
-	if err != nil || hostInfo == nil {
-		log.Debug("lastSeen failed - no host",
-			zap.String("service", config.ServiceName),
-			zap.String("version", config.ServiceVersion))
-		return
-	}
-
-	// Get port from registry
-	regData := reg.Get()
-	port := hostInfo.Port
-	if regData != nil && regData.Services != nil {
-		if svc, ok := regData.Services[config.ServiceName]; ok && svc.Port > 0 {
-			port = svc.Port
-		}
-	}
-
-	// Build request
-	uri := fmt.Sprintf("http://%s:%d%s", hostInfo.Host, port, config.API)
-
-	var body []byte
-	if config.Network != "" {
-		bodyMap := map[string]string{"network": config.Network}
-		body, _ = json.Marshal(bodyMap)
-	}
-
-	req, err := http.NewRequest("POST", uri, bytes.NewReader(body))
-	if err != nil {
-		log.Debug("lastSeen failed - request creation error", zap.Error(err))
-		return
-	}
-
-	req.Header.Set("Content-Type", "application/json")
-	if injectObj != "" {
-		req.Header.Set("soajsinjectobj", injectObj)
-	}
-
-	// Execute request
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		log.Debug("lastSeen failed", zap.Error(err))
-		return
-	}
-	defer resp.Body.Close()
-
-	log.Debug("lastSeen updated", zap.Int("status", resp.StatusCode))
 }

@@ -44,7 +44,7 @@ var proxyTransport http.RoundTripper = &http.Transport{
 //   - a version with extKeyRequired needs a key that decrypts (else 132);
 //   - the oauth passport login is passed through (simpleRTS), a soajsroaming request is answered
 //     with the injectObj (roaming), any other is redirected to the service.
-func GotoService(reg registry.Registry, aw awareness.Awareness) Middleware {
+func GotoService(reg registry.Registry, aw awareness.Awareness, mon *Monitor) Middleware {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			soajsCtx := GetSOAJSContext(r.Context())
@@ -163,7 +163,7 @@ func GotoService(reg registry.Registry, aw awareness.Awareness) Middleware {
 			switch {
 			case passportLogin:
 				soajsCtx.Controller.Gotoservice = func(w http.ResponseWriter, r *http.Request) {
-					redirect(w, r, soajsCtx, reg, aw, true)
+					redirect(w, r, soajsCtx, reg, aw, nil, true)
 				}
 			case r.Header.Get("soajsroaming") != "":
 				soajsCtx.Controller.Gotoservice = func(w http.ResponseWriter, r *http.Request) {
@@ -171,7 +171,7 @@ func GotoService(reg registry.Registry, aw awareness.Awareness) Middleware {
 				}
 			default:
 				soajsCtx.Controller.Gotoservice = func(w http.ResponseWriter, r *http.Request) {
-					redirect(w, r, soajsCtx, reg, aw, false)
+					redirect(w, r, soajsCtx, reg, aw, mon, false)
 				}
 			}
 			next.ServeHTTP(w, r)
@@ -343,13 +343,21 @@ func (m *requestMonitor) Write(p []byte) (int, error) {
 
 type monitoredBody struct {
 	io.ReadCloser
-	m *requestMonitor
+	m   *requestMonitor
+	rec *monitorRecord
+	req *http.Request
 }
 
 func (b monitoredBody) Read(p []byte) (int, error) {
 	n, err := b.ReadCloser.Read(p)
 	if n > 0 {
 		b.m.touch()
+		if b.rec != nil {
+			b.rec.captureBody(b.req, p[:n])
+		}
+	}
+	if err == io.EOF && b.rec != nil {
+		b.rec.bodyEnd()
 	}
 	return n, err
 }
@@ -401,7 +409,7 @@ func (m *requestMonitor) run(log *zap.Logger, idle time.Duration, renewals int, 
 // and query after the service and the request's headers, the gateway's soajsinjectobj among them,
 // and the soajsauth session cookie when the gateway authorizes; the service's status, headers and
 // body as they come. A call that fails answers 135. simpleRTS sets Host to the service's host.
-func redirect(w http.ResponseWriter, r *http.Request, soajsCtx *SOAJSContext, reg registry.Registry, aw awareness.Awareness, simple bool) {
+func redirect(w http.ResponseWriter, r *http.Request, soajsCtx *SOAJSContext, reg registry.Registry, aw awareness.Awareness, mon *Monitor, simple bool) {
 	regData := reg.Get()
 	params := soajsCtx.Controller.ServiceParams
 	name, version := params.URLInfo.ServiceName, params.URLInfo.ServiceVersion
@@ -437,10 +445,25 @@ func redirect(w http.ResponseWriter, r *http.Request, soajsCtx *SOAJSContext, re
 		})
 	}
 
+	// the soamonitor record of a redirect (not simpleRTS)
+	var rec *monitorRecord
+	if !simple && mon != nil {
+		rec = newMonitorRecord(regData, r, params, host)
+	}
+	send := func() {
+		if rec.wantsResponse() {
+			mon.Send(rec, r.Header.Get("soajsinjectobj"))
+		}
+	}
+
 	target := "http://" + net.JoinHostPort(host, strconv.Itoa(svc.Port)) + params.URLInfo.URL
 	var body io.Reader = http.NoBody
 	if r.Body != nil && r.Body != http.NoBody {
-		body = monitoredBody{r.Body, m}
+		mb := monitoredBody{ReadCloser: r.Body, m: m}
+		if rec.wantsBody(r.Method) {
+			mb.rec, mb.req = rec, r
+		}
+		body = mb
 	}
 	out, err := http.NewRequestWithContext(ctx, r.Method, target, body)
 	if err != nil {
@@ -464,22 +487,47 @@ func redirect(w http.ResponseWriter, r *http.Request, soajsCtx *SOAJSContext, re
 			soajsCtx.Log.Error(err.Error() + " with [" + name + "@" + version + "]")
 		}
 		m.respond(135)
+		send()
 		return
 	}
 	defer resp.Body.Close()
 	if !m.writeHeader(resp.StatusCode, resp.Header) {
 		return
 	}
+	if rec.wantsResponse() {
+		rec.responseStart(resp.Header.Get("Content-Type"))
+	}
 	if r.Method == http.MethodHead {
 		m.end()
+		send()
 		return
 	}
-	if _, err := io.Copy(m, resp.Body); err != nil && !m.isEnded() {
+	var dst io.Writer = m
+	if rec.wantsResponse() {
+		dst = capturingWriter{m, rec}
+	}
+	if _, err := io.Copy(dst, resp.Body); err != nil && !m.isEnded() {
 		soajsCtx.Log.Error(err.Error() + " with [" + name + "@" + version + "]")
 		m.respond(135)
+		send()
 		return
 	}
 	m.end()
+	send()
+}
+
+// capturingWriter passes the answer on and records it for the monitor.
+type capturingWriter struct {
+	m   *requestMonitor
+	rec *monitorRecord
+}
+
+func (c capturingWriter) Write(p []byte) (int, error) {
+	n, err := c.m.Write(p)
+	if n > 0 {
+		c.rec.captureResponse(p[:n])
+	}
+	return n, err
 }
 
 func renewReqMonitorOff(reg *types.RegistryData) bool {

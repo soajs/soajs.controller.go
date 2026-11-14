@@ -95,6 +95,15 @@
             "saveUninitialized": false,
             "secret": "conformance session secret",
             "unset": "keep"
+          },
+          "throttling": {
+            "none": {
+              "type": 1,
+              "window": 60000,
+              "limit": 0,
+              "retries": 0,
+              "delay": 0
+            }
           }
         }
       }
@@ -242,7 +251,14 @@
           "ip2ban": [
             "10.255.0.1"
           ],
-          "throttling": {}
+          "throttling": {
+            "other": {
+              "privateAPIStrategy": "none",
+              "apis": [
+                "/throttled"
+              ]
+            }
+          }
         }
       }
     },
@@ -649,6 +665,10 @@
                   "get": {
                     "apis": {
                       "/hello": {
+                        "access": true,
+                        "group": "Hello"
+                      },
+                      "/throttled": {
                         "access": true,
                         "group": "Hello"
                       }

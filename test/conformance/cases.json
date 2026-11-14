@@ -120,6 +120,20 @@
     }
   },
   {
+    "name": "throttled",
+    "about": "a private API over its throttling limit: 429 with the rate-limit headers",
+    "method": "GET",
+    "path": "/other/v1/throttled",
+    "headers": {
+      "key": "$KEY_DEFAULT",
+      "access_token": "$TOKEN_VALID"
+    },
+    "compareHeaders": [
+      "X-RateLimit-Limit",
+      "X-RateLimit-Remaining"
+    ]
+  },
+  {
     "name": "public_ok",
     "method": "GET",
     "path": "/conform/v1/public/hello",

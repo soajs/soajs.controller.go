@@ -31,7 +31,10 @@ type ServiceParams struct {
 type URLInfo struct {
 	// URL is the raw path after the service, with its query string: what the service is called
 	// with (Node.js serviceParams.url).
-	URL              string
+	URL string
+	// FullPath is the path, with the service and without the version segment (Node.js
+	// parsedUrl.pathname).
+	FullPath         string
 	OriginalPath     string
 	ServiceName      string
 	ServiceVersion   string
