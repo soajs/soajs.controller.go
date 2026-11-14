@@ -10,13 +10,16 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"os"
 	"strings"
 	"time"
 
 	"github.com/soajs/soajs.controller.go/internal/awareness"
 	"github.com/soajs/soajs.controller.go/internal/config"
+	"github.com/soajs/soajs.controller.go/internal/lib"
 	"github.com/soajs/soajs.controller.go/internal/provision"
 	"github.com/soajs/soajs.controller.go/internal/registry"
+	"github.com/soajs/soajs.controller.go/pkg/security"
 	"github.com/soajs/soajs.controller.go/pkg/types"
 	"go.uber.org/zap"
 )
@@ -126,55 +129,63 @@ func GotoService(prov provision.Provision, reg registry.Registry, aw awareness.A
 				serviceParams.URLInfo.ServicePath = servicePath
 			}
 
-			// Skip other /soajs/* routes - they're handled by SoajsRoutes middleware
+			// Gateway routes: /soajs/acl and /soajs/mcp are handled further on; any other /soajs
+			// route is not a service (Node.js extractBuildParameters finds no "soajs" service)
 			if serviceName == "soajs" {
-				next.ServeHTTP(w, r)
+				if servicePath == "/acl" || strings.HasPrefix(servicePath, "/acl/") || servicePath == "/mcp" {
+					next.ServeHTTP(w, r)
+					return
+				}
+				WriteCode(w, 130)
 				return
 			}
 
-			// Check if service requires external key (extKeyRequired)
-			// If true and no key is provided, return error 132
+			// The service must have a port, and hosts unless in HA; the version is the requested
+			// one (or the package's latest, set by keyACL), else the latest the hosts run
 			regData := reg.Get()
-			if regData != nil && regData.Services != nil {
-				if svc, ok := regData.Services[serviceName]; ok {
-					// Check version-specific extKeyRequired
-					extKeyRequired := false
-					if svc.Versions != nil {
-						// Get version to check - use specified version or find latest
-						ver := serviceVersion
-						if ver == "" {
-							// Get latest version from service hosts or find from versions map
-							if svc.Hosts != nil && svc.Hosts.Latest != "" {
-								ver = svc.Hosts.Latest
-							} else {
-								// Find latest from versions map
-								for v := range svc.Versions {
-									if ver == "" || v > ver {
-										ver = v
-									}
-								}
-							}
-						}
-						if ver != "" {
-							if vInfo, vok := svc.Versions[ver]; vok && vInfo != nil {
-								extKeyRequired = vInfo.ExtKeyRequired
-							}
+			if regData == nil {
+				WriteCode(w, 130)
+				return
+			}
+			svc := regData.Services[serviceName]
+			isHA := os.Getenv("SOAJS_DEPLOY_HA") != ""
+			if svc == nil || svc.Port == 0 || (!isHA && svc.Hosts == nil) {
+				WriteCode(w, 130)
+				return
+			}
+			if serviceVersion == "" {
+				if svc.Hosts != nil {
+					serviceVersion = svc.Hosts.Latest
+				} else {
+					for v := range svc.Versions {
+						if serviceVersion == "" || lib.IsLatest(v, serviceVersion) {
+							serviceVersion = v
 						}
 					}
-
-					// If extKeyRequired, check for key
-					if extKeyRequired {
-						key := r.Header.Get("key")
-						if key == "" {
-							key = r.URL.Query().Get("key")
-						}
-						if key == "" {
-							WriteError(w, http.StatusUnauthorized,
-								config.ErrCodeKeyRequired,
-								config.DefaultErrors[config.ErrCodeKeyRequired])
-							return
-						}
-					}
+				}
+				if serviceVersion == "" {
+					WriteCode(w, 130)
+					return
+				}
+				serviceParams.URLInfo.ServiceVersion = serviceVersion
+			}
+			extKeyRequired := false
+			if v := svc.Versions[serviceVersion]; v != nil {
+				extKeyRequired = v.ExtKeyRequired
+			}
+			if extKeyRequired {
+				key := r.Header.Get("key")
+				if key == "" {
+					key = r.URL.Query().Get("key")
+				}
+				if key == "" {
+					WriteCode(w, 132)
+					return
+				}
+				keyConfig := security.KeyConfig{Algorithm: regData.ServiceConfig.Key.Algorithm, Password: regData.ServiceConfig.Key.Password}
+				if _, err := security.DecryptKey(key, keyConfig); err != nil {
+					WriteCode(w, 132)
+					return
 				}
 			}
 

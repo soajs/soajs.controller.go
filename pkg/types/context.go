@@ -8,6 +8,7 @@ type ServiceParams struct {
 	KeyACL         map[string]interface{} // Flexible ACL structure
 	FinalACL       map[string]interface{} // Merged ACL (package + key)
 	Package        *Package
+	ACL            *FinalACL // the final ACL the keyACL middleware builds
 	UserInfo       map[string]interface{}
 	RequiresOAuth  bool
 	OAuthToken     *AccessToken

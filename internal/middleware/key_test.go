@@ -63,7 +63,7 @@ func runKey(t *testing.T, prov provision.Provision, reg *mockRegistryMT, req *ht
 	t.Helper()
 	logger := zap.NewNop()
 	var captured *SOAJSContext
-	handler := Context(logger, "dev")(URL()(Key(prov, reg, "dev")(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := Context(logger, "dev")(URL(nil)(Key(prov, reg, "dev")(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		captured = GetSOAJSContext(r.Context())
 		w.WriteHeader(http.StatusOK)
 	}))))

@@ -153,18 +153,17 @@ func (c *Controller) Setup(r *chi.Mux) error {
 
 	// Setup base middleware (chi built-in)
 	r.Use(chimw.RequestID)
-	r.Use(chimw.RealIP)
 	r.Use(chimw.Recoverer)
 
 	// Setup SOAJS middleware chain
 	r.Use(middleware.Context(c.logger, c.cfg.Environment))
-	r.Use(middleware.CORS())
+	r.Use(middleware.CORS(c.registry))
 	r.Use(middleware.Favicon())
 	r.Use(middleware.Response())
 	r.Use(middleware.Enhancer())
 	r.Use(middleware.IP2BanWithRegistry(c.registry))
 	r.Use(middleware.MaintenanceMode(c.registry))
-	r.Use(middleware.URL())
+	r.Use(middleware.URL(c.registry))
 	r.Use(middleware.Awareness(c.awareness))
 	r.Use(middleware.AwarenessEnv(c.awareness, c.registry, c.cfg.Environment))
 	r.Use(middleware.Key(c.provision, c.registry, c.cfg.Environment))

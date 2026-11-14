@@ -2,111 +2,96 @@ package middleware
 
 import (
 	"net/http"
+	"regexp"
 	"strings"
 
+	"github.com/soajs/soajs.controller.go/internal/registry"
 	"github.com/soajs/soajs.controller.go/pkg/types"
 )
 
-// URL middleware parses and normalizes the request URL
-func URL() Middleware {
+// URL parses the service, version and path of the request, as the Node.js url middleware does
+// (mw/url/index.js, lib/parseURL.js): the root path answers 136, a service the registry does not
+// have answers 130. A key sent in the query string is also set as the key header.
+func URL(reg registry.Registry) Middleware {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			ctx := r.Context()
-			soajsCtx := GetSOAJSContext(ctx)
-
-			if soajsCtx != nil && soajsCtx.Controller != nil {
-				// Parse URL to extract service info
-				urlInfo := parseURL(r.URL.Path)
-				soajsCtx.Controller.ServiceParams.URLInfo = urlInfo
+			soajsCtx := GetSOAJSContext(r.Context())
+			if soajsCtx == nil || soajsCtx.Controller == nil {
+				next.ServeHTTP(w, r)
+				return
 			}
-
+			info := parseURL(r.URL.RequestURI())
+			soajsCtx.Controller.ServiceParams.URLInfo = info
+			if info.ServiceName == "" {
+				WriteCode(w, 136)
+				return
+			}
+			if info.ServiceName != "soajs" && reg != nil {
+				data := reg.Get()
+				if data == nil || data.Services[info.ServiceName] == nil {
+					WriteCode(w, 130)
+					return
+				}
+			}
+			if r.Header.Get("key") == "" {
+				if key := r.URL.Query().Get("key"); key != "" {
+					r.Header.Set("key", key)
+				}
+			}
 			next.ServeHTTP(w, r)
 		})
 	}
 }
 
-func parseURL(path string) *types.URLInfo {
-	info := &types.URLInfo{
-		OriginalPath:     path,
-		VersionRequested: false, // Will be set to true if version found in URL
+var (
+	versionSegment = regexp.MustCompile(`/v[0-9]+(.[0-9]+)?/`)
+	versionSuffix  = regexp.MustCompile(`:[0-9]+(.[0-9]+)?`)
+)
+
+// parseURL splits a request URI (path and query) into service, version and path. The version is
+// a "/v<N>/" segment right after the service with more after it, or "<service>:<N>".
+func parseURL(uri string) *types.URLInfo {
+	path := uri
+	if i := strings.IndexByte(path, '?'); i != -1 {
+		path = path[:i]
 	}
-
-	// Remove leading slash
-	path = strings.TrimPrefix(path, "/")
-
-	// Split path into parts
-	parts := strings.Split(path, "/")
-	if len(parts) == 0 {
+	segments := strings.Split(path, "/")
+	info := &types.URLInfo{OriginalPath: path}
+	if len(segments) < 2 {
 		return info
 	}
-
-	// First part is typically the service name (or service:version)
-	serviceNV := parts[0]
+	serviceNV := segments[1]
 	info.ServiceName = serviceNV
 
-	// Check for version in /v1/ or /v1.1/ format (matches Node.js: /v[0-9]+(.[0-9]+)?/)
-	if len(parts) > 1 {
-		if isVersionPattern(parts[1]) {
-			info.ServiceVersion = strings.TrimPrefix(parts[1], "v")
-			info.VersionRequested = true
-			if len(parts) > 2 {
-				info.ServicePath = "/" + strings.Join(parts[2:], "/")
-			} else {
-				info.ServicePath = "/"
-			}
-		} else {
-			info.ServicePath = "/" + strings.Join(parts[1:], "/")
+	if m := versionSegment.FindString(uri); m != "" {
+		hit := strings.Trim(m, "/")
+		if len(segments) > 3 && segments[2] == hit {
+			info.ServiceVersion = strings.TrimPrefix(hit, "v")
+			uri = strings.Replace(uri, m, "/", 1)
 		}
 	}
-
-	// Check for version in service:1 or service:1.1 format (matches Node.js)
 	if info.ServiceVersion == "" {
-		if idx := strings.Index(serviceNV, ":"); idx != -1 {
-			possibleVersion := serviceNV[idx+1:]
-			// Check if it's a valid version number
-			if isNumericVersion(possibleVersion) {
-				info.ServiceName = serviceNV[:idx]
-				info.ServiceVersion = possibleVersion
-				info.VersionRequested = true
+		if i := strings.IndexByte(serviceNV, ':'); i != -1 {
+			if versionSuffix.MatchString(serviceNV) {
+				info.ServiceVersion = serviceNV[i+1:]
 			}
+			info.ServiceName = serviceNV[:i]
 		}
 	}
+	info.VersionRequested = info.ServiceVersion != ""
 
-	// NOTE: Do NOT set default version here
-	// The version should be resolved from ACL in the MT middleware if not requested
-	// This matches Node.js behavior in mw/mt/utils.js line 233-243
-
+	// The service path: what follows "/<service>", without the query; with a query, a trailing
+	// slash is dropped too (extractBuildParameters)
+	rest := ""
+	if len(uri) > len(serviceNV)+1 {
+		rest = uri[len(serviceNV)+1:]
+	}
+	if i := strings.IndexByte(rest, '?'); i != -1 {
+		rest = rest[:i]
+		if j := strings.LastIndexByte(rest, '/'); j > 0 && j == len(rest)-1 {
+			rest = rest[:j]
+		}
+	}
+	info.ServicePath = rest
 	return info
-}
-
-// isNumericVersion checks if a string is a valid numeric version (1, 1.0, 1.0.0)
-func isNumericVersion(s string) bool {
-	if len(s) == 0 {
-		return false
-	}
-	for i, c := range s {
-		if c >= '0' && c <= '9' {
-			continue
-		}
-		if c == '.' && i > 0 && i < len(s)-1 {
-			continue
-		}
-		return false
-	}
-	return true
-}
-
-func isVersionPattern(s string) bool {
-	if len(s) < 2 {
-		return false
-	}
-	if s[0] != 'v' {
-		return false
-	}
-	for _, c := range s[1:] {
-		if c < '0' || c > '9' {
-			return false
-		}
-	}
-	return true
 }
