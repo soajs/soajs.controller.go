@@ -315,23 +315,23 @@ func (h *maintenanceHandler) getRegistry(w http.ResponseWriter, route string, qu
 	h.write(w, resp, true)
 }
 
-// urlParamsConsumed are the URLParam options the Node.js mongo driver removes from a configuration
-// when it connects with it (soajs.mongo constructMongoOptions).
-var urlParamsConsumed = []string{"maxPoolSize", "wtimeoutMS", "slaveOk", "auto_reconnect"}
+// urlParamsLeftOut are the URLParam options a service never receives: the Node.js mongo driver
+// removes them from the configuration when the gateway connects (soajs.mongo
+// constructMongoOptions), so services run with their driver's defaults, the pool size among them.
+var urlParamsLeftOut = []string{"maxPoolSize", "wtimeoutMS", "slaveOk", "auto_reconnect"}
 
-// dbDump is a database entry as services receive it. Until the registry is loaded again, the
-// options and extraParam the Node.js gateway's connections consumed are not in it.
-func dbDump(dump map[string]interface{}, reloaded bool) map[string]interface{} {
+// dbDump is a database entry as services receive it: without the pool options and extraParam.
+// Node.js shows them again after a reload, a side effect of its connection code, which would hand
+// services a 5-connection pool; they are never in the dump here.
+func dbDump(dump map[string]interface{}) map[string]interface{} {
 	out, _ := deepCopy(dump).(map[string]interface{})
 	if out == nil {
 		out = map[string]interface{}{}
 	}
-	if !reloaded {
-		delete(out, "extraParam")
-		if p, ok := out["URLParam"].(map[string]interface{}); ok {
-			for _, k := range urlParamsConsumed {
-				delete(p, k)
-			}
+	delete(out, "extraParam")
+	if p, ok := out["URLParam"].(map[string]interface{}); ok {
+		for _, k := range urlParamsLeftOut {
+			delete(p, k)
 		}
 	}
 	return out
@@ -367,7 +367,7 @@ func cloneAndFilterRegistry(reg *types.RegistryData, reqServiceName, reqServiceT
 	}
 	coreDB := map[string]interface{}{}
 	for name, db := range reg.CoreDB {
-		coreDB[name] = dbDump(db.Dump, reg.Reloaded)
+		coreDB[name] = dbDump(db.Dump)
 	}
 	if reg.SessionDB != nil {
 		coreDB["session"] = reg.SessionDB
@@ -375,7 +375,7 @@ func cloneAndFilterRegistry(reg *types.RegistryData, reqServiceName, reqServiceT
 	filtered["coreDB"] = coreDB
 	meta := map[string]interface{}{}
 	for name, db := range reg.TenantMetaDB {
-		meta[name] = dbDump(db.Dump, reg.Reloaded)
+		meta[name] = dbDump(db.Dump)
 	}
 	filtered["tenantMetaDB"] = meta
 	if reg.ServiceConfig != nil {
@@ -406,7 +406,7 @@ func cloneAndFilterRegistry(reg *types.RegistryData, reqServiceName, reqServiceT
 			for _, c := range clusters {
 				cluster, _ := c.(map[string]interface{})
 				if config, ok := cluster["config"].(map[string]interface{}); ok {
-					cluster["config"] = dbDump(config, reg.Reloaded)
+					cluster["config"] = dbDump(config)
 				}
 			}
 		}

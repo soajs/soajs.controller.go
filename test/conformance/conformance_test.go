@@ -76,6 +76,9 @@ type Case struct {
 	// CompareJSON compares the bodies as JSON values instead of bytes, for answers whose key
 	// order follows a map, such as a registry.
 	CompareJSON bool `json:"compareJSON,omitempty"`
+	// DropFields are keys removed, at any depth, from both bodies before a JSON compare: values
+	// a gateway deliberately leaves out.
+	DropFields []string `json:"dropFields,omitempty"`
 }
 
 // Answer is what a gateway answered.
@@ -210,7 +213,7 @@ func compare(c Case, want, got Answer) string {
 	wantBody, gotBody = serviceVersion.ReplaceAllString(wantBody, "${1}null"), serviceVersion.ReplaceAllString(gotBody, "${1}null")
 	if c.CompareJSON {
 		var w, g interface{}
-		if json.Unmarshal([]byte(wantBody), &w) == nil && json.Unmarshal([]byte(gotBody), &g) == nil && reflect.DeepEqual(w, g) {
+		if json.Unmarshal([]byte(wantBody), &w) == nil && json.Unmarshal([]byte(gotBody), &g) == nil && reflect.DeepEqual(drop(w, c.DropFields), drop(g, c.DropFields)) {
 			gotBody = wantBody
 		}
 	}
@@ -224,6 +227,24 @@ func headerNames(c Case) []string {
 	names := append([]string{"Content-Type"}, c.CompareHeaders...)
 	sort.Strings(names)
 	return names
+}
+
+// drop removes the keys, at any depth.
+func drop(v interface{}, keys []string) interface{} {
+	switch t := v.(type) {
+	case map[string]interface{}:
+		for _, k := range keys {
+			delete(t, k)
+		}
+		for k, e := range t {
+			t[k] = drop(e, keys)
+		}
+	case []interface{}:
+		for i, e := range t {
+			t[i] = drop(e, keys)
+		}
+	}
+	return v
 }
 
 // serviceVersion is the version of the gateway in a maintenance answer's service block.

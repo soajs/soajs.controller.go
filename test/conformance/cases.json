@@ -523,7 +523,7 @@
   },
   {
     "name": "maintenance_reload_registry",
-    "about": "from integration ReloadRegistry",
+    "about": "from integration ReloadRegistry; pool options and extraParam are never in Go's dump, Node.js shows them again after a reload",
     "target": "maintenance",
     "method": "GET",
     "path": "/reloadRegistry",
@@ -531,6 +531,13 @@
     "ignoreFields": [
       "timeLoaded",
       "ts"
+    ],
+    "dropFields": [
+      "maxPoolSize",
+      "wtimeoutMS",
+      "slaveOk",
+      "auto_reconnect",
+      "extraParam"
     ]
   },
   {

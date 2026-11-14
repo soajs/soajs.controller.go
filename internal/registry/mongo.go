@@ -85,7 +85,6 @@ func (r *MongoRegistry) Reload() error {
 	if err != nil {
 		return err
 	}
-	data.Reloaded = true
 	r.mu.Lock()
 	r.data = data
 	r.mu.Unlock()
