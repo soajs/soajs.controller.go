@@ -61,28 +61,8 @@ func getMTWhitelistConfig(regData *types.RegistryData) *MTWhitelistConfig {
 		return nil
 	}
 
-	gateway, ok := regData.CustomRegistry["gateway"]
-	if !ok {
-		return nil
-	}
-
-	var gatewayValue interface{}
-	switch v := gateway.(type) {
-	case map[string]interface{}:
-		if val, exists := v["value"]; exists {
-			gatewayValue = val
-		} else {
-			gatewayValue = v
-		}
-	default:
-		return nil
-	}
-
-	gatewayMap, ok := gatewayValue.(map[string]interface{})
-	if !ok {
-		return nil
-	}
-
+	gateway, _ := regData.CustomRegistry["gateway"].(map[string]interface{})
+	gatewayMap, _ := gateway["value"].(map[string]interface{})
 	mt, ok := gatewayMap["mt"].(map[string]interface{})
 	if !ok {
 		return nil

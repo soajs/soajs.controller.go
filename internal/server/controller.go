@@ -173,6 +173,7 @@ func (c *Controller) Setup(r *chi.Mux) error {
 	r.Use(middleware.SoajsRoutesSetup(c.urac)) // Setup /soajs/* routes to require OAuth
 	r.Use(middleware.OAuth(c.provision))
 	r.Use(middleware.UserACL())
+	r.Use(middleware.MTACL(c.registry))
 	r.Use(middleware.SoajsRoutes(c.provision)) // Handle /soajs/* routes after OAuth/UserACL populate context
 	r.Use(middleware.Traffic(c.registry))
 	r.Use(middleware.LastSeen(c.registry, c.awareness))

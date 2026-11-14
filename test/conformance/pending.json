@@ -1,6 +1,4 @@
 {
-  "service_not_in_package": "PR 5 (keyACL): answer 154 for a service the package does not grant",
-  "api_not_in_package": "PR 6 (mt): refuse an api the package does not grant (S1)",
   "private_no_token": "PR 7 (oauth): oauth2-server texts and statuses",
   "private_unknown_token": "PR 7 (oauth): oauth2-server texts and statuses",
   "private_expired_token": "PR 7 (oauth): oauth2-server texts and statuses",

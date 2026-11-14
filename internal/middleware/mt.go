@@ -1,115 +1,215 @@
 package middleware
 
 import (
-	"context"
 	"net/http"
 	"strings"
 
-	"github.com/soajs/soajs.controller.go/internal/config"
 	"github.com/soajs/soajs.controller.go/internal/provision"
 	"github.com/soajs/soajs.controller.go/internal/registry"
 	"github.com/soajs/soajs.controller.go/pkg/types"
 	"github.com/soajs/soajs.controller.go/pkg/urac"
 )
 
-// MT (Multi-Tenant) middleware handles tenant resolution and ACL enforcement
+// MT is the multi-tenant middleware before OAuth, as in Node.js (mw/mt/index.js and the first
+// checks of mw/mt/utils.js). For a service version with extKeyRequired:
+//   - a key without a package answers 153, a package that did not load 152;
+//   - the tenant and its oauth come from the key;
+//   - the custom registry mt.whitelist can skip the ACL and OAuth checks;
+//   - the extKey's geo allow and deny lists answer 155;
+//   - for a version with oauth, OAuth is required unless the API is public (oauthCheck).
+//
+// Without extKeyRequired the API is public and OAuth runs when the version has oauth.
 func MT(prov provision.Provision, reg registry.Registry, uracDriver *urac.Driver, env string) Middleware {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			ctx := r.Context()
-			soajsCtx := GetSOAJSContext(ctx)
+			soajsCtx := GetSOAJSContext(r.Context())
+			if soajsCtx == nil || soajsCtx.Controller == nil || soajsCtx.Controller.ServiceParams == nil ||
+				soajsCtx.Controller.ServiceParams.URLInfo == nil {
+				next.ServeHTTP(w, r)
+				return
+			}
+			params := soajsCtx.Controller.ServiceParams
+			serviceName := params.URLInfo.ServiceName
+			version := versionFlags(reg, serviceName, params.URLInfo.ServiceVersion)
+			params.Environment = env
+			params.ServiceName = serviceName
+			params.ServiceVersion = params.URLInfo.ServiceVersion
+			params.UracDriver = uracDriver
 
-			// If no key, skip MT processing
-			if soajsCtx == nil || soajsCtx.Key == nil {
+			if serviceName == "soajs" || !version.ExtKeyRequired {
+				params.IsAPIPublic = true
+				params.RequiresOAuth = serviceName != "soajs" && version.OAuth
 				next.ServeHTTP(w, r)
 				return
 			}
 
-			// Check MT whitelist for IP-based ACL/OAuth bypass
-			var skipACL, skipOAuth bool
-			if reg != nil {
-				regData := reg.Get()
-				clientIP := getClientIP(r)
-				skipACL, skipOAuth = CheckMTWhitelist(regData, clientIP)
-				if skipACL || skipOAuth {
-					soajsCtx.Log.Debug("MT whitelist matched for IP, skipACL=" + boolToStr(skipACL) + " skipOAuth=" + boolToStr(skipOAuth))
-				}
+			key := soajsCtx.Key
+			if key == nil || key.Application.Package == "" {
+				WriteCode(w, 153)
+				return
 			}
+			if params.Package == nil {
+				WriteCode(w, 152)
+				return
+			}
+			soajsCtx.Tenant = types.TenantFromKey(key)
+			tenantOauth, _ := prov.GetTenantOauth(key.Tenant.ID)
+			params.TenantOauth = tenantOauth
 
-			// The tenant comes from the key; the package was loaded by the key middleware
-			soajsCtx.Tenant = types.TenantFromKey(soajsCtx.Key)
-			var pkg *types.Package
-			if soajsCtx.Controller != nil && soajsCtx.Controller.ServiceParams != nil {
-				pkg = soajsCtx.Controller.ServiceParams.Package
-			}
-			if pkg == nil {
-				WriteError(w, http.StatusForbidden,
-					config.ErrCodeInvalidPackage,
-					config.DefaultErrors[config.ErrCodeInvalidPackage])
+			params.SkipACL, params.SkipOAuth = CheckMTWhitelist(reg.Get(), getClientIP(r))
+
+			if !params.SkipACL && !geoAllowed(key.Geo, getClientIP(r)) {
+				WriteCode(w, 155)
 				return
 			}
 
-			// Check service ACL
-			serviceParams := soajsCtx.Controller.ServiceParams
-			if serviceParams != nil && serviceParams.URLInfo != nil {
-				serviceName := serviceParams.URLInfo.ServiceName
-				serviceVersion := serviceParams.URLInfo.ServiceVersion
-				servicePath := serviceParams.URLInfo.ServicePath
-
-				// Merge ACLs: package ACL + key ACL (env-aware)
-				finalACL := mergeACL(pkg.ACL, nil, serviceName, env)
-
-				// If version was not explicitly requested in URL, get latest from ACL
-				// This matches Node.js behavior in mw/mt/utils.js line 233-243
-				if !serviceParams.URLInfo.VersionRequested && finalACL != nil {
-					latestVersion := getLatestVersionFromACL(finalACL)
-					if latestVersion != "" {
-						serviceVersion = latestVersion
-						serviceParams.URLInfo.ServiceVersion = serviceVersion
-						soajsCtx.Log.Debug("resolved version from ACL: " + serviceVersion)
-					}
-				}
-
-				// Default to "1" if still no version
-				if serviceVersion == "" {
-					serviceVersion = "1"
-					serviceParams.URLInfo.ServiceVersion = serviceVersion
-				}
-
-				// Check ACL unless whitelisted
-				if !skipACL {
-					if !checkServiceAccess(finalACL, serviceName, serviceVersion, r.Method, servicePath) {
-						WriteError(w, http.StatusForbidden,
-							config.ErrCodeForbidden,
-							config.DefaultErrors[config.ErrCodeForbidden])
-						return
-					}
-				}
-
-				// Store resolved ACL
-				serviceParams.FinalACL = finalACL
-				serviceParams.SkipACL = skipACL
-				serviceParams.SkipOAuth = skipOAuth
-
-				// Check if OAuth is required - this will trigger user ACL lookup after OAuth middleware
-				// Skip OAuth check if whitelisted
-				if !skipOAuth && requiresOAuth(pkg, serviceParams, env) {
-					serviceParams.RequiresOAuth = true
-					// Store URAC info for post-OAuth ACL lookup
-					serviceParams.UracDriver = uracDriver
-					serviceParams.Environment = env
-					serviceParams.ServiceName = serviceName
-					serviceParams.ServiceVersion = serviceVersion
+			if version.OAuth && !params.SkipOAuth && reg.Get() != nil && reg.Get().ServiceConfig != nil {
+				disabled := tenantOauth != nil && tenantOauth.Disabled != 0
+				if !disabled && !isAPIPublic(params.ACL, params.URLInfo.ServicePath, r) {
+					params.RequiresOAuth = true
 				}
 			}
-
 			next.ServeHTTP(w, r)
 		})
 	}
 }
 
-// UserACL middleware checks user-level ACL after OAuth authentication
-// This should be called after OAuth middleware when user info is available
+// MTACL runs the ACL checks after OAuth and the user (serviceCheck and apiCheck of the Node.js
+// mt): a service the package does not grant answers 154; then the API: 158 when the service
+// needs a logged-in user and there is none, 159 when apisPermission is restricted and the API is
+// not listed, 161 when the API needs a logged-in user and there is none.
+func MTACL(reg registry.Registry) Middleware {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			soajsCtx := GetSOAJSContext(r.Context())
+			if soajsCtx == nil || soajsCtx.Controller == nil || soajsCtx.Controller.ServiceParams == nil ||
+				soajsCtx.Controller.ServiceParams.URLInfo == nil {
+				next.ServeHTTP(w, r)
+				return
+			}
+			params := soajsCtx.Controller.ServiceParams
+			if params.URLInfo.ServiceName == "soajs" || params.SkipACL ||
+				!versionFlags(reg, params.URLInfo.ServiceName, params.URLInfo.ServiceVersion).ExtKeyRequired {
+				next.ServeHTTP(w, r)
+				return
+			}
+			if params.ACL == nil {
+				WriteCode(w, 154)
+				return
+			}
+			if code := apiCheck(params, params.UserInfo != nil); code != 0 {
+				WriteCode(w, code)
+				return
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
+// apiCheck is the Node.js apiCheck for the latest ACL shape, where access is a boolean. It
+// returns the error code, 0 when the API may be called, and sets IsAPIPublic.
+func apiCheck(params *types.ServiceParams, loggedIn bool) int {
+	acl := params.ACL
+	api := acl.API(params.URLInfo.ServicePath)
+	if acl.Access {
+		if api != nil && !api.Access {
+			params.IsAPIPublic = true
+		}
+		if !loggedIn && (api == nil || api.Access) {
+			return 158
+		}
+		return checkPermission(acl, api, loggedIn)
+	}
+	if api == nil || !api.Access {
+		params.IsAPIPublic = true
+	}
+	if api != nil || acl.APIsPermission == "restricted" {
+		return checkPermission(acl, api, loggedIn)
+	}
+	return 0
+}
+
+// checkPermission is the Node.js _api.checkPermission.
+func checkPermission(acl *types.FinalACL, api *types.ACLAPI, loggedIn bool) int {
+	if acl.APIsPermission == "restricted" && api == nil {
+		return 159
+	}
+	if api == nil || !api.Access {
+		return 0
+	}
+	if !loggedIn {
+		return 161
+	}
+	return 0
+}
+
+// isAPIPublic is the public decision of the Node.js oauthCheck: the API needs no token when the
+// service version is open and the API is open or unlisted, or the API itself is open; a token in
+// the query string always makes it private.
+func isAPIPublic(acl *types.FinalACL, path string, r *http.Request) bool {
+	public := false
+	if acl != nil {
+		api := acl.API(path)
+		if acl.Access {
+			if api != nil && !api.Access {
+				public = true
+			}
+		} else if api == nil || !api.Access {
+			public = true
+		}
+		if acl.APIsPermission == "restricted" && api != nil && !api.Access {
+			public = true
+		}
+	}
+	if public && r.URL.Query().Get("access_token") != "" {
+		public = false
+	}
+	return public
+}
+
+// geoAllowed applies the extKey's geo deny and allow lists (CIDR blocks or addresses) to the
+// client IP.
+func geoAllowed(geo map[string]interface{}, ip string) bool {
+	if geo == nil || ip == "" {
+		return true
+	}
+	if deny, ok := geo["deny"].([]interface{}); ok && matchesAny(deny, ip) {
+		return false
+	}
+	if allow, ok := geo["allow"].([]interface{}); ok && !matchesAny(allow, ip) {
+		return false
+	}
+	return true
+}
+
+func matchesAny(list []interface{}, ip string) bool {
+	for _, e := range list {
+		if s, ok := e.(string); ok && matchIPPattern(ip, s) {
+			return true
+		}
+	}
+	return false
+}
+
+// versionFlags are the registry flags of a service version.
+func versionFlags(reg registry.Registry, service, version string) types.VersionInfo {
+	if reg == nil {
+		return types.VersionInfo{}
+	}
+	data := reg.Get()
+	if data == nil {
+		return types.VersionInfo{}
+	}
+	svc := data.Services[service]
+	if svc == nil || svc.Versions[version] == nil {
+		return types.VersionInfo{}
+	}
+	return *svc.Versions[version]
+}
+
+// UserACL loads the token's user from urac after OAuth. The user's ACL override (Node.js
+// aclUrackCheck) and the urac checks (uracCheck) come with the urac rebuild; the Go-only refusals
+// that were here answered with codes Node.js does not use.
 func UserACL() Middleware {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -154,34 +254,6 @@ func UserACL() Middleware {
 				return
 			}
 			access := uracDriver.CheckTenantAccess(user, tenantID, tenantCode, "", nil)
-			if access == nil {
-				WriteError(w, http.StatusForbidden,
-					config.ErrCodeForbidden,
-					"User does not have access to this tenant")
-				return
-			}
-
-			// Get user's ACL
-			userACL, err := uracDriver.GetACLForUser(ctx, user, tenantID)
-			if err != nil {
-				soajsCtx.Log.Debug("Failed to get user ACL")
-				next.ServeHTTP(w, r)
-				return
-			}
-
-			// Check user ACL for service access
-			if userACL != nil {
-				serviceName := params.ServiceName
-				serviceVersion := params.ServiceVersion
-				servicePath := params.URLInfo.ServicePath
-
-				if !userACL.HasAccess(params.Environment, serviceName, serviceVersion, servicePath) {
-					WriteError(w, http.StatusForbidden,
-						config.ErrCodeForbidden,
-						"User does not have access to this service")
-					return
-				}
-			}
 
 			// Store user and access info
 			params.User = user
@@ -190,313 +262,4 @@ func UserACL() Middleware {
 			next.ServeHTTP(w, r)
 		})
 	}
-}
-
-// mergeACL merges package ACL with key-specific ACL
-// ACL structure: ACL[env][service][version] or ACL[service]
-func mergeACL(packageACL, keyACL map[string]interface{}, serviceName, env string) map[string]interface{} {
-	var merged map[string]interface{}
-
-	// Check package ACL - could be ACL[env][service] or ACL[service]
-	if packageACL != nil {
-		// Try environment-keyed first (e.g., packageACL["dashboard"]["oauth"])
-		if envACL, ok := packageACL[env]; ok {
-			if envMap, ok := envACL.(map[string]interface{}); ok {
-				if svcACL, exists := envMap[serviceName]; exists {
-					if svcMap, ok := svcACL.(map[string]interface{}); ok {
-						merged = svcMap
-					}
-				}
-			}
-		}
-		// Fall back to direct service key (e.g., packageACL["oauth"])
-		if merged == nil {
-			if svcACL, exists := packageACL[serviceName]; exists {
-				if svcMap, ok := svcACL.(map[string]interface{}); ok {
-					merged = svcMap
-				}
-			}
-		}
-	}
-
-	// Override with key ACL if present (same structure check)
-	if keyACL != nil {
-		var keyServiceACL map[string]interface{}
-		if envACL, ok := keyACL[env]; ok {
-			if envMap, ok := envACL.(map[string]interface{}); ok {
-				if svcACL, exists := envMap[serviceName]; exists {
-					if svcMap, ok := svcACL.(map[string]interface{}); ok {
-						keyServiceACL = svcMap
-					}
-				}
-			}
-		}
-		if keyServiceACL == nil {
-			if svcACL, exists := keyACL[serviceName]; exists {
-				if svcMap, ok := svcACL.(map[string]interface{}); ok {
-					keyServiceACL = svcMap
-				}
-			}
-		}
-
-		if keyServiceACL != nil {
-			if merged == nil {
-				merged = keyServiceACL
-			} else {
-				// Merge: key ACL extends package ACL
-				for k, v := range keyServiceACL {
-					merged[k] = v
-				}
-			}
-		}
-	}
-
-	return merged
-}
-
-// checkServiceAccess verifies if the request is allowed
-// In SOAJS ACL:
-// - access: false/undefined = public access (allowed without auth)
-// - access: true = requires authenticated user
-// - access: ["group1", "group2"] = requires user in specific groups
-// This function only checks if the route exists in ACL, not auth requirements
-func checkServiceAccess(acl map[string]interface{}, serviceName, version, method, path string) bool {
-	if acl == nil {
-		return true // No ACL means open access
-	}
-
-	// Check version-specific ACL (e.g., acl["1"])
-	var versionACL map[string]interface{}
-	if v, ok := acl[version]; ok {
-		if vm, ok := v.(map[string]interface{}); ok {
-			versionACL = vm
-		}
-	}
-
-	// If no version ACL, check service-level access
-	if versionACL == nil {
-		// Service exists in ACL, access is allowed (specific restrictions handled elsewhere)
-		return true
-	}
-
-	// Check if version has access field set to false explicitly at version level
-	// Note: In SOAJS, access:false means PUBLIC access, not denied
-	// access:true means requires auth, which is handled by OAuth middleware
-	// So we always allow here - auth requirements are separate
-
-	// Check if the API path exists in the ACL (for apisPermission: "restricted")
-	methodLower := strings.ToLower(method)
-	if methodACL, ok := versionACL[methodLower]; ok {
-		if methodMap, ok := methodACL.(map[string]interface{}); ok {
-			if apis, ok := methodMap["apis"]; ok {
-				if apisMap, ok := apis.(map[string]interface{}); ok {
-					// API exists in ACL - this is allowed
-					// The access field determines auth requirements, not permission
-					if _, exists := apisMap[path]; exists {
-						return true
-					}
-				}
-			}
-		}
-	}
-
-	// If apisPermission is "restricted" and API not found, it would be denied
-	// But we need to check apisPermission first - for now, allow by default
-	return true
-}
-
-// requiresOAuth checks if OAuth is required for this request
-// OAuth is required when the API's access field is truthy (true or array of groups)
-// access: false/undefined = public (no OAuth)
-// access: true = requires authenticated user
-// access: ["group1", ...] = requires user in specific groups
-// API-level access overrides version-level access
-func requiresOAuth(pkg *types.Package, params *types.ServiceParams, env string) bool {
-	if pkg == nil || params == nil || params.URLInfo == nil {
-		return false
-	}
-
-	if pkg.ACL == nil {
-		return false
-	}
-
-	serviceName := params.URLInfo.ServiceName
-	serviceVersion := params.URLInfo.ServiceVersion
-	servicePath := params.URLInfo.ServicePath
-
-	// Get service ACL (could be pkg.ACL[env][service] or pkg.ACL[service])
-	var serviceACL map[string]interface{}
-	if envACL, ok := pkg.ACL[env]; ok {
-		if envMap, ok := envACL.(map[string]interface{}); ok {
-			if svcACL, exists := envMap[serviceName]; exists {
-				if svcMap, ok := svcACL.(map[string]interface{}); ok {
-					serviceACL = svcMap
-				}
-			}
-		}
-	}
-	if serviceACL == nil {
-		if svcACL, exists := pkg.ACL[serviceName]; exists {
-			if svcMap, ok := svcACL.(map[string]interface{}); ok {
-				serviceACL = svcMap
-			}
-		}
-	}
-
-	if serviceACL == nil {
-		return false
-	}
-
-	// Check version-level ACL (e.g., serviceACL["1"])
-	var versionACL map[string]interface{}
-	if v, ok := serviceACL[serviceVersion]; ok {
-		if vm, ok := v.(map[string]interface{}); ok {
-			versionACL = vm
-		}
-	}
-
-	if versionACL == nil {
-		// Check service-level access
-		if access, ok := serviceACL["access"]; ok {
-			return isAccessTruthy(access)
-		}
-		return false
-	}
-
-	// First, check API-level access (this overrides version-level)
-	// Check all HTTP methods since we don't have the request method here
-	for _, m := range []string{"get", "post", "put", "delete", "patch"} {
-		if methodACL, ok := versionACL[m]; ok {
-			if methodMap, ok := methodACL.(map[string]interface{}); ok {
-				if apis, ok := methodMap["apis"]; ok {
-					if apisMap, ok := apis.(map[string]interface{}); ok {
-						if apiACL, exists := apisMap[servicePath]; exists {
-							if apiMap, ok := apiACL.(map[string]interface{}); ok {
-								if access, ok := apiMap["access"]; ok {
-									// API-level access found - this is the final answer
-									// access: false means public, access: true/array means auth required
-									return isAccessTruthy(access)
-								}
-							}
-							// API exists but no access field = public
-							return false
-						}
-					}
-				}
-			}
-		}
-	}
-
-	// No API-level access found, fall back to version-level access
-	if access, ok := versionACL["access"]; ok {
-		return isAccessTruthy(access)
-	}
-
-	return false
-}
-
-// isAccessTruthy checks if an access value requires authentication
-// false/nil = public (no auth), true = auth required, array = group auth required
-func isAccessTruthy(access interface{}) bool {
-	if access == nil {
-		return false
-	}
-	switch v := access.(type) {
-	case bool:
-		return v // true = auth required, false = public
-	case []interface{}:
-		return len(v) > 0 // array of groups = auth required
-	default:
-		return false
-	}
-}
-
-// getLatestVersionFromACL iterates through ACL keys to find the latest version
-// ACL structure has version keys like "1", "2", "3" at the top level
-// This matches Node.js behavior in mw/mt/utils.js line 233-243
-func getLatestVersionFromACL(acl map[string]interface{}) string {
-	latestVersion := ""
-	for key := range acl {
-		// Skip non-version keys (access, apisPermission, etc.)
-		if !isVersionKey(key) {
-			continue
-		}
-		// Compare versions - simple string comparison works for single digits
-		// For more complex versions, would need semantic version comparison
-		if latestVersion == "" || compareACLVersions(key, latestVersion) > 0 {
-			latestVersion = key
-		}
-	}
-	return latestVersion
-}
-
-// isVersionKey checks if a key looks like a version number (1, 2, 1.0, 2.1, etc.)
-func isVersionKey(key string) bool {
-	if key == "" {
-		return false
-	}
-	// Check if key starts with a digit
-	if key[0] < '0' || key[0] > '9' {
-		return false
-	}
-	// Check if all characters are digits or dots
-	for _, c := range key {
-		if (c < '0' || c > '9') && c != '.' {
-			return false
-		}
-	}
-	return true
-}
-
-// compareACLVersions compares two version strings and returns:
-// -1 if v1 < v2, 0 if v1 == v2, 1 if v1 > v2
-func compareACLVersions(v1, v2 string) int {
-	// Split by dots
-	parts1 := strings.Split(v1, ".")
-	parts2 := strings.Split(v2, ".")
-
-	maxLen := len(parts1)
-	if len(parts2) > maxLen {
-		maxLen = len(parts2)
-	}
-
-	for i := 0; i < maxLen; i++ {
-		var n1, n2 int
-		if i < len(parts1) {
-			n1, _ = parseInt(parts1[i])
-		}
-		if i < len(parts2) {
-			n2, _ = parseInt(parts2[i])
-		}
-		if n1 < n2 {
-			return -1
-		}
-		if n1 > n2 {
-			return 1
-		}
-	}
-	return 0
-}
-
-// parseInt safely parses an integer string
-func parseInt(s string) (int, bool) {
-	result := 0
-	for _, c := range s {
-		if c < '0' || c > '9' {
-			return 0, false
-		}
-		result = result*10 + int(c-'0')
-	}
-	return result, true
-}
-
-// Ensure context is imported for UserACL
-var _ context.Context
-
-// boolToStr converts bool to string for logging
-func boolToStr(b bool) string {
-	if b {
-		return "true"
-	}
-	return "false"
 }

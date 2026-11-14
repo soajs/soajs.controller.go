@@ -3,6 +3,7 @@ package middleware
 import (
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/soajs/soajs.controller.go/internal/config"
@@ -65,14 +66,23 @@ func mtKey(extKey, pkg string) *types.Key {
 	}
 }
 
+func mtRegistry() *mockRegistryMT {
+	return &mockRegistryMT{data: &types.RegistryData{
+		ServiceConfig: &types.GlobalServiceConfig{},
+		Services: map[string]*types.ServiceConfig{"svc": {Versions: map[string]*types.VersionInfo{
+			"1": {ExtKeyRequired: true, OAuth: true},
+		}}},
+	}}
+}
+
 func runMT(t *testing.T, prov *mockProvision, extKey string) (*httptest.ResponseRecorder, *SOAJSContext) {
 	t.Helper()
-	reg := &mockRegistryMT{}
+	reg := mtRegistry()
 	var captured *SOAJSContext
-	handler := Context(zap.NewNop(), "test")(URL(nil)(Key(prov, reg, "test")(MT(prov, reg, nil, "test")(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := Context(zap.NewNop(), "test")(URL(nil)(Key(prov, reg, "test")(KeyACL()(MT(prov, reg, nil, "test")(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		captured = GetSOAJSContext(r.Context())
 		w.WriteHeader(http.StatusOK)
-	})))))
+	}))))))
 	req := httptest.NewRequest("GET", "/svc/v1/test", nil)
 	req.Header.Set(config.HeaderSOAJSKey, extKey)
 	rec := httptest.NewRecorder()
@@ -80,305 +90,88 @@ func runMT(t *testing.T, prov *mockProvision, extKey string) (*httptest.Response
 	return rec, captured
 }
 
+// A package that does not load answers 152, as in Node.js.
 func TestMT_RejectsKeyWithoutPackage(t *testing.T) {
 	prov := &mockProvision{keys: map[string]*types.Key{"pkg-key": mtKey("pkg-key", "PROD_MISSING")}}
 	rec, _ := runMT(t, prov, "pkg-key")
-	if rec.Code != http.StatusForbidden {
-		t.Errorf("Status = %d, want %d when the key's package cannot be loaded", rec.Code, http.StatusForbidden)
+	if rec.Code != 500 || !strings.Contains(rec.Body.String(), `"codes":[152]`) {
+		t.Errorf("got %d %s, want 152", rec.Code, rec.Body.String())
 	}
 }
 
 func TestMT_StoresTenantFromKey(t *testing.T) {
 	prov := &mockProvision{
-		keys:     map[string]*types.Key{"ctx-key": mtKey("ctx-key", "PROD_PKG")},
-		packages: map[string]*types.Package{"PROD_PKG": {Code: "PROD_PKG"}},
+		keys: map[string]*types.Key{"ctx-key": mtKey("ctx-key", "PROD_PKG")},
+		packages: map[string]*types.Package{"PROD_PKG": {Code: "PROD_PKG", ACL: map[string]interface{}{
+			"svc": map[string]interface{}{"1": map[string]interface{}{"access": false}},
+		}}},
 	}
 	rec, ctx := runMT(t, prov, "ctx-key")
 	if rec.Code != http.StatusOK {
-		t.Fatalf("Status = %d", rec.Code)
+		t.Fatalf("Status = %d %s", rec.Code, rec.Body.String())
 	}
 	if ctx.Tenant == nil || ctx.Tenant.Code != "MYTEN" || ctx.Tenant.ID != "tenant-123" {
 		t.Errorf("tenant = %+v, want the key's tenant", ctx.Tenant)
 	}
-}
-
-// =============================================================================
-// mergeACL Tests
-// =============================================================================
-
-func TestMergeACL_NilACLs(t *testing.T) {
-	result := mergeACL(nil, nil, "oauth", "test")
-	if result != nil {
-		t.Error("Expected nil when both ACLs are nil")
+	if ctx.Controller.ServiceParams.RequiresOAuth {
+		t.Error("an open service version with no API listed is public")
 	}
 }
 
-func TestMergeACL_PackageACLOnly(t *testing.T) {
-	packageACL := map[string]interface{}{
-		"oauth": map[string]interface{}{
-			"access": true,
-		},
+// apiCheck follows the Node.js mt apiCheck and checkPermission for boolean access.
+func TestAPICheck(t *testing.T) {
+	acl := func(access bool, perm string, apis map[string]bool) *types.FinalACL {
+		f := &types.FinalACL{Access: access, APIsPermission: perm, APIs: map[string]*types.ACLAPI{}}
+		for p, a := range apis {
+			f.APIs[p] = &types.ACLAPI{Access: a, Route: p}
+		}
+		return f
 	}
-
-	result := mergeACL(packageACL, nil, "oauth", "test")
-	if result == nil {
-		t.Error("Expected non-nil result with package ACL")
+	tests := []struct {
+		name     string
+		acl      *types.FinalACL
+		path     string
+		loggedIn bool
+		code     int
+		public   bool
+	}{
+		{"open, unlisted", acl(false, "", nil), "/x", false, 0, true},
+		{"open, restricted, unlisted", acl(false, "restricted", nil), "/x", false, 159, true},
+		{"open, restricted, listed public", acl(false, "restricted", map[string]bool{"/x": false}), "/x", false, 0, true},
+		{"open, restricted, listed private, no user", acl(false, "restricted", map[string]bool{"/x": true}), "/x", false, 161, false},
+		{"open, restricted, listed private, user", acl(false, "restricted", map[string]bool{"/x": true}), "/x", true, 0, false},
+		{"login, no user, unlisted", acl(true, "", nil), "/x", false, 158, false},
+		{"login, no user, public api", acl(true, "", map[string]bool{"/x": false}), "/x", false, 0, true},
+		{"login, user, restricted unlisted", acl(true, "restricted", nil), "/x", true, 159, false},
+		{"login, user, listed", acl(true, "restricted", map[string]bool{"/x": true}), "/x", true, 0, false},
 	}
-}
-
-func TestMergeACL_KeyACLOverridesPackage(t *testing.T) {
-	packageACL := map[string]interface{}{
-		"oauth": map[string]interface{}{
-			"access": true,
-			"limit":  100,
-		},
-	}
-	keyACL := map[string]interface{}{
-		"oauth": map[string]interface{}{
-			"limit": 200,
-		},
-	}
-
-	result := mergeACL(packageACL, keyACL, "oauth", "test")
-	if result == nil {
-		t.Fatal("Expected non-nil result")
-	}
-
-	if limit, ok := result["limit"].(int); !ok || limit != 200 {
-		t.Errorf("Key ACL should override package ACL, got limit=%v", result["limit"])
-	}
-}
-
-func TestMergeACL_EnvironmentKeyedACL(t *testing.T) {
-	packageACL := map[string]interface{}{
-		"dashboard": map[string]interface{}{
-			"oauth": map[string]interface{}{
-				"access": true,
-			},
-		},
-	}
-
-	result := mergeACL(packageACL, nil, "oauth", "dashboard")
-	if result == nil {
-		t.Error("Expected to find environment-keyed ACL")
+	for _, tt := range tests {
+		params := &types.ServiceParams{ACL: tt.acl, URLInfo: &types.URLInfo{ServicePath: tt.path}}
+		if code := apiCheck(params, tt.loggedIn); code != tt.code || params.IsAPIPublic != tt.public {
+			t.Errorf("%s: code %d public %v, want %d %v", tt.name, code, params.IsAPIPublic, tt.code, tt.public)
+		}
 	}
 }
 
-func TestMergeACL_FallbackToDirectServiceKey(t *testing.T) {
-	packageACL := map[string]interface{}{
-		"oauth": map[string]interface{}{
-			"access": false,
-		},
+func TestIsAPIPublic(t *testing.T) {
+	open := &types.FinalACL{Access: false}
+	login := &types.FinalACL{Access: true, APIs: map[string]*types.ACLAPI{"/pub": {Access: false}}}
+	req := httptest.NewRequest("GET", "/svc/x", nil)
+	if !isAPIPublic(open, "/x", req) || isAPIPublic(login, "/x", req) || !isAPIPublic(login, "/pub", req) {
+		t.Error("public decision")
 	}
-
-	result := mergeACL(packageACL, nil, "oauth", "nonexistent")
-	if result == nil {
-		t.Error("Expected to fallback to direct service key")
+	if isAPIPublic(nil, "/x", req) {
+		t.Error("a service the package does not grant is not public")
 	}
-}
-
-// =============================================================================
-// checkServiceAccess Tests
-// =============================================================================
-
-func TestCheckServiceAccess_NilACLAllowsAccess(t *testing.T) {
-	if !checkServiceAccess(nil, "oauth", "1", "GET", "/token") {
-		t.Error("Nil ACL should allow access")
+	if isAPIPublic(open, "/x", httptest.NewRequest("GET", "/svc/x?access_token=t", nil)) {
+		t.Error("a token in the query string makes the API private")
 	}
 }
 
-func TestCheckServiceAccess_ServiceExistsInACL(t *testing.T) {
-	acl := map[string]interface{}{
-		"1": map[string]interface{}{
-			"access": true,
-		},
-	}
-
-	if !checkServiceAccess(acl, "oauth", "1", "GET", "/token") {
-		t.Error("Service in ACL should allow access")
-	}
-}
-
-func TestCheckServiceAccess_APIPathInACL(t *testing.T) {
-	acl := map[string]interface{}{
-		"1": map[string]interface{}{
-			"get": map[string]interface{}{
-				"apis": map[string]interface{}{
-					"/token": map[string]interface{}{
-						"access": true,
-					},
-				},
-			},
-		},
-	}
-
-	if !checkServiceAccess(acl, "oauth", "1", "GET", "/token") {
-		t.Error("API path in ACL should allow access")
-	}
-}
-
-func TestCheckServiceAccess_VersionNotInACL(t *testing.T) {
-	acl := map[string]interface{}{
-		"1": map[string]interface{}{
-			"access": true,
-		},
-	}
-
-	// Version 2 not in ACL - should still allow (checked elsewhere)
-	if !checkServiceAccess(acl, "oauth", "2", "GET", "/token") {
-		t.Error("Missing version should default to allow")
-	}
-}
-
-// =============================================================================
-// requiresOAuth Tests
-// =============================================================================
-
-func TestRequiresOAuth_NilPackage(t *testing.T) {
-	if requiresOAuth(nil, nil, "test") {
-		t.Error("Nil package should not require OAuth")
-	}
-}
-
-func TestRequiresOAuth_NilACL(t *testing.T) {
-	pkg := &types.Package{ACL: nil}
-	params := &types.ServiceParams{URLInfo: &types.URLInfo{}}
-
-	if requiresOAuth(pkg, params, "test") {
-		t.Error("Nil ACL should not require OAuth")
-	}
-}
-
-func TestRequiresOAuth_AccessFalse(t *testing.T) {
-	pkg := &types.Package{
-		ACL: map[string]interface{}{
-			"oauth": map[string]interface{}{
-				"1": map[string]interface{}{
-					"access": false,
-				},
-			},
-		},
-	}
-	params := &types.ServiceParams{
-		URLInfo: &types.URLInfo{
-			ServiceName:    "oauth",
-			ServiceVersion: "1",
-			ServicePath:    "/token",
-		},
-	}
-
-	if requiresOAuth(pkg, params, "test") {
-		t.Error("access:false should not require OAuth")
-	}
-}
-
-func TestRequiresOAuth_AccessTrue(t *testing.T) {
-	pkg := &types.Package{
-		ACL: map[string]interface{}{
-			"oauth": map[string]interface{}{
-				"1": map[string]interface{}{
-					"access": true,
-				},
-			},
-		},
-	}
-	params := &types.ServiceParams{
-		URLInfo: &types.URLInfo{
-			ServiceName:    "oauth",
-			ServiceVersion: "1",
-			ServicePath:    "/user",
-		},
-	}
-
-	if !requiresOAuth(pkg, params, "test") {
-		t.Error("access:true should require OAuth")
-	}
-}
-
-func TestRequiresOAuth_AccessGroups(t *testing.T) {
-	pkg := &types.Package{
-		ACL: map[string]interface{}{
-			"oauth": map[string]interface{}{
-				"1": map[string]interface{}{
-					"access": []interface{}{"admin", "user"},
-				},
-			},
-		},
-	}
-	params := &types.ServiceParams{
-		URLInfo: &types.URLInfo{
-			ServiceName:    "oauth",
-			ServiceVersion: "1",
-			ServicePath:    "/admin",
-		},
-	}
-
-	if !requiresOAuth(pkg, params, "test") {
-		t.Error("access with groups should require OAuth")
-	}
-}
-
-func TestRequiresOAuth_APILevelAccessOverridesVersion(t *testing.T) {
-	pkg := &types.Package{
-		ACL: map[string]interface{}{
-			"oauth": map[string]interface{}{
-				"1": map[string]interface{}{
-					"access": true, // version level requires auth
-					"get": map[string]interface{}{
-						"apis": map[string]interface{}{
-							"/public": map[string]interface{}{
-								"access": false, // but this API is public
-							},
-						},
-					},
-				},
-			},
-		},
-	}
-	params := &types.ServiceParams{
-		URLInfo: &types.URLInfo{
-			ServiceName:    "oauth",
-			ServiceVersion: "1",
-			ServicePath:    "/public",
-		},
-	}
-
-	if requiresOAuth(pkg, params, "test") {
-		t.Error("API-level access:false should override version-level access:true")
-	}
-}
-
-// =============================================================================
-// isAccessTruthy Tests
-// =============================================================================
-
-func TestIsAccessTruthy_Nil(t *testing.T) {
-	if isAccessTruthy(nil) {
-		t.Error("nil should not be truthy")
-	}
-}
-
-func TestIsAccessTruthy_False(t *testing.T) {
-	if isAccessTruthy(false) {
-		t.Error("false should not be truthy")
-	}
-}
-
-func TestIsAccessTruthy_True(t *testing.T) {
-	if !isAccessTruthy(true) {
-		t.Error("true should be truthy")
-	}
-}
-
-func TestIsAccessTruthy_EmptyArray(t *testing.T) {
-	if isAccessTruthy([]interface{}{}) {
-		t.Error("empty array should not be truthy")
-	}
-}
-
-func TestIsAccessTruthy_NonEmptyArray(t *testing.T) {
-	if !isAccessTruthy([]interface{}{"admin"}) {
-		t.Error("non-empty array should be truthy")
+func TestGeoAllowed(t *testing.T) {
+	geo := map[string]interface{}{"allow": []interface{}{"10.0.0.0/8"}, "deny": []interface{}{"10.9.9.9"}}
+	if !geoAllowed(nil, "1.2.3.4") || !geoAllowed(geo, "10.1.2.3") || geoAllowed(geo, "10.9.9.9") || geoAllowed(geo, "11.0.0.1") {
+		t.Error("geo deny, then allow")
 	}
 }
 
@@ -449,3 +242,30 @@ func (m *mockRegistryMT) LoadByEnv(env string, reload bool) (*types.RegistryData
 }
 
 func (m *mockRegistryMT) Close() {}
+
+// A service the package does not grant answers 154 after OAuth, as in Node.js (serviceCheck).
+func TestMTACL_ServiceNotInPackage(t *testing.T) {
+	reg := mtRegistry()
+	prov := &mockProvision{
+		keys:     map[string]*types.Key{"k": mtKey("k", "PROD_PKG")},
+		packages: map[string]*types.Package{"PROD_PKG": {Code: "PROD_PKG", ACL: map[string]interface{}{}}},
+	}
+	final := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) })
+	handler := Context(zap.NewNop(), "test")(URL(nil)(Key(prov, reg, "test")(KeyACL()(MT(prov, reg, nil, "test")(MTACL(reg)(final))))))
+	req := httptest.NewRequest("GET", "/svc/v1/test", nil)
+	req.Header.Set(config.HeaderSOAJSKey, "k")
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != 401 || !strings.Contains(rec.Body.String(), `"codes":[154]`) {
+		t.Errorf("got %d %s, want 154", rec.Code, rec.Body.String())
+	}
+}
+
+// A key without a package answers 153.
+func TestMT_KeyWithoutApplicationPackage(t *testing.T) {
+	prov := &mockProvision{keys: map[string]*types.Key{"k": mtKey("k", "")}}
+	rec, _ := runMT(t, prov, "k")
+	if rec.Code != 500 || !strings.Contains(rec.Body.String(), `"codes":[153]`) {
+		t.Errorf("got %d %s, want 153", rec.Code, rec.Body.String())
+	}
+}
