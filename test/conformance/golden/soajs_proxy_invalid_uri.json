@@ -1,0 +1,7 @@
+{
+  "status": 503,
+  "headers": {
+    "Content-Type": "application/json"
+  },
+  "body": "{\"result\":false,\"errors\":{\"codes\":[135],\"details\":[{\"code\":135,\"message\":\"Error occurred while redirecting your request to the service\"}]}}"
+}

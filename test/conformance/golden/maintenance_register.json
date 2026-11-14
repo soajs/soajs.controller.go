@@ -1,0 +1,7 @@
+{
+  "status": 200,
+  "headers": {
+    "Content-Type": "application/json"
+  },
+  "body": "{\"result\":true,\"ts\":1794669625264,\"service\":{\"service\":\"soajs.controller\",\"version\":\"4.3.28\",\"type\":\"rest\",\"route\":\"/register\"},\"data\":{\"group\":\"Conformance\",\"port\":24200,\"requestTimeoutRenewal\":5,\"requestTimeout\":30,\"versions\":{\"1\":{\"extKeyRequired\":false,\"maintenance\":{\"commands\":[],\"port\":{\"type\":\"maintenance\"},\"readiness\":\"/heartbeat\"}}},\"maintenance\":{\"readiness\":\"/heartbeat\",\"port\":{\"type\":\"maintenance\"}},\"version\":\"1\",\"extKeyRequired\":false,\"oauth\":true,\"oport\":24200,\"hosts\":{\"1\":[\"127.0.0.1\",\"127.0.0.3\"],\"latest\":\"1\"}}}"
+}

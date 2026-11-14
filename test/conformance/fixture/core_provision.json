@@ -259,6 +259,28 @@
       "value": {
         "masterDB": "DBTN_urac"
       }
+    },
+    {
+      "_id": {
+        "$oid": "6a0e000000000000000000d3"
+      },
+      "name": "oauth",
+      "created": "DEV",
+      "author": "conformance",
+      "plugged": true,
+      "shared": false,
+      "sharedEnvs": {},
+      "value": {
+        "roaming": {
+          "services": {
+            "conform": {
+              "whitelistips": [
+                "10.255.0.9"
+              ]
+            }
+          }
+        }
+      }
     }
   ],
   "marketplace": [
@@ -362,6 +384,24 @@
               "v": "/restricted/api",
               "m": "get",
               "group": "Hello"
+            },
+            {
+              "l": "Add item",
+              "v": "/private/item",
+              "m": "post",
+              "group": "Item"
+            },
+            {
+              "l": "Delete item",
+              "v": "/private/item/:id",
+              "m": "delete",
+              "group": "Item"
+            },
+            {
+              "l": "Patch item",
+              "v": "/private/item/:id",
+              "m": "patch",
+              "group": "Item"
             }
           ],
           "maintenance": {
@@ -427,6 +467,60 @@
           }
         }
       ]
+    },
+    {
+      "_id": {
+        "$oid": "6a0e000000000000000000b4"
+      },
+      "type": "service",
+      "name": "oauth",
+      "description": "Conformance oauth service, answered by cmd/mockservice",
+      "configuration": {
+        "group": "Gateway",
+        "port": 24300,
+        "requestTimeout": 30,
+        "requestTimeoutRenewal": 5
+      },
+      "src": {
+        "provider": "github",
+        "owner": "soajs",
+        "repo": "soajs.oauth"
+      },
+      "metadata": {
+        "program": [
+          "soajs"
+        ]
+      },
+      "versions": [
+        {
+          "version": "1",
+          "extKeyRequired": true,
+          "oauth": true,
+          "urac": false,
+          "urac_Profile": false,
+          "urac_ACL": false,
+          "urac_Config": false,
+          "urac_GroupConfig": false,
+          "tenant_Profile": false,
+          "provision_ACL": false,
+          "interConnect": [],
+          "apis": [
+            {
+              "l": "Passport login",
+              "v": "/passport/login/:strategy",
+              "m": "get",
+              "group": "Passport"
+            }
+          ],
+          "maintenance": {
+            "commands": [],
+            "port": {
+              "type": "maintenance"
+            },
+            "readiness": "/heartbeat"
+          }
+        }
+      ]
     }
   ],
   "hosts": [
@@ -451,6 +545,17 @@
       "hostname": "conformance",
       "version": "1",
       "port": 24200
+    },
+    {
+      "_id": {
+        "$oid": "6a0e000000000000000000cb"
+      },
+      "env": "dev",
+      "name": "oauth",
+      "ip": "127.0.0.1",
+      "hostname": "conformance",
+      "version": "1",
+      "port": 24100
     }
   ],
   "products": [
@@ -497,6 +602,58 @@
                       "/private/item/:id": {
                         "access": true,
                         "group": "Item"
+                      }
+                    }
+                  },
+                  "post": {
+                    "apis": {
+                      "/private/item": {
+                        "access": true,
+                        "group": "Item"
+                      }
+                    }
+                  },
+                  "delete": {
+                    "apis": {
+                      "/private/item/:id": {
+                        "access": true,
+                        "group": "Item"
+                      }
+                    }
+                  },
+                  "patch": {
+                    "apis": {
+                      "/private/item/:id": {
+                        "access": true,
+                        "group": "Item"
+                      }
+                    }
+                  }
+                }
+              },
+              "other": {
+                "1": {
+                  "access": true,
+                  "apisPermission": "restricted",
+                  "get": {
+                    "apis": {
+                      "/hello": {
+                        "access": true,
+                        "group": "Hello"
+                      }
+                    }
+                  }
+                }
+              },
+              "oauth": {
+                "1": {
+                  "access": false,
+                  "apisPermission": "restricted",
+                  "get": {
+                    "apis": {
+                      "/passport/login/:strategy": {
+                        "access": false,
+                        "group": "Passport"
                       }
                     }
                   }
@@ -564,6 +721,22 @@
                   "extKey": "5bbf311a30f4acaec52b7472be854cc95259156275114822ad91615d02d27609ac1ebf7aecfdc2355849a594cc55d042d9906c2c0190a3b7d5f5935d8053a953ede02160a6f8429f1ba971b8d9d6fe6afe7c59af3462d188c4b1a08e9c07670e",
                   "env": "DEV",
                   "label": "conformance default",
+                  "device": null,
+                  "geo": null,
+                  "expDate": null
+                },
+                {
+                  "extKey": "5bbf311a30f4acaec52b7472be854cc95259156275114822ad91615d02d2760944be5f2421ce4cd2c35aae1da35ac3b96a72d5942c01956d1a29a29cfee5fa6d1c1e0bffdd48b418fb8615150a38a5c35b6117a9a86bcfdcf6086c797ace797a",
+                  "env": "DEV",
+                  "label": "conformance expired",
+                  "device": null,
+                  "geo": null,
+                  "expDate": 946684800000
+                },
+                {
+                  "extKey": "5bbf311a30f4acaec52b7472be854cc95259156275114822ad91615d02d27609ae1f75a4f8cdf2c4d66a956a94354d315cb54fffd2da740b16b23321cc397e7aee083b3aea2b66b992166c72629cfcad4b36c5c5b989de68c54a7b31cb01812e",
+                  "env": "STG",
+                  "label": "conformance other environment",
                   "device": null,
                   "geo": null,
                   "expDate": null

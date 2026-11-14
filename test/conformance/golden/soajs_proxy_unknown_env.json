@@ -1,0 +1,7 @@
+{
+  "status": 401,
+  "headers": {
+    "Content-Type": "application/json"
+  },
+  "body": "{\"result\":false,\"errors\":{\"codes\":[137],\"details\":[{\"code\":137,\"message\":\"Access Forbidden to requested environment\"}]}}"
+}

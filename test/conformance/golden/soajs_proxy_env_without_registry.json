@@ -1,0 +1,7 @@
+{
+  "status": 500,
+  "headers": {
+    "Content-Type": "application/json"
+  },
+  "body": "{\"result\":false,\"errors\":{\"codes\":[207],\"details\":[{\"code\":207,\"message\":\"Unable to load provisioned information for the provided env code\"}]}}"
+}

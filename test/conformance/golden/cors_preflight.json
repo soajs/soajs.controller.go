@@ -1,0 +1,11 @@
+{
+  "status": 204,
+  "headers": {
+    "Access-Control-Allow-Credentials": "true",
+    "Access-Control-Allow-Headers": "key,soajsauth,device-id,Content-Type",
+    "Access-Control-Allow-Methods": "GET,HEAD,PUT,PATCH,POST,DELETE",
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Max-Age": "1728000"
+  },
+  "body": ""
+}
