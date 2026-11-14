@@ -1,0 +1,74 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "cache_invalidation",
+  "x-soajs": {
+    "collection": "cache_invalidation",
+    "database": "gateway"
+  },
+  "type": "object",
+  "properties": {
+    "_id": {
+      "type": "object",
+      "properties": {
+        "$oid": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{24}$"
+        }
+      },
+      "required": [
+        "$oid"
+      ],
+      "additionalProperties": false
+    },
+    "l1": {
+      "type": "string",
+      "minLength": 1
+    },
+    "service": {
+      "type": "string",
+      "minLength": 1
+    },
+    "api": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "user": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "clearedAt": {
+      "type": "object",
+      "properties": {
+        "$date": {}
+      },
+      "required": [
+        "$date"
+      ],
+      "additionalProperties": false
+    },
+    "expiresAt": {
+      "type": "object",
+      "properties": {
+        "$date": {}
+      },
+      "required": [
+        "$date"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "_id",
+    "l1",
+    "service",
+    "api",
+    "user",
+    "clearedAt",
+    "expiresAt"
+  ]
+}

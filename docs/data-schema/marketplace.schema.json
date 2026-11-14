@@ -1,0 +1,360 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "marketplace",
+  "x-soajs": {
+    "collection": "marketplace",
+    "database": "provision"
+  },
+  "type": "object",
+  "properties": {
+    "_id": {
+      "type": "object",
+      "properties": {
+        "$oid": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{24}$"
+        }
+      },
+      "required": [
+        "$oid"
+      ],
+      "additionalProperties": false
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1
+    },
+    "type": {
+      "type": "string",
+      "minLength": 1
+    },
+    "description": {
+      "type": "string"
+    },
+    "configuration": {
+      "type": "object"
+    },
+    "versions": {
+      "type": "array",
+      "minItems": 1
+    },
+    "src": {},
+    "metadata": {},
+    "settings": {},
+    "ui": {},
+    "deploy": {}
+  },
+  "additionalProperties": false,
+  "required": [
+    "_id",
+    "name",
+    "type",
+    "configuration",
+    "versions"
+  ],
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "service"
+          },
+          "name": {
+            "not": {
+              "const": "controller"
+            }
+          }
+        },
+        "required": [
+          "type",
+          "name"
+        ]
+      },
+      "then": {
+        "properties": {
+          "configuration": {
+            "type": "object",
+            "properties": {
+              "group": {
+                "type": "string",
+                "minLength": 1
+              },
+              "port": {
+                "type": "integer"
+              },
+              "requestTimeout": {
+                "type": "integer"
+              },
+              "requestTimeoutRenewal": {
+                "type": "integer"
+              },
+              "subType": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "required": [
+              "group",
+              "port",
+              "requestTimeout",
+              "requestTimeoutRenewal"
+            ]
+          },
+          "versions": {
+            "items": {
+              "type": "object",
+              "properties": {
+                "version": {
+                  "type": "string",
+                  "pattern": "^[0-9]+$"
+                },
+                "interConnect": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "name": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "version": {
+                        "type": "string",
+                        "pattern": "^[0-9]+$"
+                      }
+                    },
+                    "additionalProperties": false,
+                    "required": [
+                      "name"
+                    ]
+                  }
+                },
+                "maintenance": {
+                  "type": "object",
+                  "properties": {
+                    "readiness": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "port": {
+                      "type": "object",
+                      "properties": {
+                        "type": {
+                          "enum": [
+                            "maintenance",
+                            "inherit"
+                          ]
+                        }
+                      },
+                      "additionalProperties": false,
+                      "required": [
+                        "type"
+                      ]
+                    },
+                    "commands": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "label": {
+                            "type": "string"
+                          },
+                          "path": {
+                            "type": "string"
+                          },
+                          "icon": {
+                            "type": "string"
+                          }
+                        },
+                        "additionalProperties": false,
+                        "required": [
+                          "label",
+                          "path"
+                        ]
+                      }
+                    }
+                  },
+                  "additionalProperties": false,
+                  "required": [
+                    "readiness",
+                    "port"
+                  ]
+                },
+                "apis": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "l": {
+                        "type": "string"
+                      },
+                      "v": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "m": {
+                        "enum": [
+                          "get",
+                          "post",
+                          "put",
+                          "delete",
+                          "patch",
+                          "head",
+                          "options"
+                        ]
+                      },
+                      "group": {
+                        "type": "string"
+                      },
+                      "groupMain": {
+                        "type": "boolean"
+                      }
+                    },
+                    "additionalProperties": false,
+                    "required": [
+                      "l",
+                      "v",
+                      "m"
+                    ]
+                  }
+                },
+                "soa": {},
+                "lastSync": {},
+                "branches": {},
+                "tags": {},
+                "documentation": {},
+                "swagger": {},
+                "profile": {},
+                "customByEnv": {},
+                "extKeyRequired": {
+                  "type": "boolean"
+                },
+                "oauth": {
+                  "type": "boolean"
+                },
+                "urac": {
+                  "type": "boolean"
+                },
+                "urac_Profile": {
+                  "type": "boolean"
+                },
+                "urac_ACL": {
+                  "type": "boolean"
+                },
+                "urac_Config": {
+                  "type": "boolean"
+                },
+                "urac_GroupConfig": {
+                  "type": "boolean"
+                },
+                "tenant_Profile": {
+                  "type": "boolean"
+                },
+                "provision_ACL": {
+                  "type": "boolean"
+                }
+              },
+              "additionalProperties": false,
+              "required": [
+                "version",
+                "interConnect",
+                "maintenance",
+                "apis",
+                "extKeyRequired",
+                "oauth",
+                "urac",
+                "urac_Profile",
+                "urac_ACL",
+                "urac_Config",
+                "urac_GroupConfig",
+                "tenant_Profile",
+                "provision_ACL"
+              ]
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "mdaemon"
+          }
+        },
+        "required": [
+          "type"
+        ]
+      },
+      "then": {
+        "properties": {
+          "configuration": {
+            "type": "object",
+            "properties": {
+              "group": {
+                "type": "string",
+                "minLength": 1
+              },
+              "port": {
+                "type": "integer"
+              }
+            },
+            "additionalProperties": false,
+            "required": [
+              "group",
+              "port"
+            ]
+          },
+          "versions": {
+            "items": {
+              "type": "object",
+              "properties": {
+                "version": {
+                  "type": "string",
+                  "pattern": "^[0-9]+$"
+                },
+                "maintenance": {
+                  "type": "object",
+                  "properties": {
+                    "readiness": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "port": {
+                      "type": "object",
+                      "properties": {
+                        "type": {
+                          "enum": [
+                            "maintenance",
+                            "inherit"
+                          ]
+                        }
+                      },
+                      "additionalProperties": false,
+                      "required": [
+                        "type"
+                      ]
+                    },
+                    "commands": {}
+                  },
+                  "additionalProperties": false,
+                  "required": [
+                    "readiness",
+                    "port"
+                  ]
+                },
+                "jobs": {
+                  "type": "object"
+                }
+              },
+              "additionalProperties": false,
+              "required": [
+                "version",
+                "maintenance"
+              ]
+            }
+          }
+        }
+      }
+    }
+  ]
+}

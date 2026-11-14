@@ -1,0 +1,115 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "idempotency_store",
+  "x-soajs": {
+    "collection": "idempotency_store",
+    "database": "gateway"
+  },
+  "type": "object",
+  "properties": {
+    "_id": {
+      "type": "object",
+      "properties": {
+        "$oid": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{24}$"
+        }
+      },
+      "required": [
+        "$oid"
+      ],
+      "additionalProperties": false
+    },
+    "l1": {
+      "type": "string",
+      "minLength": 1
+    },
+    "l2": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+    },
+    "status": {
+      "enum": [
+        "in_flight",
+        "completed"
+      ]
+    },
+    "lockId": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "lockedAt": {
+      "type": "object",
+      "properties": {
+        "$date": {}
+      },
+      "required": [
+        "$date"
+      ],
+      "additionalProperties": false
+    },
+    "completedAt": {
+      "type": "object",
+      "properties": {
+        "$date": {}
+      },
+      "required": [
+        "$date"
+      ],
+      "additionalProperties": false
+    },
+    "expiresAt": {
+      "type": "object",
+      "properties": {
+        "$date": {}
+      },
+      "required": [
+        "$date"
+      ],
+      "additionalProperties": false
+    },
+    "response": {
+      "type": "object",
+      "properties": {
+        "statusCode": {
+          "type": "integer"
+        },
+        "headers": {
+          "type": "object"
+        },
+        "body": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "statusCode",
+        "headers",
+        "body"
+      ]
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "_id",
+    "l1",
+    "l2",
+    "status",
+    "expiresAt"
+  ],
+  "if": {
+    "properties": {
+      "status": {
+        "const": "completed"
+      }
+    }
+  },
+  "then": {
+    "required": [
+      "response",
+      "completedAt"
+    ]
+  }
+}

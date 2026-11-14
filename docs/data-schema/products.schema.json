@@ -1,0 +1,354 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "products",
+  "x-soajs": {
+    "collection": "products",
+    "database": "provision"
+  },
+  "type": "object",
+  "properties": {
+    "_id": {
+      "type": "object",
+      "properties": {
+        "$oid": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{24}$"
+        }
+      },
+      "required": [
+        "$oid"
+      ],
+      "additionalProperties": false
+    },
+    "code": {
+      "type": "string",
+      "pattern": "^[A-Z0-9]+$"
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1
+    },
+    "description": {
+      "type": "string"
+    },
+    "console": {
+      "type": "boolean"
+    },
+    "locked": {
+      "type": "boolean"
+    },
+    "scope": {},
+    "packages": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "pattern": "^[A-Z0-9]+_[A-Z0-9_]+$"
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "description": {
+            "type": "string"
+          },
+          "_TTL": {
+            "type": "integer"
+          },
+          "locked": {
+            "type": "boolean"
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "aclTypeByEnv": {
+            "type": "object",
+            "propertyNames": {
+              "pattern": "^[a-z0-9]+$"
+            },
+            "additionalProperties": {
+              "const": "granular"
+            }
+          },
+          "acl": {
+            "type": "object",
+            "propertyNames": {
+              "pattern": "^[a-z0-9]+$"
+            },
+            "additionalProperties": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "object",
+                "propertyNames": {
+                  "pattern": "^[0-9]+$"
+                },
+                "additionalProperties": {
+                  "type": "object",
+                  "properties": {
+                    "access": {
+                      "type": "boolean"
+                    },
+                    "apisPermission": {
+                      "const": "restricted"
+                    },
+                    "get": {
+                      "type": "object",
+                      "properties": {
+                        "apis": {
+                          "type": "object",
+                          "additionalProperties": {
+                            "type": "object",
+                            "properties": {
+                              "access": {
+                                "type": "boolean"
+                              },
+                              "group": {
+                                "type": "string"
+                              }
+                            },
+                            "additionalProperties": false,
+                            "required": [
+                              "access"
+                            ]
+                          }
+                        }
+                      },
+                      "additionalProperties": false,
+                      "required": [
+                        "apis"
+                      ]
+                    },
+                    "post": {
+                      "type": "object",
+                      "properties": {
+                        "apis": {
+                          "type": "object",
+                          "additionalProperties": {
+                            "type": "object",
+                            "properties": {
+                              "access": {
+                                "type": "boolean"
+                              },
+                              "group": {
+                                "type": "string"
+                              }
+                            },
+                            "additionalProperties": false,
+                            "required": [
+                              "access"
+                            ]
+                          }
+                        }
+                      },
+                      "additionalProperties": false,
+                      "required": [
+                        "apis"
+                      ]
+                    },
+                    "put": {
+                      "type": "object",
+                      "properties": {
+                        "apis": {
+                          "type": "object",
+                          "additionalProperties": {
+                            "type": "object",
+                            "properties": {
+                              "access": {
+                                "type": "boolean"
+                              },
+                              "group": {
+                                "type": "string"
+                              }
+                            },
+                            "additionalProperties": false,
+                            "required": [
+                              "access"
+                            ]
+                          }
+                        }
+                      },
+                      "additionalProperties": false,
+                      "required": [
+                        "apis"
+                      ]
+                    },
+                    "delete": {
+                      "type": "object",
+                      "properties": {
+                        "apis": {
+                          "type": "object",
+                          "additionalProperties": {
+                            "type": "object",
+                            "properties": {
+                              "access": {
+                                "type": "boolean"
+                              },
+                              "group": {
+                                "type": "string"
+                              }
+                            },
+                            "additionalProperties": false,
+                            "required": [
+                              "access"
+                            ]
+                          }
+                        }
+                      },
+                      "additionalProperties": false,
+                      "required": [
+                        "apis"
+                      ]
+                    },
+                    "patch": {
+                      "type": "object",
+                      "properties": {
+                        "apis": {
+                          "type": "object",
+                          "additionalProperties": {
+                            "type": "object",
+                            "properties": {
+                              "access": {
+                                "type": "boolean"
+                              },
+                              "group": {
+                                "type": "string"
+                              }
+                            },
+                            "additionalProperties": false,
+                            "required": [
+                              "access"
+                            ]
+                          }
+                        }
+                      },
+                      "additionalProperties": false,
+                      "required": [
+                        "apis"
+                      ]
+                    },
+                    "head": {
+                      "type": "object",
+                      "properties": {
+                        "apis": {
+                          "type": "object",
+                          "additionalProperties": {
+                            "type": "object",
+                            "properties": {
+                              "access": {
+                                "type": "boolean"
+                              },
+                              "group": {
+                                "type": "string"
+                              }
+                            },
+                            "additionalProperties": false,
+                            "required": [
+                              "access"
+                            ]
+                          }
+                        }
+                      },
+                      "additionalProperties": false,
+                      "required": [
+                        "apis"
+                      ]
+                    },
+                    "options": {
+                      "type": "object",
+                      "properties": {
+                        "apis": {
+                          "type": "object",
+                          "additionalProperties": {
+                            "type": "object",
+                            "properties": {
+                              "access": {
+                                "type": "boolean"
+                              },
+                              "group": {
+                                "type": "string"
+                              }
+                            },
+                            "additionalProperties": false,
+                            "required": [
+                              "access"
+                            ]
+                          }
+                        }
+                      },
+                      "additionalProperties": false,
+                      "required": [
+                        "apis"
+                      ]
+                    }
+                  },
+                  "additionalProperties": false,
+                  "required": [
+                    "access"
+                  ],
+                  "anyOf": [
+                    {
+                      "required": [
+                        "get"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "post"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "put"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "delete"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "patch"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "head"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "options"
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "code",
+          "name",
+          "_TTL",
+          "aclTypeByEnv",
+          "acl"
+        ]
+      }
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "_id",
+    "code",
+    "name",
+    "console",
+    "packages"
+  ]
+}

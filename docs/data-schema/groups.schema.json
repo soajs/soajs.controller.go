@@ -1,0 +1,97 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "urac groups (masterDB)",
+  "x-soajs": {
+    "collection": "groups",
+    "database": "urac"
+  },
+  "type": "object",
+  "properties": {
+    "_id": {
+      "type": "object",
+      "properties": {
+        "$oid": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{24}$"
+        }
+      },
+      "required": [
+        "$oid"
+      ],
+      "additionalProperties": false
+    },
+    "code": {
+      "type": "string",
+      "minLength": 1
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1
+    },
+    "description": {
+      "type": "string"
+    },
+    "locked": {
+      "type": "boolean"
+    },
+    "ts": {
+      "type": "number"
+    },
+    "tenant": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{24}$"
+        },
+        "code": {
+          "type": "string",
+          "pattern": "^[A-Z0-9]+$"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "code"
+      ]
+    },
+    "config": {
+      "type": "object",
+      "properties": {
+        "allowedPackages": {
+          "type": "object",
+          "propertyNames": {
+            "pattern": "^[A-Z0-9]+$"
+          },
+          "additionalProperties": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "allowedEnvironments": {
+          "type": "object",
+          "propertyNames": {
+            "pattern": "^[A-Z0-9]+$"
+          },
+          "additionalProperties": {
+            "type": "object"
+          }
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "allowedPackages"
+      ]
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "_id",
+    "code",
+    "name",
+    "tenant",
+    "config"
+  ]
+}

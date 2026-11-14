@@ -1,0 +1,371 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "tenants",
+  "x-soajs": {
+    "collection": "tenants",
+    "database": "provision"
+  },
+  "type": "object",
+  "properties": {
+    "_id": {
+      "type": "object",
+      "properties": {
+        "$oid": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{24}$"
+        }
+      },
+      "required": [
+        "$oid"
+      ],
+      "additionalProperties": false
+    },
+    "code": {
+      "type": "string",
+      "pattern": "^[A-Z0-9]+$"
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1
+    },
+    "description": {
+      "type": "string"
+    },
+    "type": {
+      "enum": [
+        "product",
+        "client"
+      ]
+    },
+    "console": {
+      "type": "boolean"
+    },
+    "locked": {
+      "type": "boolean"
+    },
+    "tag": {
+      "type": "string"
+    },
+    "category": {
+      "type": "string"
+    },
+    "profile": {
+      "type": "object",
+      "properties": {
+        "access": {
+          "type": "object",
+          "properties": {
+            "resolver": {
+              "type": "string",
+              "minLength": 1
+            },
+            "subject": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "resolver"
+          ]
+        }
+      }
+    },
+    "tenant": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{24}$"
+        },
+        "code": {
+          "type": "string",
+          "pattern": "^[A-Z0-9]+$"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "code"
+      ]
+    },
+    "oauth": {
+      "type": "object",
+      "properties": {
+        "secret": {
+          "type": "string",
+          "minLength": 1
+        },
+        "type": {
+          "const": 2
+        },
+        "disabled": {
+          "enum": [
+            0,
+            1
+          ]
+        },
+        "loginMode": {
+          "type": "string"
+        },
+        "grants": {},
+        "redirectURI": {},
+        "pin": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "enabled": {
+                "type": "boolean"
+              }
+            },
+            "additionalProperties": false,
+            "required": [
+              "enabled"
+            ]
+          }
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "secret",
+        "type",
+        "disabled"
+      ]
+    },
+    "applications": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "appId": {
+            "type": "object",
+            "properties": {
+              "$oid": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{24}$"
+              }
+            },
+            "required": [
+              "$oid"
+            ],
+            "additionalProperties": false
+          },
+          "product": {
+            "type": "string",
+            "pattern": "^[A-Z0-9]+$"
+          },
+          "package": {
+            "type": "string",
+            "pattern": "^[A-Z0-9]+_[A-Z0-9_]+$"
+          },
+          "description": {
+            "type": "string"
+          },
+          "_TTL": {
+            "type": "integer"
+          },
+          "keys": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "key": {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{32}$"
+                },
+                "config": {
+                  "type": "object",
+                  "propertyNames": {
+                    "pattern": "^[a-z0-9]+$"
+                  },
+                  "additionalProperties": {
+                    "type": "object",
+                    "properties": {
+                      "gateway": {
+                        "type": "object",
+                        "properties": {
+                          "networkPackages": {
+                            "type": "object",
+                            "additionalProperties": {
+                              "type": "object",
+                              "additionalProperties": {
+                                "type": "object",
+                                "properties": {
+                                  "default": {
+                                    "type": "string"
+                                  },
+                                  "users": {
+                                    "type": "object",
+                                    "additionalProperties": {
+                                      "type": "string"
+                                    }
+                                  }
+                                },
+                                "additionalProperties": false
+                              }
+                            }
+                          },
+                          "validateTokenAccount": {
+                            "type": "object",
+                            "properties": {
+                              "email": {
+                                "type": "boolean"
+                              },
+                              "phone": {
+                                "type": "boolean"
+                              }
+                            },
+                            "additionalProperties": false
+                          },
+                          "throttling": {
+                            "type": "object",
+                            "additionalProperties": {
+                              "type": "object",
+                              "properties": {
+                                "publicAPIStrategy": {
+                                  "type": "string"
+                                },
+                                "privateAPIStrategy": {
+                                  "type": "string"
+                                },
+                                "apis": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "string"
+                                  }
+                                }
+                              },
+                              "additionalProperties": false
+                            }
+                          }
+                        },
+                        "additionalProperties": false
+                      },
+                      "commonFields": {
+                        "type": "object"
+                      }
+                    },
+                    "additionalProperties": {
+                      "type": "object"
+                    }
+                  }
+                },
+                "extKeys": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "extKey": {
+                        "type": "string",
+                        "pattern": "^[0-9a-f]+$"
+                      },
+                      "env": {
+                        "type": "string",
+                        "pattern": "^[A-Z0-9]+$"
+                      },
+                      "label": {
+                        "type": "string"
+                      },
+                      "device": {
+                        "oneOf": [
+                          {
+                            "type": "null"
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "allow": {},
+                              "deny": {}
+                            },
+                            "additionalProperties": false,
+                            "minProperties": 1
+                          }
+                        ]
+                      },
+                      "geo": {
+                        "oneOf": [
+                          {
+                            "type": "null"
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "allow": {},
+                              "deny": {}
+                            },
+                            "additionalProperties": false,
+                            "minProperties": 1
+                          }
+                        ]
+                      },
+                      "expDate": {
+                        "type": [
+                          "integer",
+                          "null"
+                        ]
+                      },
+                      "dashboardAccess": {
+                        "type": "boolean"
+                      }
+                    },
+                    "additionalProperties": false,
+                    "required": [
+                      "extKey",
+                      "env",
+                      "device",
+                      "geo",
+                      "expDate"
+                    ]
+                  }
+                }
+              },
+              "additionalProperties": false,
+              "required": [
+                "key",
+                "config",
+                "extKeys"
+              ]
+            }
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "appId",
+          "product",
+          "package",
+          "_TTL",
+          "keys"
+        ]
+      }
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "_id",
+    "code",
+    "name",
+    "type",
+    "console",
+    "oauth",
+    "applications"
+  ],
+  "if": {
+    "properties": {
+      "type": {
+        "const": "client"
+      }
+    }
+  },
+  "then": {
+    "required": [
+      "tenant"
+    ]
+  },
+  "else": {
+    "not": {
+      "required": [
+        "tenant"
+      ]
+    }
+  }
+}

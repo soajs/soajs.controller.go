@@ -1,0 +1,181 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "urac users (masterDB)",
+  "x-soajs": {
+    "collection": "users",
+    "database": "urac"
+  },
+  "type": "object",
+  "properties": {
+    "_id": {
+      "type": "object",
+      "properties": {
+        "$oid": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{24}$"
+        }
+      },
+      "required": [
+        "$oid"
+      ],
+      "additionalProperties": false
+    },
+    "username": {
+      "type": "string",
+      "minLength": 1
+    },
+    "email": {
+      "type": "string"
+    },
+    "phone": {
+      "type": "string"
+    },
+    "ln": {
+      "type": "string"
+    },
+    "firstName": {
+      "type": "string"
+    },
+    "lastName": {
+      "type": "string"
+    },
+    "password": {
+      "type": "string"
+    },
+    "status": {
+      "enum": [
+        "active",
+        "inactive",
+        "pending",
+        "pendingNew",
+        "pendingJoin"
+      ]
+    },
+    "tenant": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{24}$"
+        },
+        "code": {
+          "type": "string",
+          "pattern": "^[A-Z0-9]+$"
+        },
+        "pin": {}
+      },
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "code"
+      ]
+    },
+    "groups": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "config": {
+      "type": "object",
+      "properties": {
+        "allowedTenants": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "tenant": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "code": {
+                    "type": "string"
+                  },
+                  "pin": {}
+                },
+                "additionalProperties": true,
+                "required": [
+                  "id",
+                  "code"
+                ]
+              },
+              "groups": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "additionalProperties": false,
+            "required": [
+              "tenant"
+            ]
+          }
+        },
+        "keys": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "config": {
+                "type": "object"
+              }
+            },
+            "additionalProperties": false,
+            "required": [
+              "config"
+            ]
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "profile": {
+      "type": "object"
+    },
+    "memberships": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "product": {
+            "type": "string",
+            "minLength": 1
+          },
+          "membership": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "product",
+          "membership"
+        ]
+      }
+    },
+    "ts": {
+      "type": "number"
+    },
+    "lastLogin": {
+      "type": "number"
+    },
+    "lastNetwork": {},
+    "locked": {
+      "type": "boolean"
+    },
+    "socialId": {}
+  },
+  "additionalProperties": false,
+  "required": [
+    "_id",
+    "username",
+    "status",
+    "tenant",
+    "groups",
+    "config",
+    "profile"
+  ]
+}

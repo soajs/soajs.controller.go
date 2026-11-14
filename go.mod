@@ -5,6 +5,7 @@ go 1.22
 require (
 	github.com/go-chi/chi/v5 v5.0.12
 	github.com/google/uuid v1.6.0
+	github.com/santhosh-tekuri/jsonschema/v5 v5.3.1
 	github.com/spf13/viper v1.18.2
 	go.mongodb.org/mongo-driver v1.14.0
 	go.uber.org/zap v1.27.0
