@@ -9,12 +9,12 @@ The Go gateway must answer as the Node.js gateway (`soajs.controller`) does, byt
 | `pending.json` | Cases the Go gateway does not pass yet, each with the pull request that ports it. It is empty: Go passes every case. |
 | `fixture/` | The data both gateways run on, in the shapes of the live `core_provision` data. Every value in it is a test value. |
 | `cmd/fixture` | Loads the fixture. It writes only the `conformance_*` databases, and only on a local MongoDB. |
-| `cmd/mockservice` | The fixture's services: `conform` (24100, maintenance 25100) and `other` (24200, maintenance 25200). They answer with the method, path, query and body they received and the `soajsinjectobj` the gateway sent; their maintenance port serves the MCP tools (`-tools soajs`, `-tools swagger`). |
+| `cmd/mockservice` | The fixture's services: `conform` (24100, maintenance 25100), `other` (24200, maintenance 25200) and `open`, whose version needs no key (24400, maintenance 25400). They answer with the method, path, query and body they received and the `soajsinjectobj` the gateway sent; their maintenance port serves the MCP tools (`-tools soajs`, `-tools swagger`). |
 | `run.sh` | Loads the fixture, starts the mocks and the gateways (dev on 24000/25000, dashboard on 26000/27000), and runs the cases. |
 
 ## Run
 
-A local MongoDB on `127.0.0.1:27017` is needed, or set `MONGO_URI`. Ports 24000, 25000, 26000, 27000, 24100, 25100, 24200 and 25200 must be free.
+A local MongoDB on `127.0.0.1:27017` is needed, or set `MONGO_URI`. Ports 24000, 25000, 26000, 27000, 24100, 25100, 24200, 25200, 24400 and 25400 must be free.
 
 ```bash
 test/conformance/run.sh go
@@ -31,7 +31,7 @@ NODE_CONTROLLER_DIR=/path/to/soajs.controller test/conformance/run.sh node -reco
 test/conformance/run.sh node    # check the recording is stable
 ```
 
-`NODE_CONTROLLER_DIR` is a checkout of `soajs.controller` with its `node_modules` installed. The golden files in this repository were recorded from 4.3.28.
+`NODE_CONTROLLER_DIR` is a checkout of `soajs.controller` with its `node_modules` installed. The golden files in this repository were recorded from 4.3.29.
 
 ## Adding a case
 

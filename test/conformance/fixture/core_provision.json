@@ -535,6 +535,60 @@
     },
     {
       "_id": {
+        "$oid": "6a0e000000000000000000b5"
+      },
+      "type": "service",
+      "name": "open",
+      "description": "Service whose version needs no key",
+      "configuration": {
+        "group": "Conformance",
+        "port": 24400,
+        "requestTimeout": 30,
+        "requestTimeoutRenewal": 5
+      },
+      "src": {
+        "provider": "github",
+        "owner": "soajs",
+        "repo": "soajs.open"
+      },
+      "metadata": {
+        "program": [
+          "soajs"
+        ]
+      },
+      "versions": [
+        {
+          "version": "1",
+          "extKeyRequired": false,
+          "oauth": false,
+          "urac": false,
+          "urac_Profile": false,
+          "urac_ACL": false,
+          "urac_Config": false,
+          "urac_GroupConfig": false,
+          "tenant_Profile": false,
+          "provision_ACL": false,
+          "interConnect": [],
+          "apis": [
+            {
+              "l": "Hello",
+              "v": "/hello",
+              "m": "get",
+              "group": "Hello"
+            }
+          ],
+          "maintenance": {
+            "commands": [],
+            "port": {
+              "type": "maintenance"
+            },
+            "readiness": "/heartbeat"
+          }
+        }
+      ]
+    },
+    {
+      "_id": {
         "$oid": "6a0e000000000000000000b4"
       },
       "type": "service",
@@ -610,6 +664,17 @@
       "hostname": "conformance",
       "version": "1",
       "port": 24200
+    },
+    {
+      "_id": {
+        "$oid": "6a0e000000000000000000cd"
+      },
+      "env": "dev",
+      "name": "open",
+      "ip": "127.0.0.1",
+      "hostname": "conformance",
+      "version": "1",
+      "port": 24400
     },
     {
       "_id": {

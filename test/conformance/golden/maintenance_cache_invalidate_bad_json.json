@@ -3,5 +3,5 @@
   "headers": {
     "Content-Type": "application/json"
   },
-  "body": "{\"result\":false,\"ts\":1794689024294,\"service\":{\"service\":\"soajs.controller\",\"version\":\"4.3.28\",\"type\":\"rest\",\"route\":\"/cache/invalidate\"},\"error\":\"The body is not valid JSON.\"}"
+  "body": "{\"result\":false,\"ts\":1794693479006,\"service\":{\"service\":\"soajs.controller\",\"version\":\"4.3.29\",\"type\":\"rest\",\"route\":\"/cache/invalidate\"},\"error\":\"The body is not valid JSON.\"}"
 }

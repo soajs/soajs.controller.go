@@ -3,7 +3,7 @@
 [![Go Version](https://img.shields.io/badge/Go-1.25+-00ADD8?style=flat&logo=go)](https://go.dev/)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 
-The SOAJS API gateway written in Go. The Node.js gateway, [soajs.controller](https://github.com/soajs/soajs.controller) 4.3.28, is its specification. The Go gateway reads the same profile and the same databases, and answers requests as that gateway does.
+The SOAJS API gateway written in Go. The Node.js gateway, [soajs.controller](https://github.com/soajs/soajs.controller) 4.3.29, is its specification. The Go gateway reads the same profile and the same databases, and answers requests as that gateway does.
 
 **Status:**
 - Every area of the Node.js gateway is ported:
@@ -13,7 +13,7 @@ The SOAJS API gateway written in Go. The Node.js gateway, [soajs.controller](htt
   - the maintenance port;
   - `/soajs/acl`, `/soajs/proxy` and `/soajs/mcp` with its authorization flow;
   - idempotency and the response cache.
-- The [conformance harness](test/conformance/README.md) replays 123 requests against both gateways on the same fixture database and compares status, headers and body byte for byte. Both pass all of them.
+- The [conformance harness](test/conformance/README.md) replays 126 requests against both gateways on the same fixture database and compares status, headers and body byte for byte. Both pass all of them.
 - The places where Go deliberately answers differently are listed in [docs/differences.md](docs/differences.md).
 
 Go reads only the latest data schema ([docs/data-schema](docs/data-schema/README.md)). It carries no compatibility code for older shapes: a document that does not match its schema is logged and skipped or refused, never converted.
@@ -51,7 +51,7 @@ make test                              # go test -race -cover ./...
 test/conformance/run.sh go             # the Go gateway against the Node.js answers
 ```
 
-The conformance harness needs a local MongoDB (`127.0.0.1:27017`, or `MONGO_URI`) and free ports 24000, 25000, 26000, 27000, 24100, 25100, 24200 and 25200. To record the Node.js answers again:
+The conformance harness needs a local MongoDB (`127.0.0.1:27017`, or `MONGO_URI`) and free ports 24000, 25000, 26000, 27000, 24100, 25100, 24200, 25200, 24400 and 25400. To record the Node.js answers again:
 
 ```bash
 NODE_CONTROLLER_DIR=/path/to/soajs.controller test/conformance/run.sh node -record

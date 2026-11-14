@@ -3,5 +3,5 @@
   "headers": {
     "Content-Type": "application/json"
   },
-  "body": "{\"result\":false,\"ts\":1794689024303,\"service\":{\"service\":\"soajs.controller\",\"version\":\"4.3.28\",\"type\":\"rest\",\"route\":\"/cache/invalidate\"},\"error\":\"api must be written as in the cache configuration, for example \\\"GET /spaces\\\".\"}"
+  "body": "{\"result\":false,\"ts\":1794693479007,\"service\":{\"service\":\"soajs.controller\",\"version\":\"4.3.29\",\"type\":\"rest\",\"route\":\"/cache/invalidate\"},\"error\":\"api must be written as in the cache configuration, for example \\\"GET /spaces\\\".\"}"
 }
