@@ -55,249 +55,50 @@ func TestMT_SkipsWhenNoKey(t *testing.T) {
 	}
 }
 
-func TestMT_RejectsInvalidTenant(t *testing.T) {
-	logger, _ := zap.NewDevelopment()
-
-	// Key exists but tenant doesn't
-	prov := &mockProvision{
-		keys: map[string]*types.Key{
-			"test-key": {
-				ExtKey:     "test-key",
-				TenantCode: "INVALID_TENANT",
-			},
-		},
-		tenants: map[string]*types.Tenant{}, // Empty - no tenants
+func mtKey(extKey, pkg string) *types.Key {
+	return &types.Key{
+		InternalKey: "ikey",
+		ExtKey:      extKey,
+		Env:         "TEST",
+		Tenant:      types.KeyTenant{ID: "tenant-123", Code: "MYTEN", Name: "My Tenant"},
+		Application: types.KeyApplication{Product: "PROD", Package: pkg},
 	}
+}
+
+func runMT(t *testing.T, prov *mockProvision, extKey string) (*httptest.ResponseRecorder, *SOAJSContext) {
+	t.Helper()
 	reg := &mockRegistryMT{}
-
-	contextMW := Context(logger, "test")
-	keyMW := Key(prov)
-	mtMW := MT(prov, reg, nil, "test")
-
-	handler := contextMW(keyMW(mtMW(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	var captured *SOAJSContext
+	handler := Context(zap.NewNop(), "test")(URL()(Key(prov, reg, "test")(MT(prov, reg, nil, "test")(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		captured = GetSOAJSContext(r.Context())
 		w.WriteHeader(http.StatusOK)
-	}))))
-
-	req := httptest.NewRequest("GET", "/test", nil)
-	req.Header.Set(config.HeaderSOAJSKey, "test-key")
+	})))))
+	req := httptest.NewRequest("GET", "/svc/v1/test", nil)
+	req.Header.Set(config.HeaderSOAJSKey, extKey)
 	rec := httptest.NewRecorder()
-
 	handler.ServeHTTP(rec, req)
+	return rec, captured
+}
 
+func TestMT_RejectsKeyWithoutPackage(t *testing.T) {
+	prov := &mockProvision{keys: map[string]*types.Key{"pkg-key": mtKey("pkg-key", "PROD_MISSING")}}
+	rec, _ := runMT(t, prov, "pkg-key")
 	if rec.Code != http.StatusForbidden {
-		t.Errorf("Status = %d, want %d for invalid tenant", rec.Code, http.StatusForbidden)
+		t.Errorf("Status = %d, want %d when the key's package cannot be loaded", rec.Code, http.StatusForbidden)
 	}
 }
 
-func TestMT_RejectsTenantInMaintenanceMode(t *testing.T) {
-	logger, _ := zap.NewDevelopment()
-
+func TestMT_StoresTenantFromKey(t *testing.T) {
 	prov := &mockProvision{
-		keys: map[string]*types.Key{
-			"maint-key": {
-				ExtKey:     "maint-key",
-				TenantCode: "MAINT",
-			},
-		},
-		tenants: map[string]*types.Tenant{
-			"MAINT": {Code: "MAINT", MaintenanceMode: true},
-		},
+		keys:     map[string]*types.Key{"ctx-key": mtKey("ctx-key", "PROD_PKG")},
+		packages: map[string]*types.Package{"PROD_PKG": {Code: "PROD_PKG"}},
 	}
-	reg := &mockRegistryMT{}
-
-	contextMW := Context(logger, "test")
-	keyMW := Key(prov)
-	mtMW := MT(prov, reg, nil, "test")
-
-	handler := contextMW(keyMW(mtMW(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-	}))))
-
-	req := httptest.NewRequest("GET", "/test", nil)
-	req.Header.Set(config.HeaderSOAJSKey, "maint-key")
-	rec := httptest.NewRecorder()
-
-	handler.ServeHTTP(rec, req)
-
-	if rec.Code != http.StatusServiceUnavailable {
-		t.Errorf("Status = %d, want %d for maintenance mode", rec.Code, http.StatusServiceUnavailable)
-	}
-}
-
-func TestMT_RejectsInvalidProduct(t *testing.T) {
-	logger, _ := zap.NewDevelopment()
-
-	prov := &mockProvision{
-		keys: map[string]*types.Key{
-			"prod-key": {
-				ExtKey:      "prod-key",
-				TenantCode:  "TEST",
-				ProductCode: "INVALID_PRODUCT",
-			},
-		},
-		tenants: map[string]*types.Tenant{
-			"TEST": {Code: "TEST", MaintenanceMode: false},
-		},
-		products: map[string]*types.Product{}, // Empty - no products
-	}
-	reg := &mockRegistryMT{}
-
-	contextMW := Context(logger, "test")
-	keyMW := Key(prov)
-	mtMW := MT(prov, reg, nil, "test")
-
-	handler := contextMW(keyMW(mtMW(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-	}))))
-
-	req := httptest.NewRequest("GET", "/test", nil)
-	req.Header.Set(config.HeaderSOAJSKey, "prod-key")
-	rec := httptest.NewRecorder()
-
-	handler.ServeHTTP(rec, req)
-
-	if rec.Code != http.StatusForbidden {
-		t.Errorf("Status = %d, want %d for invalid product", rec.Code, http.StatusForbidden)
-	}
-}
-
-func TestMT_RejectsInvalidPackage(t *testing.T) {
-	logger, _ := zap.NewDevelopment()
-
-	prov := &mockProvision{
-		keys: map[string]*types.Key{
-			"pkg-key": {
-				ExtKey:      "pkg-key",
-				TenantCode:  "TEST",
-				ProductCode: "PROD",
-				PackageCode: "INVALID_PKG",
-			},
-		},
-		tenants: map[string]*types.Tenant{
-			"TEST": {Code: "TEST"},
-		},
-		products: map[string]*types.Product{
-			"PROD": {Code: "PROD"},
-		},
-		packages: map[string]*types.Package{}, // Empty - no packages
-	}
-	reg := &mockRegistryMT{}
-
-	contextMW := Context(logger, "test")
-	keyMW := Key(prov)
-	mtMW := MT(prov, reg, nil, "test")
-
-	handler := contextMW(keyMW(mtMW(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-	}))))
-
-	req := httptest.NewRequest("GET", "/test", nil)
-	req.Header.Set(config.HeaderSOAJSKey, "pkg-key")
-	rec := httptest.NewRecorder()
-
-	handler.ServeHTTP(rec, req)
-
-	if rec.Code != http.StatusForbidden {
-		t.Errorf("Status = %d, want %d for invalid package", rec.Code, http.StatusForbidden)
-	}
-}
-
-func TestMT_AllowsValidTenantProductPackage(t *testing.T) {
-	logger, _ := zap.NewDevelopment()
-
-	prov := &mockProvision{
-		keys: map[string]*types.Key{
-			"valid-key": {
-				ExtKey:      "valid-key",
-				TenantCode:  "TEST",
-				ProductCode: "PROD",
-				PackageCode: "PKG",
-			},
-		},
-		tenants: map[string]*types.Tenant{
-			"TEST": {Code: "TEST"},
-		},
-		products: map[string]*types.Product{
-			"PROD": {Code: "PROD"},
-		},
-		packages: map[string]*types.Package{
-			"PROD/PKG": {Code: "PKG"},
-		},
-	}
-	reg := &mockRegistryMT{}
-
-	called := false
-	contextMW := Context(logger, "test")
-	keyMW := Key(prov)
-	mtMW := MT(prov, reg, nil, "test")
-
-	handler := contextMW(keyMW(mtMW(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		called = true
-		w.WriteHeader(http.StatusOK)
-	}))))
-
-	req := httptest.NewRequest("GET", "/test", nil)
-	req.Header.Set(config.HeaderSOAJSKey, "valid-key")
-	rec := httptest.NewRecorder()
-
-	handler.ServeHTTP(rec, req)
-
-	if !called {
-		t.Error("Handler should be called for valid tenant/product/package")
-	}
+	rec, ctx := runMT(t, prov, "ctx-key")
 	if rec.Code != http.StatusOK {
-		t.Errorf("Status = %d, want %d", rec.Code, http.StatusOK)
+		t.Fatalf("Status = %d", rec.Code)
 	}
-}
-
-func TestMT_StoresTenantInContext(t *testing.T) {
-	logger, _ := zap.NewDevelopment()
-
-	prov := &mockProvision{
-		keys: map[string]*types.Key{
-			"ctx-key": {
-				ExtKey:      "ctx-key",
-				TenantCode:  "MYTEN",
-				ProductCode: "PROD",
-				PackageCode: "PKG",
-			},
-		},
-		tenants: map[string]*types.Tenant{
-			"MYTEN": {ID: "tenant-123", Code: "MYTEN", Name: "My Tenant"},
-		},
-		products: map[string]*types.Product{
-			"PROD": {Code: "PROD"},
-		},
-		packages: map[string]*types.Package{
-			"PROD/PKG": {Code: "PKG"},
-		},
-	}
-	reg := &mockRegistryMT{}
-
-	var capturedTenant *types.Tenant
-	contextMW := Context(logger, "test")
-	keyMW := Key(prov)
-	mtMW := MT(prov, reg, nil, "test")
-
-	handler := contextMW(keyMW(mtMW(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		soajsCtx := GetSOAJSContext(r.Context())
-		if soajsCtx != nil {
-			capturedTenant = soajsCtx.Tenant
-		}
-		w.WriteHeader(http.StatusOK)
-	}))))
-
-	req := httptest.NewRequest("GET", "/test", nil)
-	req.Header.Set(config.HeaderSOAJSKey, "ctx-key")
-	rec := httptest.NewRecorder()
-
-	handler.ServeHTTP(rec, req)
-
-	if capturedTenant == nil {
-		t.Fatal("Tenant should be stored in context")
-	}
-	if capturedTenant.Code != "MYTEN" {
-		t.Errorf("Tenant.Code = %s, want MYTEN", capturedTenant.Code)
+	if ctx.Tenant == nil || ctx.Tenant.Code != "MYTEN" || ctx.Tenant.ID != "tenant-123" {
+		t.Errorf("tenant = %+v, want the key's tenant", ctx.Tenant)
 	}
 }
 

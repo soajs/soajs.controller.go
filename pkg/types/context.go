@@ -7,19 +7,18 @@ type ServiceParams struct {
 	URLInfo        *URLInfo
 	KeyACL         map[string]interface{} // Flexible ACL structure
 	FinalACL       map[string]interface{} // Merged ACL (package + key)
-	Product        *Product
 	Package        *Package
 	UserInfo       map[string]interface{}
 	RequiresOAuth  bool
 	OAuthToken     *AccessToken
-	UracDriver     interface{}    // URAC driver for user ACL lookup
-	Environment    string         // Current environment
-	ServiceName    string         // Target service name
-	ServiceVersion string         // Target service version
-	User           interface{}    // URAC user (set after OAuth)
-	TenantAccess   interface{}    // Tenant access info (set after OAuth)
-	SkipACL        bool           // Skip ACL checks (MT whitelist)
-	SkipOAuth      bool           // Skip OAuth checks (MT whitelist)
+	UracDriver     interface{} // URAC driver for user ACL lookup
+	Environment    string      // Current environment
+	ServiceName    string      // Target service name
+	ServiceVersion string      // Target service version
+	User           interface{} // URAC user (set after OAuth)
+	TenantAccess   interface{} // Tenant access info (set after OAuth)
+	SkipACL        bool        // Skip ACL checks (MT whitelist)
+	SkipOAuth      bool        // Skip OAuth checks (MT whitelist)
 }
 
 // URLInfo holds parsed URL information
@@ -47,23 +46,12 @@ type GeoInfo struct {
 	Longitude float64 `json:"longitude"`
 }
 
-// AccessToken represents an OAuth access token
+// AccessToken is an oauth_token document of type accessToken (docs/data-schema/oauth_token.md).
 type AccessToken struct {
-	Token     string                 `json:"accessToken" bson:"token"`
-	ClientID  string                 `json:"clientId" bson:"clientId"`
-	UserID    string                 `json:"userId" bson:"userId"`
-	Expires   time.Time              `json:"accessTokenExpiresAt" bson:"expires"`
-	Scope     string                 `json:"scope" bson:"scope"`
-	User      map[string]interface{} `json:"user" bson:"user"`
-	Env       string                 `json:"env" bson:"env"`
-	Type      string                 `json:"type" bson:"type"`
-}
-
-// RefreshToken represents an OAuth refresh token
-type RefreshToken struct {
-	Token    string    `json:"refreshToken" bson:"token"`
-	ClientID string    `json:"clientId" bson:"clientId"`
-	UserID   string    `json:"userId" bson:"userId"`
-	Expires  time.Time `json:"refreshTokenExpiresAt" bson:"expires"`
-	Scope    string    `json:"scope" bson:"scope"`
+	Token    string                 `json:"token"`
+	Type     string                 `json:"type"`
+	ClientID string                 `json:"clientId"`
+	Env      string                 `json:"env"`
+	Expires  time.Time              `json:"expires"`
+	User     map[string]interface{} `json:"user"`
 }

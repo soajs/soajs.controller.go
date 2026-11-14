@@ -391,8 +391,7 @@ func TestInjectSOAJSHeaders_Basic(t *testing.T) {
 		Key: &types.Key{
 			InternalKey: "ikey123",
 			ExtKey:      "ekey123",
-			ProductCode: "PROD",
-			PackageCode: "PKG",
+			Application: types.KeyApplication{Product: "PROD", Package: "PKG"},
 		},
 	}
 

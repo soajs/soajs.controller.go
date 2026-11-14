@@ -129,7 +129,7 @@ func OAuthWithRegistry(prov provision.Provision, reg registry.Registry) Middlewa
 				// OAuth2 validation (Type 2)
 				oauthModel := prov.OAuthModel()
 				accessToken, err := oauthModel.GetAccessToken(token)
-				if err != nil {
+				if err != nil || accessToken == nil {
 					soajsCtx.Log.Debug("OAuth token lookup failed")
 					WriteError(w, http.StatusUnauthorized,
 						config.ErrCodeUnauthorized,
@@ -154,16 +154,7 @@ func OAuthWithRegistry(prov provision.Provision, reg registry.Registry) Middlewa
 					userInfo = convertBSONMap(accessToken.User)
 				}
 
-				// Get user ID: prefer top-level userId, fallback to user._id
-				userID := accessToken.UserID
-				if userID == "" {
-					if id, ok := userInfo["_id"].(string); ok {
-						userID = id
-					}
-				}
-				userInfo["_id"] = userID
 				userInfo["clientId"] = accessToken.ClientID
-				userInfo["scope"] = accessToken.Scope
 
 				soajsCtx.Controller.ServiceParams.UserInfo = userInfo
 				soajsCtx.Controller.ServiceParams.OAuthToken = accessToken
