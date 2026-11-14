@@ -29,7 +29,10 @@ func TestParseURL(t *testing.T) {
 		{"/", "", "", "", false},
 	}
 	for _, tt := range tests {
-		info := parseURL(tt.uri)
+		info, err := parseURL(tt.uri)
+		if err != nil {
+			t.Fatalf("%s: %v", tt.uri, err)
+		}
 		if info.ServiceName != tt.service || info.ServiceVersion != tt.version || info.ServicePath != tt.path || info.VersionRequested != tt.requested {
 			t.Errorf("%s: got %q %q %q %v, want %q %q %q %v", tt.uri, info.ServiceName, info.ServiceVersion, info.ServicePath, info.VersionRequested,
 				tt.service, tt.version, tt.path, tt.requested)
@@ -60,5 +63,33 @@ func TestURLMiddleware(t *testing.T) {
 	}
 	if rec := run("/orders/v1/x?key=abc"); rec.Code != 200 || rec.Header().Get("X-Key") != "abc" {
 		t.Errorf("a query key becomes the key header: %v", rec.Header())
+	}
+}
+
+// The service, its path and the URL it is called with all come from the URL as Node.js parses it.
+func TestParseURL_WHATWG(t *testing.T) {
+	cases := []struct {
+		target, service, version, path, url string
+	}{
+		{"/conform/v1/public/../private/hello", "conform", "1", "/private/hello", "/private/hello"},
+		{"/conform/v1/public/%2e%2e/private/hello?a=b c", "conform", "1", "/private/hello", "/private/hello?a=b%20c"},
+		{"/conform/./public/hello", "conform", "", "/public/hello", "/public/hello"},
+		{"/../conform/x", "conform", "", "/x", "/x"},
+		{"//evil/conform/x", "conform", "", "/x", "/x"},
+		{"/svc/a%2Fb/../c", "svc", "", "/c", "/c"},
+		{"/svc/é b", "svc", "", "/%C3%A9%20b", "/%C3%A9%20b"},
+	}
+	for _, c := range cases {
+		info, err := parseURL(c.target)
+		if err != nil {
+			t.Errorf("%s: %v", c.target, err)
+			continue
+		}
+		if info.ServiceName != c.service || info.ServiceVersion != c.version || info.ServicePath != c.path || info.URL != c.url {
+			t.Errorf("%s: %+v", c.target, info)
+		}
+	}
+	if _, err := parseURL("//evil:abc/x"); err == nil {
+		t.Error("an invalid host is an invalid URL")
 	}
 }

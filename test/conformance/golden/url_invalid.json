@@ -1,0 +1,7 @@
+{
+  "status": 500,
+  "headers": {
+    "Content-Type": "application/json"
+  },
+  "body": "{\"result\":false,\"errors\":{\"codes\":[\"ERR_INVALID_URL\"],\"details\":[{\"code\":\"ERR_INVALID_URL\",\"message\":\"Invalid URL\"}]}}"
+}

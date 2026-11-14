@@ -701,5 +701,50 @@
       "key": "$KEY_DEFAULT",
       "Authorization": "Bearer $TOKEN_R_GONE"
     }
+  },
+  {
+    "name": "url_dot_segment_to_private",
+    "about": "a dot segment moves the path from the public API to the private one: the private API's checks apply",
+    "method": "GET",
+    "path": "/conform/v1/public/../private/hello",
+    "headers": {
+      "key": "$KEY_DEFAULT"
+    }
+  },
+  {
+    "name": "url_encoded_dot_segment_to_private",
+    "about": "%2e%2e is a dot segment as well",
+    "method": "GET",
+    "path": "/conform/v1/public/%2e%2e/private/hello",
+    "headers": {
+      "key": "$KEY_DEFAULT"
+    }
+  },
+  {
+    "name": "url_dot_segment_to_public",
+    "about": "the service is called with the resolved path",
+    "method": "GET",
+    "path": "/conform/v1/x/./../public/hello?a=b%20c",
+    "headers": {
+      "key": "$KEY_DEFAULT"
+    }
+  },
+  {
+    "name": "url_double_slash_host",
+    "about": "a target starting with // names a host, the path follows it",
+    "method": "GET",
+    "path": "//elsewhere/conform/v1/public/hello",
+    "headers": {
+      "key": "$KEY_DEFAULT"
+    }
+  },
+  {
+    "name": "url_invalid",
+    "about": "a target the URL parser refuses",
+    "method": "GET",
+    "path": "//elsewhere:port/x",
+    "headers": {
+      "key": "$KEY_DEFAULT"
+    }
   }
 ]
