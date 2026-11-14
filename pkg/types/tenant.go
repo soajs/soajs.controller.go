@@ -1,44 +1,25 @@
 package types
 
-// Tenant represents a SOAJS tenant
+// Tenant is the request's tenant, from its key.
 type Tenant struct {
-	ID              string        `json:"_id" bson:"_id"`
-	Code            string        `json:"code" bson:"code"`
-	Name            string        `json:"name" bson:"name"`
-	Description     string        `json:"description" bson:"description"`
-	Type            string        `json:"type" bson:"type"`
-	Locked          bool          `json:"locked" bson:"locked"`
-	MaintenanceMode bool          `json:"maintenance" bson:"maintenance"`
-	Profile         interface{}   `json:"profile" bson:"profile"`
-	Roaming         interface{}   `json:"roaming,omitempty" bson:"roaming,omitempty"`
-	Main            interface{}   `json:"main,omitempty" bson:"main,omitempty"`
-	Applications    []Application `json:"applications" bson:"applications"`
+	ID      string                 `json:"id"`
+	Code    string                 `json:"code"`
+	Name    string                 `json:"name"`
+	Type    string                 `json:"type"`
+	Locked  bool                   `json:"locked"`
+	Profile map[string]interface{} `json:"profile"`
+	Main    *TenantRef             `json:"main,omitempty"`
 }
 
-// Application represents a tenant application
-type Application struct {
-	Product     string        `json:"product" bson:"product"`
-	Package     string        `json:"package" bson:"package"`
-	AppID       string        `json:"appId" bson:"appId"`
-	Description string        `json:"description" bson:"description"`
-	ACL         interface{}   `json:"acl" bson:"acl"`
-	Keys        []ApplicationKey `json:"keys" bson:"keys"`
-}
-
-// ApplicationKey represents an application key
-type ApplicationKey struct {
-	Key     string   `json:"key" bson:"key"`
-	ExtKeys []ExtKey `json:"extKeys" bson:"extKeys"`
-	Config  interface{} `json:"config" bson:"config"`
-}
-
-// ExtKey represents an external key
-type ExtKey struct {
-	ExtKey     string                 `json:"extKey" bson:"extKey"`
-	Device     interface{}            `json:"device" bson:"device"`
-	Geo        interface{}            `json:"geo" bson:"geo"`
-	Env        string                 `json:"env" bson:"env"`
-	Expiration interface{}            `json:"expDate" bson:"expDate"`
-	ACL        map[string]interface{} `json:"acl" bson:"acl"` // Flexible ACL structure
-	Config     map[string]interface{} `json:"config" bson:"config"`
+// TenantFromKey is the tenant of a key.
+func TenantFromKey(k *Key) *Tenant {
+	return &Tenant{
+		ID:      k.Tenant.ID,
+		Code:    k.Tenant.Code,
+		Name:    k.Tenant.Name,
+		Type:    k.Tenant.Type,
+		Locked:  k.Tenant.Locked,
+		Profile: k.Tenant.Profile,
+		Main:    k.Tenant.Main,
+	}
 }

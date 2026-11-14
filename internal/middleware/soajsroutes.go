@@ -140,7 +140,7 @@ func handleSoajsACL(w http.ResponseWriter, r *http.Request, soajsCtx *SOAJSConte
 		// Get product code for package lookup
 		productCode := ""
 		if soajsCtx.Key != nil {
-			productCode = soajsCtx.Key.ProductCode
+			productCode = soajsCtx.Key.Application.Product
 		}
 
 		// Get user ID from OAuth token's user info
@@ -245,30 +245,20 @@ func handleSoajsACL(w http.ResponseWriter, r *http.Request, soajsCtx *SOAJSConte
 			}
 		}
 
-		// Priority 3: Try application ACL (from key)
-		if acl == nil && soajsCtx.Key.AppACL != nil {
-			acl = extractEnvACL(soajsCtx.Key.AppACL, currentEnv)
-		}
-
 		// Priority 4: Fall back to package ACL
 		if acl == nil && params.Package != nil && params.Package.ACL != nil {
 			acl = extractEnvACL(params.Package.ACL, currentEnv)
 		}
 
 		// Default packages from key if not set from user
-		if packages == nil && soajsCtx.Key != nil && soajsCtx.Key.PackageCode != "" {
-			packages = []string{soajsCtx.Key.PackageCode}
+		if packages == nil && soajsCtx.Key != nil && soajsCtx.Key.Application.Package != "" {
+			packages = []string{soajsCtx.Key.Application.Package}
 		}
 	}
 
-	// Last resort: try key's ACL directly
-	if acl == nil && soajsCtx.Key.ACL != nil {
-		acl = extractEnvACL(soajsCtx.Key.ACL, currentEnv)
-	}
-
 	// Default packages from key if still not set
-	if packages == nil && soajsCtx.Key != nil && soajsCtx.Key.PackageCode != "" {
-		packages = []string{soajsCtx.Key.PackageCode}
+	if packages == nil && soajsCtx.Key != nil && soajsCtx.Key.Application.Package != "" {
+		packages = []string{soajsCtx.Key.Application.Package}
 	}
 
 	// Build tenant info
@@ -681,20 +671,11 @@ func mergePackageACLs(prov provision.Provision, productCode string, packages []s
 	var packageACLs []map[string]interface{}
 
 	for _, pkgCode := range packages {
-		pkg, err := prov.GetPackage(productCode, pkgCode)
-		if err != nil {
+		pkg, err := prov.GetPackageData(pkgCode)
+		if err != nil || pkg.ACL == nil {
 			continue
 		}
-
-		if pkg.ACL == nil {
-			continue
-		}
-
-		// Extract environment-specific ACL (package ACL is keyed by env)
-		envACL := extractEnvACL(pkg.ACL, currentEnv)
-		if envACL != nil {
-			packageACLs = append(packageACLs, envACL)
-		}
+		packageACLs = append(packageACLs, pkg.ACL)
 	}
 
 	if len(packageACLs) == 0 {
