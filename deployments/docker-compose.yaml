@@ -1,21 +1,21 @@
-version: '3.8'
-
 services:
   controller:
     build:
       context: ..
       dockerfile: deployments/Dockerfile
     ports:
-      - "4000:4000"   # API port
-      - "5000:5000"   # Maintenance port
+      - "4000:4000"   # gateway port (SOAJS_SERVICE_PORT)
+      - "5000:5000"   # maintenance port: the registry's ports.controller + ports.maintenanceInc
+    # The variables are described in docs/configuration.md. The mongo below must hold the SOAJS
+    # data (core_provision with the environment, resources, marketplace, tenants, products) for
+    # the gateway to load its registry; this file does not create it.
     environment:
-      # Required: Environment name (e.g., dashboard, dev, production)
       - SOAJS_ENV=dashboard
-      # MongoDB connection (Go uses direct URI, not SOAJS_PROFILE)
-      - SOAJS_MONGO_URI=mongodb://mongo:27017
-      - SOAJS_MONGO_DATABASE=core_provision
-      # Logging
+      - SOAJS_PROFILE=/app/profile.js
+      - SOAJS_SERVICE_PORT=4000
       - SOAJS_LOG_LEVEL=debug
+    volumes:
+      - ./profile.js:/app/profile.js:ro   # the profile of the mongo service below
     depends_on:
       mongo:
         condition: service_healthy

@@ -25,7 +25,7 @@ The gateway takes its settings from three places:
 | `SOAJS_LOG_FORMAT` | `json` (`console` when `SOAJS_ENV` is `dev`) | `console` for readable logs. |
 | `SOAJS_SERVER_SHUTDOWN_TIMEOUT` | `10` | Seconds to finish requests on SIGINT or SIGTERM. |
 
-Any of the settings above can also be written in a `config.yaml` (keys `service_port`, `log_level`, `maintenance.port_increment`, ...), looked up in the working directory, `./configs` and `/etc/soajs/`. The environment variables take precedence.
+Any of the settings above can also be written in a `config.yaml` (keys `service_port`, `log_level`, `maintenance.port_increment`, ...), looked up in the working directory, `./configs` and `/etc/soajs/`; [configs/config.example.yaml](../configs/config.example.yaml) shows every key with its default. The environment variables take precedence.
 
 ## From the registry
 
