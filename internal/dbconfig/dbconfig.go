@@ -45,6 +45,10 @@ type DB struct {
 	URLParam         map[string]interface{} `json:"URLParam"`
 	RegistryLocation *Location              `json:"registryLocation,omitempty"`
 	Name             string                 `json:"name"`
+	// Dump is the entry as the Node.js registry gives it to services: the prefix and cluster,
+	// the cluster's configuration as stored, then registryLocation and name (the profile for
+	// provision).
+	Dump map[string]interface{} `json:"-"`
 }
 
 // DatabaseName is the name MongoDB knows the database by: the prefix and the name, joined.

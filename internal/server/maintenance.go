@@ -1,158 +1,385 @@
 package server
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
-	"github.com/soajs/soajs.controller.go/internal/awareness"
+	"io"
 	"net/http"
+	"net/url"
 	"os"
-	"strings"
+	"strconv"
 	"time"
 
-	"github.com/go-chi/chi/v5"
+	"github.com/soajs/soajs.controller.go/internal/awareness"
+	"github.com/soajs/soajs.controller.go/internal/lib"
+	"github.com/soajs/soajs.controller.go/internal/registry"
 	"github.com/soajs/soajs.controller.go/pkg/types"
 	"github.com/soajs/soajs.controller.go/pkg/version"
 	"go.uber.org/zap"
 )
 
-// MaintenanceResponse represents a maintenance endpoint response
-type MaintenanceResponse struct {
+// maintenanceResponse is the answer of the maintenance port (server/maintenance.js
+// maintenanceResponse): result, ts, the gateway as the service and the route, then data.
+type maintenanceResponse struct {
 	Result  bool        `json:"result"`
 	TS      int64       `json:"ts"`
-	Service ServiceInfo `json:"service"`
+	Service serviceInfo `json:"service"`
 	Data    interface{} `json:"data,omitempty"`
-	Error   string      `json:"error,omitempty"`
 }
 
-// ServiceInfo holds service metadata
-type ServiceInfo struct {
-	Name    string `json:"service"`
+type serviceInfo struct {
+	Service string `json:"service"`
 	Version string `json:"version"`
 	Type    string `json:"type"`
-	Route   string `json:"route,omitempty"`
+	Route   string `json:"route"`
 }
 
-// NewMaintenanceServer creates a new maintenance HTTP server
-func NewMaintenanceServer(port int, ctrl *Controller, logger *zap.Logger) *http.Server {
-	r := chi.NewRouter()
-
-	handler := &maintenanceHandler{
-		ctrl:   ctrl,
-		logger: logger,
-	}
-
-	// Maintenance routes
-	r.Get("/favicon.ico", handler.favicon)
-	r.Get("/heartbeat", handler.heartbeat)
-	r.Get("/loadProvision", handler.loadProvision)
-	r.Get("/reloadRegistry", handler.reloadRegistry)
-	r.Get("/getRegistry", handler.getRegistry)
-	r.Get("/awarenessStat", handler.awarenessStat)
-	r.Get("/register", handler.register)
-	r.Post("/register", handler.register)
-	r.Get("/proxySocket", handler.proxySocket)
-
+// NewMaintenanceServer is the maintenance port, as the Node.js gateway's (server/maintenance.js):
+// /favicon.ico, /reloadRegistry, /awarenessStat, /register, /loadProvision, /getRegistry, and the
+// heartbeat on any other path. /cache/invalidate comes with the cache; /proxySocket is not
+// ported (D7).
+func NewMaintenanceServer(port int, ctrl *Controller, serviceIP string, logger *zap.Logger) *http.Server {
+	h := &maintenanceHandler{ctrl: ctrl, logger: logger, serviceIP: serviceIP}
 	return &http.Server{
-		Addr:         fmt.Sprintf(":%d", port),
-		Handler:      r,
-		ReadTimeout:  10 * time.Second,
-		WriteTimeout: 10 * time.Second,
+		Addr:              fmt.Sprintf(":%d", port),
+		Handler:           h,
+		ReadHeaderTimeout: 60 * time.Second,
 	}
 }
 
 type maintenanceHandler struct {
-	ctrl   *Controller
-	logger *zap.Logger
+	ctrl      *Controller
+	logger    *zap.Logger
+	serviceIP string
 }
 
-func (h *maintenanceHandler) favicon(w http.ResponseWriter, r *http.Request) {
-	// Return empty response for favicon
-	w.WriteHeader(http.StatusNoContent)
-}
-
-func (h *maintenanceHandler) heartbeat(w http.ResponseWriter, r *http.Request) {
-	h.respondWithRoute(w, true, nil, "/heartbeat")
-}
-
-func (h *maintenanceHandler) loadProvision(w http.ResponseWriter, r *http.Request) {
-	if err := h.ctrl.ReloadProvision(); err != nil {
-		h.respondError(w, "/loadProvision", err)
+func (h *maintenanceHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if r.RequestURI == "/favicon.ico" {
+		w.Header().Set("Content-Type", "image/x-icon")
+		w.WriteHeader(http.StatusOK)
 		return
 	}
-	h.respondWithRoute(w, true, nil, "/loadProvision")
+	pathname, search, err := lib.RequestURL(r.RequestURI)
+	if err != nil {
+		pathname, search = r.URL.Path, ""
+		if r.URL.RawQuery != "" {
+			search = "?" + r.URL.RawQuery
+		}
+	}
+	query := map[string]string{}
+	if values, err := url.ParseQuery(trimQuestion(search)); err == nil {
+		for k, v := range values {
+			query[k] = v[len(v)-1]
+		}
+	}
+	switch pathname {
+	case "/reloadRegistry":
+		h.write(w, h.reloadRegistry(pathname), true)
+	case "/awarenessStat":
+		h.awarenessStat(w, pathname, query)
+	case "/register":
+		h.register(w, r, pathname, query)
+	case "/loadProvision":
+		resp := h.response(pathname)
+		resp.Result = h.ctrl.ReloadProvision() == nil
+		// Node.js ends this answer without writing its headers: no Content-Type
+		h.write(w, resp, false)
+	case "/getRegistry":
+		h.getRegistry(w, pathname, query)
+	default:
+		resp := h.response(pathname)
+		resp.Result = true
+		h.write(w, resp, true)
+	}
 }
 
-func (h *maintenanceHandler) reloadRegistry(w http.ResponseWriter, r *http.Request) {
+func trimQuestion(s string) string {
+	if len(s) > 0 && s[0] == '?' {
+		return s[1:]
+	}
+	return s
+}
+
+func (h *maintenanceHandler) response(route string) maintenanceResponse {
+	return maintenanceResponse{
+		TS:      time.Now().UnixMilli(),
+		Service: serviceInfo{Service: "soajs.controller", Version: version.Get(), Type: "rest", Route: route},
+	}
+}
+
+// write answers 200 with the response as JSON.stringify writes it.
+func (h *maintenanceHandler) write(w http.ResponseWriter, resp maintenanceResponse, contentType bool) {
+	var b bytes.Buffer
+	enc := json.NewEncoder(&b)
+	enc.SetEscapeHTML(false)
+	_ = enc.Encode(resp)
+	if contentType {
+		w.Header().Set("Content-Type", "application/json")
+	} else {
+		w.Header()["Content-Type"] = nil
+	}
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(bytes.TrimRight(b.Bytes(), "\n"))
+}
+
+func (h *maintenanceHandler) reloadRegistry(route string) maintenanceResponse {
+	resp := h.response(route)
 	if err := h.ctrl.ReloadRegistry(); err != nil {
-		h.respondError(w, "/reloadRegistry", err)
-		return
+		h.logger.Error("Failed to load registry. reusing from previous load. Reason: " + err.Error())
+		return resp
 	}
-	h.respondWithRoute(w, true, cloneAndFilterRegistry(h.ctrl.Registry().Get(), "", ""), "/reloadRegistry")
+	resp.Result = true
+	resp.Data = cloneAndFilterRegistry(h.ctrl.Registry().Get(), "", "")
+	return resp
 }
 
-func (h *maintenanceHandler) getRegistry(w http.ResponseWriter, r *http.Request) {
-	reqServiceName := r.URL.Query().Get("serviceName")
-	reqServiceType := r.URL.Query().Get("type")
-	if reqServiceType == "" {
-		reqServiceType = "service"
+// awarenessStat answers the registry's services and daemons with their hosts' health; with
+// ?update, outside HA, the gateway's controllers document is written too.
+func (h *maintenanceHandler) awarenessStat(w http.ResponseWriter, route string, query map[string]string) {
+	resp := h.response(route)
+	reg := h.ctrl.Registry().Get()
+	if reg != nil {
+		services, daemons := awareness.RegistryWithStats(reg, h.ctrl.Awareness().Stats())
+		resp.Result = true
+		resp.Data = map[string]interface{}{"services": services, "daemons": daemons}
 	}
-
-	regData := h.ctrl.Registry().Get()
-	if regData == nil {
-		h.respondError(w, "/getRegistry", fmt.Errorf("registry not loaded"))
-		return
+	if os.Getenv("SOAJS_DEPLOY_HA") == "" && query["update"] != "" && reg != nil {
+		data := awareness.ControllerData(reg, h.ctrl.Awareness().Stats(), h.ctrl.Gateway().Name, h.serviceIP, false, time.Now())
+		go func(ts int64) {
+			if err := h.ctrl.Registry().UpsertEnvController(h.ctrl.Registry().GetEnvironment(), awareness.ControllerIP(h.serviceIP), ts, data); err != nil {
+				h.logger.Error(err.Error())
+			}
+		}(resp.TS)
 	}
-
-	filteredRegistry := cloneAndFilterRegistry(regData, reqServiceName, reqServiceType)
-
-	// Add awareness info
-	controllerPort := 4000
-	if regData.ServiceConfig != nil && regData.ServiceConfig.Ports.Controller > 0 {
-		controllerPort = regData.ServiceConfig.Ports.Controller
-	}
-	filteredRegistry["awareness"] = map[string]interface{}{
-		"host": "127.0.0.1",
-		"port": controllerPort,
-	}
-
-	h.respondWithRoute(w, true, filteredRegistry, "/getRegistry")
+	h.write(w, resp, true)
 }
 
-// cloneAndFilterRegistry is the registry a service receives (Node.js server/maintenance.js:51-139):
-// serviceConfig without cors, and without oauth except for the oauth service; the deployer without
-// its kubernetes token; for a service, only the gateway entry and its own group and port.
+// register records a service on its registration (outside HA): from the query, or the POST body.
+// With ?serviceHATask the registry is reloaded instead. A version that is not one answers false.
+func (h *maintenanceHandler) register(w http.ResponseWriter, r *http.Request, route string, query map[string]string) {
+	resp := h.response(route)
+	if os.Getenv("SOAJS_DEPLOY_HA") != "" {
+		h.write(w, resp, true)
+		return
+	}
+	raw, _ := io.ReadAll(r.Body)
+	var body map[string]interface{}
+	if len(raw) > 0 {
+		if err := json.Unmarshal(raw, &body); err != nil {
+			h.logger.Error("Failed to register service: the body is not JSON")
+			h.write(w, resp, true)
+			return
+		}
+	}
+	if query["serviceHATask"] != "" {
+		h.write(w, h.reloadRegistry(route), true)
+		return
+	}
+	info := map[string]interface{}{}
+	for k, v := range query {
+		info[k] = v
+	}
+	if r.Method == http.MethodPost && body != nil {
+		info = body
+	}
+	ver := asString(info["version"])
+	if !validVersion(ver) {
+		h.logger.Error("Failed to register service for [" + asString(info["name"]) + "@" + ver + "] version should be of format [1.1]")
+		h.write(w, resp, true)
+		return
+	}
+	opt := registry.RegisterOptions{
+		Name: asString(info["name"]), Group: asString(info["group"]), IP: asString(info["ip"]), Type: asString(info["type"]),
+		Version: ver, SubType: asString(info["subType"]), Description: asString(info["description"]),
+		Port: asInt(info["port"]), PortHost: asInt(info["portHost"]), MW: truthyValue(info["mw"]),
+		Maintenance: registry.DecodeMaintenance(bodyValue(body, "maintenance")),
+	}
+	if opt.Type == "service" {
+		opt.Flags = map[string]bool{}
+		for _, f := range []string{"extKeyRequired", "oauth", "urac", "urac_Profile", "urac_ACL", "urac_Config", "urac_GroupConfig", "tenant_Profile", "provision_ACL"} {
+			if b, ok := registry.ParseRegisterFlag(info[f]); ok {
+				opt.Flags[f] = b
+			}
+		}
+		opt.RequestTimeout, opt.RequestTimeoutRenewal = asInt(info["requestTimeout"]), asInt(info["requestTimeoutRenewal"])
+		if ic, ok := info["interConnect"]; ok && ic != nil {
+			raw, _ := json.Marshal(ic)
+			if json.Unmarshal(raw, &opt.InterConnect) == nil {
+				opt.HasInterConn = true
+			}
+		}
+		opt.APIList = bodyValue(body, "apiList")
+	}
+	data, err := h.ctrl.Registry().Register(opt)
+	if err != nil {
+		h.logger.Error("Failed to register service for [" + opt.Name + "] " + err.Error())
+	} else {
+		resp.Result = true
+		resp.Data = data
+	}
+	h.write(w, resp, true)
+}
+
+func bodyValue(body map[string]interface{}, key string) interface{} {
+	if body == nil {
+		return nil
+	}
+	return body[key]
+}
+
+func asString(v interface{}) string {
+	switch t := v.(type) {
+	case string:
+		return t
+	case float64:
+		return strconv.FormatFloat(t, 'f', -1, 64)
+	}
+	return ""
+}
+
+func asInt(v interface{}) int {
+	switch t := v.(type) {
+	case float64:
+		return int(t)
+	case string:
+		n, _ := strconv.Atoi(t)
+		return n
+	}
+	return 0
+}
+
+func truthyValue(v interface{}) bool {
+	switch t := v.(type) {
+	case nil:
+		return false
+	case bool:
+		return t
+	case string:
+		return t != ""
+	case float64:
+		return t != 0
+	}
+	return true
+}
+
+// validVersion is soajs.core.libs version.validate: a value with digits in it.
+func validVersion(v string) bool {
+	for _, c := range v {
+		if c >= '0' && c <= '9' {
+			return true
+		}
+	}
+	return false
+}
+
+// getRegistry answers the registry of ?env (the gateway's by default) for the service ?name (or
+// ?serviceName) of ?type (service by default), with the gateway's host in this environment;
+// ?setBy=loadByEnv loads another environment again.
+func (h *maintenanceHandler) getRegistry(w http.ResponseWriter, route string, query map[string]string) {
+	resp := h.response(route)
+	env := query["env"]
+	if env == "" {
+		env = h.ctrl.Registry().GetEnvironment()
+	}
+	name := query["name"]
+	if name == "" {
+		name = query["serviceName"]
+	}
+	typ := query["type"]
+	if typ == "" {
+		typ = "service"
+	}
+	reg, err := h.ctrl.Registry().LoadByEnv(env, query["setBy"] == "loadByEnv")
+	if err != nil {
+		h.logger.Error(name + " " + err.Error())
+	} else {
+		resp.Result = true
+		resp.Data = map[string]interface{}{}
+	}
+	if reg != nil {
+		data := cloneAndFilterRegistry(reg, name, typ)
+		if reg.ServiceConfig != nil && reg.ServiceConfig.Ports.Controller != 0 {
+			var host interface{}
+			gateway := h.ctrl.Gateway().Name
+			if gw := reg.Services["controller"]; gw != nil && gw.Name != "" {
+				gateway = gw.Name
+			}
+			if info, err := h.ctrl.Awareness().GetHost(gateway, ""); err == nil {
+				host = info.Host
+			}
+			data["awareness"] = map[string]interface{}{"host": host, "port": reg.ServiceConfig.Ports.Controller}
+		}
+		resp.Data = data
+	}
+	h.write(w, resp, true)
+}
+
+// urlParamsConsumed are the URLParam options the Node.js mongo driver removes from a configuration
+// when it connects with it (soajs.mongo constructMongoOptions).
+var urlParamsConsumed = []string{"maxPoolSize", "wtimeoutMS", "slaveOk", "auto_reconnect"}
+
+// dbDump is a database entry as services receive it. Until the registry is loaded again, the
+// options and extraParam the Node.js gateway's connections consumed are not in it.
+func dbDump(dump map[string]interface{}, reloaded bool) map[string]interface{} {
+	out, _ := deepCopy(dump).(map[string]interface{})
+	if out == nil {
+		out = map[string]interface{}{}
+	}
+	if !reloaded {
+		delete(out, "extraParam")
+		if p, ok := out["URLParam"].(map[string]interface{}); ok {
+			for _, k := range urlParamsConsumed {
+				delete(p, k)
+			}
+		}
+	}
+	return out
+}
+
+func deepCopy(v interface{}) interface{} {
+	raw, _ := json.Marshal(v)
+	var out interface{}
+	_ = json.Unmarshal(raw, &out)
+	return out
+}
+
+// cloneAndFilterRegistry is the registry a service receives (server/maintenance.js
+// cloneAndFilterRegistry): the environment, its databases as the Node.js registry gives them (with
+// coreDB.session), serviceConfig without cors, and without oauth except for the oauth service, the
+// deployer without its kubernetes token, custom and resources; for a service, only the gateway
+// entry and its own group and port; for a daemon, its own; otherwise every service and daemon.
 func cloneAndFilterRegistry(reg *types.RegistryData, reqServiceName, reqServiceType string) map[string]interface{} {
 	filtered := map[string]interface{}{}
 	if reg == nil {
 		return filtered
 	}
-	filtered["timeLoaded"] = reg.TimeLoaded
-	if reg.Name != "" {
-		filtered["name"] = reg.Name
+	if reg.TimeLoaded != 0 {
+		filtered["timeLoaded"] = reg.TimeLoaded
 	}
-	if reg.Domain != "" {
-		filtered["domain"] = reg.Domain
-	}
-	if reg.SitePrefix != "" {
-		filtered["sitePrefix"] = reg.SitePrefix
-	}
-	if reg.APIPrefix != "" {
-		filtered["apiPrefix"] = reg.APIPrefix
-	}
-	if reg.Protocol != "" {
-		filtered["protocol"] = reg.Protocol
+	for k, v := range map[string]string{"name": reg.Name, "domain": reg.Domain, "sitePrefix": reg.SitePrefix, "apiPrefix": reg.APIPrefix, "protocol": reg.Protocol, "environment": reg.Environment} {
+		if v != "" {
+			filtered[k] = v
+		}
 	}
 	if reg.Port != 0 {
 		filtered["port"] = reg.Port
 	}
-	if reg.Environment != "" {
-		filtered["environment"] = reg.Environment
+	coreDB := map[string]interface{}{}
+	for name, db := range reg.CoreDB {
+		coreDB[name] = dbDump(db.Dump, reg.Reloaded)
 	}
-	filtered["coreDB"] = reg.CoreDB
-	filtered["tenantMetaDB"] = reg.TenantMetaDB
+	if reg.SessionDB != nil {
+		coreDB["session"] = reg.SessionDB
+	}
+	filtered["coreDB"] = coreDB
+	meta := map[string]interface{}{}
+	for name, db := range reg.TenantMetaDB {
+		meta[name] = dbDump(db.Dump, reg.Reloaded)
+	}
+	filtered["tenantMetaDB"] = meta
 	if reg.ServiceConfig != nil {
-		var serviceConfig map[string]interface{}
-		clone(reg.ServiceConfig, &serviceConfig)
+		serviceConfig, _ := deepCopy(reg.ServiceConfig).(map[string]interface{})
 		delete(serviceConfig, "cors")
 		if reqServiceName != "oauth" {
 			delete(serviceConfig, "oauth")
@@ -160,8 +387,7 @@ func cloneAndFilterRegistry(reg *types.RegistryData, reqServiceName, reqServiceT
 		filtered["serviceConfig"] = serviceConfig
 	}
 	if reg.Deployer != nil {
-		var deployer map[string]interface{}
-		clone(reg.Deployer, &deployer)
+		deployer, _ := deepCopy(reg.Deployer).(map[string]interface{})
 		if deployer["type"] == "container" {
 			container, _ := deployer["container"].(map[string]interface{})
 			k8s, _ := container["kubernetes"].(map[string]interface{})
@@ -171,8 +397,21 @@ func cloneAndFilterRegistry(reg *types.RegistryData, reqServiceName, reqServiceT
 		}
 		filtered["deployer"] = deployer
 	}
-	filtered["custom"] = reg.CustomRegistry
-	filtered["resources"] = reg.Resources
+	if reg.CustomRegistry != nil {
+		filtered["custom"] = reg.CustomRegistry
+	}
+	if reg.Resources != nil {
+		resources, _ := deepCopy(reg.Resources).(map[string]interface{})
+		if clusters, ok := resources["cluster"].(map[string]interface{}); ok {
+			for _, c := range clusters {
+				cluster, _ := c.(map[string]interface{})
+				if config, ok := cluster["config"].(map[string]interface{}); ok {
+					cluster["config"] = dbDump(config, reg.Reloaded)
+				}
+			}
+		}
+		filtered["resources"] = resources
+	}
 
 	services := map[string]interface{}{}
 	if gw, ok := reg.Services["controller"]; ok {
@@ -195,183 +434,4 @@ func cloneAndFilterRegistry(reg *types.RegistryData, reqServiceName, reqServiceT
 	}
 	filtered["services"] = services
 	return filtered
-}
-
-// clone deep-copies through JSON, so filtering never touches the registry in use.
-func clone(in, out interface{}) {
-	raw, _ := json.Marshal(in)
-	_ = json.Unmarshal(raw, out)
-}
-
-func (h *maintenanceHandler) awarenessStat(w http.ResponseWriter, r *http.Request) {
-	regData := h.ctrl.Registry().Get()
-	data := map[string]interface{}{}
-	if regData != nil {
-		data["services"], data["daemons"] = awareness.RegistryWithStats(regData, h.ctrl.Awareness().Stats())
-	}
-	h.respondWithRoute(w, true, data, "/awarenessStat")
-}
-
-// RegisterRequest holds the service registration request data
-type RegisterRequest struct {
-	Name                  string `json:"name"`
-	Group                 string `json:"group"`
-	Port                  int    `json:"port"`
-	IP                    string `json:"ip"`
-	Type                  string `json:"type"`
-	Version               string `json:"version"`
-	ExtKeyRequired        bool   `json:"extKeyRequired"`
-	OAuth                 bool   `json:"oauth"`
-	RequestTimeout        int    `json:"requestTimeout"`
-	RequestTimeoutRenewal int    `json:"requestTimeoutRenewal"`
-}
-
-func (h *maintenanceHandler) register(w http.ResponseWriter, r *http.Request) {
-	// Get registration info from query params or POST body
-	var regInfo RegisterRequest
-
-	if r.Method == "POST" {
-		// Parse POST body
-		if err := json.NewDecoder(r.Body).Decode(&regInfo); err != nil {
-			// Try query params as fallback
-			regInfo = h.parseRegisterQuery(r)
-		}
-	} else {
-		// GET request - parse query params
-		regInfo = h.parseRegisterQuery(r)
-	}
-
-	// Validate required fields
-	if regInfo.Name == "" || regInfo.IP == "" || regInfo.Version == "" {
-		h.logger.Warn("invalid registration request",
-			zap.String("name", regInfo.Name),
-			zap.String("ip", regInfo.IP),
-			zap.String("version", regInfo.Version),
-		)
-		h.respondWithRoute(w, false, nil, "/register")
-		return
-	}
-
-	// Default port if not provided
-	if regInfo.Port == 0 {
-		// Try to get from registry
-		regData := h.ctrl.Registry().Get()
-		if regData != nil && regData.Services != nil {
-			if svc, ok := regData.Services[regInfo.Name]; ok {
-				regInfo.Port = svc.Port
-			}
-		}
-	}
-
-	// Register the host
-	hostname, _ := os.Hostname()
-	hostInfo := types.HostRecord{
-		Env:      h.ctrl.Registry().GetEnvironment(),
-		Name:     regInfo.Name,
-		Version:  regInfo.Version,
-		IP:       regInfo.IP,
-		Port:     regInfo.Port,
-		Hostname: strings.ToLower(hostname),
-	}
-
-	if err := h.ctrl.Registry().RegisterHost(hostInfo); err != nil {
-		h.logger.Error("failed to register service host",
-			zap.String("name", regInfo.Name),
-			zap.String("ip", regInfo.IP),
-			zap.Error(err),
-		)
-		h.respondWithRoute(w, false, nil, "/register")
-		return
-	}
-
-	h.logger.Info("service registered",
-		zap.String("name", regInfo.Name),
-		zap.String("ip", regInfo.IP),
-		zap.Int("port", regInfo.Port),
-		zap.String("version", regInfo.Version),
-	)
-
-	// Return service info
-	regData := h.ctrl.Registry().Get()
-	var responseData interface{}
-	if regData != nil && regData.Services != nil {
-		if svc, ok := regData.Services[regInfo.Name]; ok {
-			responseData = svc
-		}
-	}
-
-	h.respondWithRoute(w, true, responseData, "/register")
-}
-
-func (h *maintenanceHandler) parseRegisterQuery(r *http.Request) RegisterRequest {
-	port := 0
-	if p := r.URL.Query().Get("port"); p != "" {
-		fmt.Sscanf(p, "%d", &port)
-	}
-
-	return RegisterRequest{
-		Name:    r.URL.Query().Get("name"),
-		Group:   r.URL.Query().Get("group"),
-		Port:    port,
-		IP:      r.URL.Query().Get("ip"),
-		Type:    r.URL.Query().Get("type"),
-		Version: r.URL.Query().Get("version"),
-	}
-}
-
-func (h *maintenanceHandler) respondWithRoute(w http.ResponseWriter, result bool, data interface{}, route string) {
-	resp := MaintenanceResponse{
-		Result: result,
-		TS:     time.Now().UnixMilli(),
-		Service: ServiceInfo{
-			Name:    "soajs.controller",
-			Version: version.Get(),
-			Type:    "rest",
-			Route:   route,
-		},
-		Data: data,
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(resp)
-}
-
-func (h *maintenanceHandler) respondError(w http.ResponseWriter, route string, err error) {
-	h.logger.Error("maintenance operation failed",
-		zap.String("route", route),
-		zap.Error(err),
-	)
-
-	resp := MaintenanceResponse{
-		Result: false,
-		TS:     time.Now().UnixMilli(),
-		Service: ServiceInfo{
-			Name:    "soajs.controller",
-			Version: version.Get(),
-			Type:    "rest",
-			Route:   route,
-		},
-		Error: err.Error(),
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusInternalServerError)
-	json.NewEncoder(w).Encode(resp)
-}
-
-func (h *maintenanceHandler) proxySocket(w http.ResponseWriter, r *http.Request) {
-	// ProxySocket returns information about socket proxy configuration
-	// This is used for WebSocket routing
-	regData := h.ctrl.Registry().Get()
-
-	var socketInfo interface{}
-	if regData != nil && regData.ServiceConfig != nil {
-		// Return socket configuration if available
-		socketInfo = map[string]interface{}{
-			"host": "127.0.0.1",
-			"port": regData.ServiceConfig.Ports.Controller,
-		}
-	}
-
-	h.respondWithRoute(w, true, socketInfo, "/proxySocket")
 }

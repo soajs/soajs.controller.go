@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"encoding/json"
+	"github.com/soajs/soajs.controller.go/internal/registry"
 	"io"
 	"net"
 	"net/http"
@@ -58,6 +59,8 @@ func (m *mockRegistryProxy) OtherEnvControllerHosts(string) ([]types.HostRecord,
 func (m *mockRegistryProxy) UpsertEnvController(string, string, int64, map[string]interface{}) error {
 	return nil
 }
+func (m *mockRegistryProxy) Register(registry.RegisterOptions) (interface{}, error) { return nil, nil }
+
 func (m *mockRegistryProxy) LoadByEnv(env string, reload bool) (*types.RegistryData, error) {
 	return m.Get(), nil
 }

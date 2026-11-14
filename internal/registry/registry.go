@@ -24,7 +24,11 @@ type Registry interface {
 	// loads it again.
 	LoadByEnv(env string, reload bool) (*types.RegistryData, error)
 
-	// RegisterHost records a service host in the hosts collection and in the registry.
+	// Register records a registration of the maintenance port in the registry (and, with mw, in
+	// the hosts and marketplace collections); it returns the entry as the registry holds it.
+	Register(opt RegisterOptions) (interface{}, error)
+
+	// RegisterHost records a service host in the hosts collection.
 	RegisterHost(host types.HostRecord) error
 
 	// GetHost returns a host of a service: of the given version, or of the latest when version

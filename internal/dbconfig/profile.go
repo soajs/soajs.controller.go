@@ -23,6 +23,8 @@ type Profile struct {
 	Streaming   map[string]interface{} `json:"streaming"`
 	ExtraParam  map[string]interface{} `json:"extraParam"`
 	URLParam    map[string]interface{} `json:"URLParam"`
+	// Raw is the profile as written.
+	Raw map[string]interface{} `json:"-"`
 }
 
 var exportsRe = regexp.MustCompile(`(?s)^\s*(?:["']use strict["']\s*;)?\s*module\.exports\s*=\s*(\{.*\})\s*;?\s*$`)
@@ -41,6 +43,9 @@ func LoadProfile(path string) (*Profile, error) {
 	dec.DisallowUnknownFields()
 	var p Profile
 	if err := dec.Decode(&p); err != nil {
+		return nil, fmt.Errorf("profile %s: %w", path, err)
+	}
+	if err := json.Unmarshal(m[1], &p.Raw); err != nil {
 		return nil, fmt.Errorf("profile %s: %w", path, err)
 	}
 	if p.Name == "" {
@@ -69,5 +74,15 @@ func (p *Profile) ProvisionDB(env string, timeLoaded int64) *DB {
 			Env:        env,
 			TimeLoaded: timeLoaded,
 		},
+		Dump: provisionDump(p.Raw, env, timeLoaded),
 	}
+}
+
+func provisionDump(raw map[string]interface{}, env string, timeLoaded int64) map[string]interface{} {
+	dump := map[string]interface{}{}
+	for k, v := range raw {
+		dump[k] = v
+	}
+	dump["registryLocation"] = map[string]interface{}{"l1": "coreDB", "l2": "provision", "env": env, "timeLoaded": timeLoaded}
+	return dump
 }

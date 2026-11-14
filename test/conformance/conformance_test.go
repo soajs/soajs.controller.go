@@ -206,6 +206,8 @@ func compare(c Case, want, got Answer) string {
 		}
 	}
 	wantBody, gotBody := mask(want.Body, c.IgnoreFields), mask(got.Body, c.IgnoreFields)
+	// each gateway reports its own version on the maintenance port
+	wantBody, gotBody = serviceVersion.ReplaceAllString(wantBody, "${1}null"), serviceVersion.ReplaceAllString(gotBody, "${1}null")
 	if c.CompareJSON {
 		var w, g interface{}
 		if json.Unmarshal([]byte(wantBody), &w) == nil && json.Unmarshal([]byte(gotBody), &g) == nil && reflect.DeepEqual(w, g) {
@@ -223,6 +225,9 @@ func headerNames(c Case) []string {
 	sort.Strings(names)
 	return names
 }
+
+// serviceVersion is the version of the gateway in a maintenance answer's service block.
+var serviceVersion = regexp.MustCompile(`("service":\{"service":"soajs\.controller","version":)"[^"]*"`)
 
 // mask replaces the value of each ignored field, a JSON number or string, with null.
 func mask(body string, fields []string) string {

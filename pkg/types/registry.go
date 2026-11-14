@@ -29,8 +29,15 @@ type RegistryData struct {
 	CustomRegistry map[string]interface{} `json:"custom"`
 	// Resources holds the resources for the environment by type, then name, each as stored.
 	Resources map[string]map[string]map[string]interface{} `json:"resources"`
-	Services  map[string]*ServiceConfig                    `json:"services"`
-	Daemons   map[string]*DaemonConfig                     `json:"daemons"`
+	// SessionDB is coreDB.session as the Node.js registry gives it (build.sessionDB).
+	SessionDB map[string]interface{} `json:"-"`
+	// Reloaded is set once the registry was loaded again (reloadRegistry or the automatic
+	// reload). Until then the Node.js gateway's database connections have consumed the
+	// URLParam options it does not pass on and the extraParam of the configurations it gives
+	// services; after a reload they show again.
+	Reloaded bool                      `json:"-"`
+	Services map[string]*ServiceConfig `json:"services"`
+	Daemons  map[string]*DaemonConfig  `json:"daemons"`
 }
 
 // GlobalServiceConfig is environment.services.config (docs/data-schema/environment.md).
