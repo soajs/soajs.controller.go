@@ -1,0 +1,265 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "oauth_token",
+  "x-soajs": {
+    "collection": "oauth_token",
+    "database": "oauth"
+  },
+  "type": "object",
+  "properties": {
+    "_id": {
+      "type": "object",
+      "properties": {
+        "$oid": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{24}$"
+        }
+      },
+      "required": [
+        "$oid"
+      ],
+      "additionalProperties": false
+    },
+    "token": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$"
+    },
+    "type": {
+      "enum": [
+        "accessToken",
+        "refreshToken"
+      ]
+    },
+    "clientId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "env": {
+      "type": "string",
+      "pattern": "^[a-z0-9]+$"
+    },
+    "expires": {
+      "type": "object",
+      "properties": {
+        "$date": {}
+      },
+      "required": [
+        "$date"
+      ],
+      "additionalProperties": false
+    },
+    "user": {
+      "type": "object",
+      "properties": {
+        "_id": {
+          "type": "object",
+          "properties": {
+            "$oid": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{24}$"
+            }
+          },
+          "required": [
+            "$oid"
+          ],
+          "additionalProperties": false
+        },
+        "id": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{24}$"
+        },
+        "username": {
+          "type": "string",
+          "minLength": 1
+        },
+        "loginMode": {
+          "enum": [
+            "urac",
+            "oauth"
+          ]
+        },
+        "tenant": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{24}$"
+            },
+            "code": {
+              "type": "string",
+              "pattern": "^[A-Z0-9]+$"
+            },
+            "pin": {}
+          },
+          "additionalProperties": false,
+          "required": [
+            "id",
+            "code"
+          ]
+        },
+        "deviceId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "agent": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "guest": {
+          "type": "boolean"
+        },
+        "restrictedTo": {
+          "type": "object",
+          "properties": {
+            "tenant": {
+              "oneOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              ]
+            },
+            "product": {
+              "oneOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              ]
+            },
+            "package": {
+              "oneOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              ]
+            },
+            "key": {
+              "oneOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              ]
+            },
+            "env": {
+              "oneOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              ]
+            },
+            "agent": {
+              "oneOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              ]
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "tenant"
+          ]
+        },
+        "groups": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "config": {
+          "type": "object"
+        },
+        "groupsConfig": {
+          "type": "object"
+        },
+        "profile": {
+          "type": "object"
+        },
+        "email": {
+          "type": "string"
+        },
+        "phone": {
+          "type": "string"
+        },
+        "pinLogin": {
+          "type": "boolean"
+        },
+        "pinLocked": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": true,
+      "required": [
+        "_id",
+        "id",
+        "username",
+        "loginMode",
+        "tenant",
+        "deviceId"
+      ],
+      "not": {
+        "anyOf": [
+          {
+            "required": [
+              "userId"
+            ]
+          },
+          {
+            "required": [
+              "tId"
+            ]
+          }
+        ]
+      }
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "_id",
+    "token",
+    "type",
+    "clientId",
+    "env",
+    "expires",
+    "user"
+  ]
+}

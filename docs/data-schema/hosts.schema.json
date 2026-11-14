@@ -1,0 +1,75 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "hosts",
+  "x-soajs": {
+    "collection": "hosts",
+    "database": "provision"
+  },
+  "type": "object",
+  "properties": {
+    "_id": {
+      "type": "object",
+      "properties": {
+        "$oid": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{24}$"
+        }
+      },
+      "required": [
+        "$oid"
+      ],
+      "additionalProperties": false
+    },
+    "env": {
+      "type": "string",
+      "pattern": "^[a-z0-9]+$"
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1
+    },
+    "ip": {
+      "type": "string",
+      "minLength": 1
+    },
+    "port": {
+      "type": "integer"
+    },
+    "hostname": {
+      "type": "string"
+    },
+    "version": {
+      "type": "string",
+      "pattern": "^[0-9]+$"
+    },
+    "type": {
+      "type": "string"
+    },
+    "serviceHATask": {
+      "type": "string"
+    },
+    "healthy": {
+      "type": "boolean"
+    },
+    "lastCheck": {
+      "type": "object",
+      "properties": {
+        "$date": {}
+      },
+      "required": [
+        "$date"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "_id",
+    "env",
+    "name",
+    "ip",
+    "port",
+    "hostname",
+    "version"
+  ]
+}

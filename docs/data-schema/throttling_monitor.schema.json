@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "throttling_monitor",
+  "x-soajs": {
+    "collection": "throttling_monitor",
+    "database": "gateway"
+  },
+  "type": "object",
+  "properties": {
+    "_id": {
+      "type": "object",
+      "properties": {
+        "$oid": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{24}$"
+        }
+      },
+      "required": [
+        "$oid"
+      ],
+      "additionalProperties": false
+    },
+    "l1": {
+      "type": "string",
+      "minLength": 1
+    },
+    "l2": {
+      "type": "string",
+      "minLength": 1
+    },
+    "firstReqTime": {
+      "type": "object",
+      "properties": {
+        "$date": {}
+      },
+      "required": [
+        "$date"
+      ],
+      "additionalProperties": false
+    },
+    "count": {
+      "type": "integer"
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "_id",
+    "l1",
+    "l2",
+    "firstReqTime",
+    "count"
+  ]
+}

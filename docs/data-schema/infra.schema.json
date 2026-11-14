@@ -1,0 +1,74 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "infra (kubernetes account)",
+  "x-soajs": {
+    "collection": "infra",
+    "database": "provision"
+  },
+  "type": "object",
+  "properties": {
+    "_id": {
+      "type": "object",
+      "properties": {
+        "$oid": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{24}$"
+        }
+      },
+      "required": [
+        "$oid"
+      ],
+      "additionalProperties": false
+    },
+    "type": {
+      "type": "string"
+    },
+    "label": {
+      "type": "string"
+    },
+    "description": {
+      "type": "string"
+    },
+    "ts": {
+      "type": "number"
+    },
+    "deployments": {},
+    "settings": {},
+    "configuration": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string"
+        },
+        "url": {
+          "type": "string",
+          "minLength": 1
+        },
+        "port": {
+          "type": "integer"
+        },
+        "token": {
+          "type": "string",
+          "minLength": 1
+        },
+        "protocol": {
+          "enum": [
+            "http",
+            "https"
+          ]
+        },
+        "ca": {}
+      },
+      "additionalProperties": false,
+      "required": [
+        "url",
+        "token"
+      ]
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "_id",
+    "configuration"
+  ]
+}
