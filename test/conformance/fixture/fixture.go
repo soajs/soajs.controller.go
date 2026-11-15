@@ -31,6 +31,10 @@ var files = map[string]string{
 	"DBTN_urac.json":      "DBTN_urac",
 }
 
+// written are the databases the gateways write during a run (call events): dropped with the
+// fixture, so a run starts without them.
+var written = []string{"gateway"}
+
 // Load drops the fixture databases and loads them again.
 func Load(ctx context.Context, uri string) error {
 	if err := checkLocal(uri); err != nil {
@@ -45,6 +49,11 @@ func Load(ctx context.Context, uri string) error {
 	dir, err := sourceDir()
 	if err != nil {
 		return err
+	}
+	for _, name := range written {
+		if err := client.Database(Prefix + name).Drop(ctx); err != nil {
+			return fmt.Errorf("drop %s: %w", Prefix+name, err)
+		}
 	}
 	for file, name := range files {
 		collections, err := readFile(filepath.Join(dir, file))
@@ -82,6 +91,11 @@ func Drop(ctx context.Context, uri string) error {
 	}
 	defer client.Disconnect(ctx)
 	for _, name := range files {
+		if err := client.Database(Prefix + name).Drop(ctx); err != nil {
+			return fmt.Errorf("drop %s: %w", Prefix+name, err)
+		}
+	}
+	for _, name := range written {
 		if err := client.Database(Prefix + name).Drop(ctx); err != nil {
 			return fmt.Errorf("drop %s: %w", Prefix+name, err)
 		}

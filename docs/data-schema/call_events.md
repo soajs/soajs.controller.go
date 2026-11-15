@@ -4,7 +4,7 @@ One document per call through the gateway, written only when the custom registry
 
 - **Schema:** [call_events.schema.json](call_events.schema.json)
 - **Written by:** the gateway only, in batches (up to 200 events, at least every second), off the request path. On a graceful stop the events still queued are written. When the queue is full, or the sink fails, events are dropped and the count is logged.
-- **Calls covered:** a request refused from the key step on, and every request answered by the route handler. Requests refused earlier (unknown service, banned IP, maintenance mode, the MCP 401) have no event.
+- **Calls covered:** a request refused from the key step on, and every request answered by the route handler. Requests refused earlier (unknown service, banned IP, maintenance mode, the MCP 401) have no event. Refusals at the key step itself (an unknown key, 148, with no tenant yet) are kept: under misuse they are the most numerous events, so size `queueSize` and the collection's retention with them in mind.
 
 The documents carry identity and routing, never request or response bodies, query values, headers, tokens or keys. A field the call does not have is left out, never written as `null`.
 
