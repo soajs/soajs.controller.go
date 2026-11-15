@@ -3,5 +3,5 @@
   "headers": {
     "Content-Type": "application/json"
   },
-  "body": "{\"result\":false,\"ts\":1794693479007,\"service\":{\"service\":\"soajs.controller\",\"version\":\"4.3.29\",\"type\":\"rest\",\"route\":\"/cache/invalidate\"},\"error\":\"Cache invalidation needs the mongo model, the cache model is [memory].\"}"
+  "body": "{\"result\":false,\"ts\":1794707049758,\"service\":{\"service\":\"soajs.controller\",\"version\":\"4.3.30\",\"type\":\"rest\",\"route\":\"/cache/invalidate\"},\"error\":\"Cache invalidation needs the mongo model, the cache model is [memory].\"}"
 }

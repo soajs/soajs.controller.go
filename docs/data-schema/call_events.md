@@ -3,6 +3,7 @@
 One document per call through the gateway, written only when the custom registry `gateway.events` is enabled with the `mongo` sink. The collection is a time-series collection (`timeField: ts`, `metaField: tenant`, granularity seconds) in the core database that `gateway.events.mongo.db` names. The gateway creates it when it does not exist.
 
 - **Schema:** [call_events.schema.json](call_events.schema.json)
+- **Gateways:** both write the same document, field names and BSON types alike: Go from 4.4.29, Node.js (soajs.controller) from 4.3.30. The conformance harness compares the documents of the two.
 - **Written by:** the gateway only, in batches (up to 200 events, at least every second), off the request path. On a graceful stop the events still queued are written. When the queue is full, or the sink fails, events are dropped and the count is logged.
 - **Calls covered:** a request refused from the key step on, and every request answered by the route handler. Requests refused earlier (unknown service, banned IP, maintenance mode, the MCP 401) have no event. Refusals at the key step itself (an unknown key, 148, with no tenant yet) are kept: under misuse they are the most numerous events, so size `queueSize` and the collection's retention with them in mind.
 
