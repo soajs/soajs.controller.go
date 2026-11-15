@@ -31,6 +31,8 @@ MOCK_PID=""
 OTHER_PID=""
 OPEN_PID=""
 
+# stop PID: SIGTERM, then kill -9 after 5 s. Both gateways exit on the SIGTERM itself (the Node.js
+# gateway since 4.3.30); the kill -9 stays for a process that hangs.
 stop() {
 	[ -n "$1" ] || return 0
 	kill "$1" 2>/dev/null || true

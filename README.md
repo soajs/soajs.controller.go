@@ -3,7 +3,7 @@
 [![Go Version](https://img.shields.io/badge/Go-1.25+-00ADD8?style=flat&logo=go)](https://go.dev/)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 
-The SOAJS API gateway written in Go. The Node.js gateway, [soajs.controller](https://github.com/soajs/soajs.controller) 4.3.29, is its specification. The Go gateway reads the same profile and the same databases, and answers requests as that gateway does.
+The SOAJS API gateway written in Go. The Node.js gateway, [soajs.controller](https://github.com/soajs/soajs.controller) 4.3.30, is its specification. The Go gateway reads the same profile and the same databases, and answers requests as that gateway does.
 
 **Status:**
 - Every area of the Node.js gateway is ported:

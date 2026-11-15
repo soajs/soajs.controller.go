@@ -32,7 +32,7 @@ NODE_CONTROLLER_DIR=/path/to/soajs.controller test/conformance/run.sh node -reco
 test/conformance/run.sh node    # check the recording is stable
 ```
 
-`NODE_CONTROLLER_DIR` is a checkout of `soajs.controller` with its `node_modules` installed. The golden files in this repository were recorded from 4.3.29.
+`NODE_CONTROLLER_DIR` is a checkout of `soajs.controller` with its `node_modules` installed. The golden files in this repository were recorded from 4.3.30.
 
 ## Adding a case
 

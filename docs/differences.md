@@ -1,10 +1,6 @@
 # Differences from the Node.js gateway
 
-The Go gateway answers as soajs.controller 4.3.29 does, and the [conformance harness](../test/conformance/README.md) checks it. This page lists where it deliberately does not, each one reviewed in the pull request given.
-
-## Go only, for now
-
-- **Call events** (custom registry `gateway.events`, [call_events.md](data-schema/call_events.md)): Node.js gets the same feature, with the same configuration and document shape, in a later release.
+The Go gateway answers as soajs.controller 4.3.30 does, and the [conformance harness](../test/conformance/README.md) checks it. This page lists where it deliberately does not, each one reviewed in the pull request given.
 
 ## Not ported
 

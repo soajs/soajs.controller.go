@@ -77,6 +77,14 @@ func Load(ctx context.Context, uri string) error {
 			}
 		}
 	}
+	// The Node.js gateway asks for a TTL index on oauth_token.expires when it starts; MongoDB's TTL
+	// monitor would then delete the fixture's expired token within a minute, and the expired-token
+	// case would answer "invalid" or "expired" depending on timing. A plain index on the same key
+	// is in place first: Node.js's request conflicts with it and is skipped (it ignores the error).
+	if _, err := client.Database(Prefix+"oauth").Collection("oauth_token").Indexes().CreateOne(ctx,
+		mongo.IndexModel{Keys: bson.D{{Key: "expires", Value: 1}}}); err != nil {
+		return fmt.Errorf("index %soauth.oauth_token: %w", Prefix, err)
+	}
 	return nil
 }
 

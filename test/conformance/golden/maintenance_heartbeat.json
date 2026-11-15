@@ -3,5 +3,5 @@
   "headers": {
     "Content-Type": "application/json"
   },
-  "body": "{\"result\":true,\"ts\":1794693478845,\"service\":{\"service\":\"soajs.controller\",\"version\":\"4.3.29\",\"type\":\"rest\",\"route\":\"/heartbeat\"}}"
+  "body": "{\"result\":true,\"ts\":1794707049422,\"service\":{\"service\":\"soajs.controller\",\"version\":\"4.3.30\",\"type\":\"rest\",\"route\":\"/heartbeat\"}}"
 }
