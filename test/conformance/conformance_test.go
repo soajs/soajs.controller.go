@@ -10,11 +10,14 @@
 //	CONFORMANCE_MAINTENANCE=<url>  its maintenance port, e.g. http://127.0.0.1:25000
 //	CONFORMANCE_DASHBOARD_GATEWAY=<url>      the gateway of the dashboard environment, for the
 //	CONFORMANCE_DASHBOARD_MAINTENANCE=<url>  cases with "env": "dashboard"
+//	CONFORMANCE_MONGO_URI=<uri>              the call events the dashboard gateway writes
 //
 // go test ./test/conformance -record writes golden/ from the running gateway, which must be Node.js.
 package conformance
 
 import (
+	"bytes"
+	"context"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -28,6 +31,10 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
 var record = flag.Bool("record", false, "write golden/ from the running gateway (Node.js only)")
@@ -173,6 +180,44 @@ func TestConformance(t *testing.T) {
 			}
 		})
 	}
+
+	// the call events the dashboard gateway wrote (events are on there), compared with Node.js's
+	t.Run("call_events", func(t *testing.T) {
+		uri := os.Getenv("CONFORMANCE_MONGO_URI")
+		if uri == "" {
+			t.Skip("set CONFORMANCE_MONGO_URI, or use run.sh")
+		}
+		got := callEvents(t, uri)
+		golden := filepath.Join("golden", "_call_events.json")
+		if *record {
+			writeJSON(t, golden, got)
+			return
+		}
+		var want []json.RawMessage
+		readJSON(t, golden, &want)
+		compact := func(list []json.RawMessage) map[string]int {
+			out := map[string]int{}
+			for _, raw := range list {
+				var b bytes.Buffer
+				if err := json.Compact(&b, raw); err != nil {
+					t.Fatal(err)
+				}
+				out[b.String()]++
+			}
+			return out
+		}
+		wantSet, gotSet := compact(want), compact(got)
+		for doc, n := range wantSet {
+			if gotSet[doc] != n {
+				t.Errorf("Node.js wrote %d, Go %d of:\n  %s", n, gotSet[doc], doc)
+			}
+		}
+		for doc, n := range gotSet {
+			if _, ok := wantSet[doc]; !ok {
+				t.Errorf("Go wrote %d that Node.js did not:\n  %s", n, doc)
+			}
+		}
+	})
 }
 
 func send(client *http.Client, base string, c Case) (Answer, error) {
@@ -331,4 +376,75 @@ func writeJSON(t *testing.T, path string, v interface{}) {
 	if err := os.WriteFile(path, append(raw, '\n'), 0o644); err != nil {
 		t.Fatal(err)
 	}
+}
+
+// eventsMasked are the call event fields that change on every run.
+var eventsMasked = []string{"_id", "ts", "durationMs", "requestId"}
+
+// callEvents reads conformance_gateway.call_events once the gateway stopped writing (no new event
+// for 2.5 s, at most 20 s): each document without the masked fields, as canonical extended JSON
+// with sorted keys, so field types (Int32, Long, Double) are compared too; sorted.
+func callEvents(t *testing.T, uri string) []json.RawMessage {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 40*time.Second)
+	defer cancel()
+	client, err := mongo.Connect(ctx, options.Client().ApplyURI(uri))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer client.Disconnect(context.Background())
+	coll := client.Database("conformance_gateway").Collection("call_events")
+	last, stableSince, deadline := int64(-1), time.Now(), time.Now().Add(20*time.Second)
+	for time.Now().Before(deadline) {
+		n, err := coll.CountDocuments(ctx, bson.M{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if n != last {
+			last, stableSince = n, time.Now()
+		} else if time.Since(stableSince) >= 2500*time.Millisecond {
+			break
+		}
+		time.Sleep(250 * time.Millisecond)
+	}
+	cur, err := coll.Find(ctx, bson.M{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cur.Close(ctx)
+	var out []string
+	for cur.Next(ctx) {
+		var doc bson.D
+		if err := bson.Unmarshal(cur.Current, &doc); err != nil {
+			t.Fatal(err)
+		}
+		kept := bson.D{}
+		for _, e := range doc {
+			masked := false
+			for _, m := range eventsMasked {
+				if e.Key == m {
+					masked = true
+				}
+			}
+			if !masked {
+				kept = append(kept, e)
+			}
+		}
+		ext, err := bson.MarshalExtJSON(kept, true, false)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var v interface{}
+		if err := json.Unmarshal(ext, &v); err != nil {
+			t.Fatal(err)
+		}
+		sorted, _ := json.Marshal(v)
+		out = append(out, string(sorted))
+	}
+	sort.Strings(out)
+	raw := make([]json.RawMessage, len(out))
+	for i, s := range out {
+		raw[i] = json.RawMessage(s)
+	}
+	return raw
 }

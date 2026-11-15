@@ -1,0 +1,275 @@
+[
+  {
+    "api": "/private/admin",
+    "appId": "6a0e000000000000000000a6",
+    "env": "dashboard",
+    "ip": "127.0.0.1",
+    "method": "GET",
+    "package": "DSBRD_DEFAULT",
+    "product": "DSBRD",
+    "service": "conform",
+    "status": {
+      "$numberInt": "200"
+    },
+    "tenant": {
+      "code": "DBTN",
+      "id": "6a0e00000000000000000002"
+    },
+    "user": {
+      "id": "6a0e000000000000000000b5",
+      "username": "invited_admin"
+    },
+    "version": "1"
+  },
+  {
+    "api": "/private/hello",
+    "appId": "6a0e000000000000000000a6",
+    "code": {
+      "$numberInt": "146"
+    },
+    "env": "dashboard",
+    "ip": "127.0.0.1",
+    "method": "GET",
+    "package": "DSBRD_DEFAULT",
+    "product": "DSBRD",
+    "service": "conform",
+    "status": {
+      "$numberInt": "401"
+    },
+    "tenant": {
+      "code": "DBTN",
+      "id": "6a0e00000000000000000002"
+    },
+    "user": {
+      "id": "6a0e000000000000000000b1",
+      "username": "console_paused"
+    },
+    "version": "1"
+  },
+  {
+    "api": "/private/hello",
+    "appId": "6a0e000000000000000000a6",
+    "code": {
+      "$numberInt": "146"
+    },
+    "env": "dashboard",
+    "ip": "127.0.0.1",
+    "method": "GET",
+    "package": "DSBRD_DEFAULT",
+    "product": "DSBRD",
+    "service": "conform",
+    "status": {
+      "$numberInt": "401"
+    },
+    "tenant": {
+      "code": "DBTN",
+      "id": "6a0e00000000000000000002"
+    },
+    "user": {
+      "id": "6a0e000000000000000000b2",
+      "username": "console_pending"
+    },
+    "version": "1"
+  },
+  {
+    "api": "/private/hello",
+    "appId": "6a0e000000000000000000a6",
+    "code": {
+      "$numberInt": "146"
+    },
+    "env": "dashboard",
+    "ip": "127.0.0.1",
+    "method": "GET",
+    "package": "DSBRD_DEFAULT",
+    "product": "DSBRD",
+    "service": "conform",
+    "status": {
+      "$numberInt": "401"
+    },
+    "tenant": {
+      "code": "DBTN",
+      "id": "6a0e00000000000000000002"
+    },
+    "user": {
+      "id": "6a0e000000000000000000b3",
+      "username": "console_ghost"
+    },
+    "version": "1"
+  },
+  {
+    "api": "/private/hello",
+    "appId": "6a0e000000000000000000a6",
+    "code": {
+      "$numberInt": "146"
+    },
+    "env": "dashboard",
+    "ip": "127.0.0.1",
+    "method": "GET",
+    "package": "DSBRD_DEFAULT",
+    "product": "DSBRD",
+    "service": "conform",
+    "status": {
+      "$numberInt": "401"
+    },
+    "tenant": {
+      "code": "DBTN",
+      "id": "6a0e00000000000000000002"
+    },
+    "user": {
+      "id": "6a0e000000000000000000b4",
+      "username": "outsider"
+    },
+    "version": "1"
+  },
+  {
+    "api": "/private/hello",
+    "appId": "6a0e000000000000000000a6",
+    "code": {
+      "$numberInt": "146"
+    },
+    "env": "dashboard",
+    "ip": "127.0.0.1",
+    "method": "GET",
+    "package": "DSBRD_DEFAULT",
+    "product": "DSBRD",
+    "service": "conform",
+    "status": {
+      "$numberInt": "401"
+    },
+    "tenant": {
+      "code": "DBTN",
+      "id": "6a0e00000000000000000002"
+    },
+    "user": {
+      "id": "6a0e000000000000000000b6",
+      "username": "console_moved"
+    },
+    "version": "1"
+  },
+  {
+    "api": "/private/hello",
+    "appId": "6a0e000000000000000000a6",
+    "env": "dashboard",
+    "ip": "127.0.0.1",
+    "method": "GET",
+    "package": "DSBRD_DEFAULT",
+    "product": "DSBRD",
+    "service": "conform",
+    "status": {
+      "$numberInt": "200"
+    },
+    "tenant": {
+      "code": "DBTN",
+      "id": "6a0e00000000000000000002"
+    },
+    "user": {
+      "id": "6a0e000000000000000000ac",
+      "username": "console_owner"
+    },
+    "version": "1"
+  },
+  {
+    "api": "/public/hello",
+    "appId": "6a0e000000000000000000a6",
+    "env": "dashboard",
+    "ip": "127.0.0.1",
+    "method": "GET",
+    "package": "DSBRD_DEFAULT",
+    "product": "DSBRD",
+    "service": "conform",
+    "status": {
+      "$numberInt": "200"
+    },
+    "tenant": {
+      "code": "DBTN",
+      "id": "6a0e00000000000000000002"
+    },
+    "version": "1"
+  },
+  {
+    "api": "/soajs/mcp",
+    "appId": "6a0e000000000000000000a6",
+    "code": {
+      "$numberInt": "190"
+    },
+    "env": "dashboard",
+    "ip": "127.0.0.1",
+    "method": "POST",
+    "package": "DSBRD_DEFAULT",
+    "product": "DSBRD",
+    "service": "controller",
+    "status": {
+      "$numberInt": "404"
+    },
+    "tenant": {
+      "code": "DBTN",
+      "id": "6a0e00000000000000000002"
+    },
+    "user": {
+      "id": "6a0e000000000000000000ac",
+      "username": "console_owner"
+    },
+    "version": "1"
+  },
+  {
+    "appId": "6a0e000000000000000000a6",
+    "code": {
+      "$numberInt": "159"
+    },
+    "env": "dashboard",
+    "ip": "127.0.0.1",
+    "method": "GET",
+    "package": "DSBRD_DEFAULT",
+    "product": "DSBRD",
+    "service": "conform",
+    "status": {
+      "$numberInt": "401"
+    },
+    "tenant": {
+      "code": "DBTN",
+      "id": "6a0e00000000000000000002"
+    },
+    "user": {
+      "id": "6a0e000000000000000000ac",
+      "username": "console_owner"
+    },
+    "version": "1"
+  },
+  {
+    "appId": "6a0e000000000000000000a6",
+    "code": {
+      "$numberInt": "159"
+    },
+    "env": "dashboard",
+    "ip": "127.0.0.1",
+    "method": "GET",
+    "package": "DSBRD_DEFAULT",
+    "product": "DSBRD",
+    "service": "conform",
+    "status": {
+      "$numberInt": "401"
+    },
+    "tenant": {
+      "code": "DBTN",
+      "id": "6a0e00000000000000000002"
+    },
+    "user": {
+      "id": "6a0e000000000000000000b5",
+      "username": "invited_admin"
+    },
+    "version": "1"
+  },
+  {
+    "code": {
+      "$numberInt": "148"
+    },
+    "env": "dashboard",
+    "ip": "127.0.0.1",
+    "method": "GET",
+    "service": "conform",
+    "status": {
+      "$numberInt": "500"
+    },
+    "version": "1"
+  }
+]

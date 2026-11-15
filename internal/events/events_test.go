@@ -13,6 +13,8 @@ import (
 	drv "go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
+	"go.uber.org/zap/zaptest/observer"
 )
 
 // blockingSink holds every write until released, and keeps what it was given.
@@ -93,6 +95,31 @@ func TestEmitterSinkFailureCounts(t *testing.T) {
 	none.Close()
 	if none.Dropped() != 1 {
 		t.Errorf("no sink: dropped %d", none.Dropped())
+	}
+}
+
+// A sink failing on every batch is logged once, not per batch, then once more with the totals on
+// close.
+func TestEmitterReportsAtMostOncePerInterval(t *testing.T) {
+	core, logs := observer.New(zapcore.ErrorLevel)
+	e := NewEmitter(1000, func() (Sink, error) { return failingSink{}, nil }, zap.New(core))
+	for round := 0; round < 3; round++ {
+		for i := 0; i < 450; i++ {
+			e.Emit(&Event{})
+		}
+		time.Sleep(1200 * time.Millisecond)
+	}
+	if n := logs.Len(); n != 1 {
+		t.Errorf("%d reports before close, want 1", n)
+	}
+	e.Close()
+	entries := logs.All()
+	if len(entries) != 2 {
+		t.Fatalf("%d reports, want 2", len(entries))
+	}
+	last := entries[1].ContextMap()
+	if last["dropped"] != int64(1350) || last["sinkFailures"].(int64) < 7 || last["lastError"] != "down" {
+		t.Errorf("totals %v", last)
 	}
 }
 

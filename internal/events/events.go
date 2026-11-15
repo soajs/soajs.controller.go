@@ -71,15 +71,20 @@ const (
 	batchSize     = 200
 	flushInterval = time.Second
 	writeTimeout  = 10 * time.Second
+	// reportInterval: drops and sink failures are logged at most this often, with the totals
+	reportInterval = time.Minute
 )
 
 // Emitter queues events and writes them in batches.
 type Emitter struct {
-	queue   chan *Event
-	resolve SinkResolver
-	logger  *zap.Logger
-	dropped atomic.Int64
-	written atomic.Int64
+	queue    chan *Event
+	resolve  SinkResolver
+	logger   *zap.Logger
+	dropped  atomic.Int64
+	written  atomic.Int64
+	failures atomic.Int64
+	// lastErr is the last sink error, logged with the next report (worker only)
+	lastErr error
 
 	stopOnce sync.Once
 	stop     chan struct{}
@@ -116,6 +121,9 @@ func (e *Emitter) Emit(ev *Event) bool {
 // Dropped is the number of events dropped, the queue being full or the sink failing.
 func (e *Emitter) Dropped() int64 { return e.dropped.Load() }
 
+// Failures is the number of batches the sink could not take.
+func (e *Emitter) Failures() int64 { return e.failures.Load() }
+
 // Written is the number of events the sink accepted.
 func (e *Emitter) Written() int64 { return e.written.Load() }
 
@@ -130,16 +138,27 @@ func (e *Emitter) run() {
 	ticker := time.NewTicker(flushInterval)
 	defer ticker.Stop()
 	batch := make([]*Event, 0, batchSize)
-	reported := int64(0)
+	var reportedDropped, reportedFailures int64
+	var lastReport time.Time
+	// report logs the totals when they changed, at most once per reportInterval unless forced
+	report := func(force bool) {
+		d, f := e.dropped.Load(), e.failures.Load()
+		if (d == reportedDropped && f == reportedFailures) || (!force && time.Since(lastReport) < reportInterval) {
+			return
+		}
+		fields := []zap.Field{zap.Int64("dropped", d), zap.Int64("sinkFailures", f)}
+		if e.lastErr != nil {
+			fields = append(fields, zap.NamedError("lastError", e.lastErr))
+		}
+		e.logger.Error("call events dropped", fields...)
+		reportedDropped, reportedFailures, lastReport = d, f, time.Now()
+	}
 	flush := func() {
 		if len(batch) > 0 {
 			e.write(batch)
 			batch = make([]*Event, 0, batchSize)
 		}
-		if d := e.dropped.Load(); d != reported {
-			e.logger.Error("call events dropped", zap.Int64("dropped", d))
-			reported = d
-		}
+		report(false)
 	}
 	for {
 		select {
@@ -157,6 +176,7 @@ func (e *Emitter) run() {
 					batch = append(batch, ev)
 				default:
 					flush()
+					report(true)
 					return
 				}
 			}
@@ -168,7 +188,8 @@ func (e *Emitter) write(batch []*Event) {
 	sink, err := e.resolve()
 	if err != nil || sink == nil {
 		if err != nil {
-			e.logger.Error("call events: no sink", zap.Error(err))
+			e.failures.Add(1)
+			e.lastErr = err
 		}
 		e.dropped.Add(int64(len(batch)))
 		return
@@ -176,7 +197,8 @@ func (e *Emitter) write(batch []*Event) {
 	ctx, cancel := context.WithTimeout(context.Background(), writeTimeout)
 	defer cancel()
 	if err := sink.Write(ctx, batch); err != nil {
-		e.logger.Error("call events: the sink failed, the batch is dropped", zap.Int("events", len(batch)), zap.Error(err))
+		e.failures.Add(1)
+		e.lastErr = err
 		e.dropped.Add(int64(len(batch)))
 		return
 	}
