@@ -44,6 +44,11 @@ Every block is optional.
 | `….enabled` | boolean | yes | | |
 | `….scope` | string | | `tenant` \| `tenant_user`; default `tenant` for public APIs, `tenant_user` for private | Cache key scope. |
 | `….ttl` | integer (ms) | | default `defaultTTL` | |
+| `events.enabled` | boolean | yes | | Turns call events on ([call_events.md](call_events.md)). Off, nothing changes. |
+| `events.sink` | string | when enabled | `mongo` \| `log` | Where events are written. `log` is for debugging: it writes at info level. |
+| `events.mongo.db`, `events.mongo.collection` | string | with `mongo` | a core database of the environment | The time-series collection. |
+| `events.queueSize` | integer | | default 10000 | Events waiting to be written; when full, events are dropped and counted. Read when the first event is queued. |
+| `events.services.<service>.enabled` | boolean | yes | | With `services`, only the services enabled emit; without it, every service does. |
 | `lastSeen.active` | boolean | yes | | Reports user activity to urac. |
 | `lastSeen.include.<service>.apis.<path>` | string[] | yes | HTTP methods; the path is relative, `"*"` matches all | APIs that count as activity. |
 | `lastSeen.serviceName`, `serviceVersion`, `api` | string | | default `urac`, `"3"`, `/user/last/seen` | Where activity is reported. |

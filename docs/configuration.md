@@ -37,7 +37,7 @@ The registry is the environment document with its databases (`dbs`, resolved aga
   - `oauth`, `key` (extKey decryption), `cors`, `throttling`.
 - **`coreDB`:** the provision, oauth and gateway databases. Access tokens are read in the `oauth` database when the environment has one, else in provision. Throttling, idempotency and the cache use the `gateway` database, else provision.
 - **The custom registry:**
-  - `gateway`: `traffic` (with `ip2ban`), `maintenanceMode`, `idempotency`, `cache`, `mcp`, `lastSeen`, `membership`, `mt.whitelist`, `oauth.deviceIdCheck`;
+  - `gateway`: `traffic` (with `ip2ban`), `maintenanceMode`, `events`, `idempotency`, `cache`, `mcp`, `lastSeen`, `membership`, `mt.whitelist`, `oauth.deviceIdCheck`;
   - `oauth`: PIN wrapper and whitelist, roaming;
   - `urac`: `masterDB`, the core database that holds users and groups.
 
@@ -53,4 +53,5 @@ The registry is the environment document with its databases (`dbs`, resolved aga
 | `gateway.mcp.enabled` | `/soajs/mcp`. With `gateway.mcp.auth`, the 401 challenge and the `/.well-known` metadata. |
 | `gateway.traffic` | Throttling overrides and the model, and `ip2ban`; the strategies are in `serviceConfig.throttling`. |
 | `gateway.lastSeen` | Reporting user activity to urac. |
+| `gateway.events` | Call events: one record per call, written to a time-series collection (`mongo`) or the log, off the request path ([call_events.md](data-schema/call_events.md)). |
 | `gateway.maintenanceMode` | `on`: every request answers `status` (503) with `message`, and `Retry-After` when `retryAfter` is set. |

@@ -17,6 +17,7 @@ The gateway is a chain of middlewares on a chi router, in the order of the Node.
 | 9 | URL | mw/url, lib/parseURL.js | Service, version and path, parsed as WHATWG `new URL` does (130, 136). |
 | 10 | Awareness, AwarenessEnv | mw/awareness, mw/awarenessEnv | Hosts in this and other environments. |
 | 11 | MCPAuthorize | mw/soajsRoutes/mcp/auth.js authorize | `/soajs/mcp`: the 401 challenge; the key of a token restricted to one key. |
+| 11a | CallEvents | (Go only, for now) | With the custom registry `gateway.events`: one call event per request from here on, written off the request path. |
 | 12 | Key | mw/key | Resolves the extKey (148, 144), the network package, the package. |
 | 13 | KeyACL | mw/keyACL | The final ACL of the requested version (154). |
 | 14 | GotoService | mw/gotoService | The service and its version (130, 132); `/soajs/acl`, `/soajs/proxy`, `/soajs/mcp`; passport login, roaming, redirect. |
@@ -53,5 +54,7 @@ Only with the mongo models, in the environment's `gateway` database, else provis
 - `throttling_monitor` and `throttling_error`;
 - `idempotency_store`;
 - `cache_store` and `cache_invalidation`.
+
+With call events on the `mongo` sink, `call_events` in the core database `gateway.events.mongo.db` names ([call_events.md](data-schema/call_events.md)).
 
 The gateway also writes its `controllers` document, its host and, on `/register`, the marketplace and hosts.

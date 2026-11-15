@@ -134,6 +134,10 @@
           "DBTN_urac": {
             "cluster": "conformance_cluster",
             "tenantSpecific": false
+          },
+          "gateway": {
+            "cluster": "conformance_cluster",
+            "tenantSpecific": false
           }
         }
       },
@@ -308,6 +312,36 @@
               }
             }
           }
+        },
+        "events": {
+          "enabled": false,
+          "sink": "mongo",
+          "mongo": {
+            "db": "gateway",
+            "collection": "call_events"
+          }
+        }
+      }
+    },
+    {
+      "_id": {
+        "$oid": "6a0e000000000000000000d4"
+      },
+      "name": "gateway",
+      "created": "DASHBOARD",
+      "author": "conformance",
+      "plugged": true,
+      "shared": false,
+      "sharedEnvs": {},
+      "value": {
+        "events": {
+          "enabled": true,
+          "sink": "mongo",
+          "mongo": {
+            "db": "gateway",
+            "collection": "call_events"
+          },
+          "queueSize": 1000
         }
       }
     },

@@ -202,6 +202,7 @@ func (m *MCP) handle(r *http.Request, soajsCtx *SOAJSContext, config *mcpConfig,
 		if !ok {
 			return rpcError(id, rpcInvalidParams, "Unknown tool: "+name)
 		}
+		soajsCtx.Marks.MCPTool = name
 		args, _ := params.get("arguments")
 		return rpcResult(id, m.callTool(r, soajsCtx, config, entry, args))
 	}

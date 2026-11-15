@@ -186,6 +186,7 @@ func Idempotency(reg registry.Registry, models map[string]IdempotencyModel, logg
 					return
 				}
 				if existing.Status == idempotencyCompleted && existing.Response != nil {
+					soajsCtx.Marks.Idempotency = "replay"
 					replayRecorded(w, existing.Response)
 					return
 				}

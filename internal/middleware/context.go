@@ -33,6 +33,8 @@ type SOAJSContext struct {
 	Idempotency *IdempotencyContext
 	// Cache is the cache entry the service's answer fills.
 	Cache *CacheContext
+	// Marks are what the request's call event records besides its identity and routing.
+	Marks EventMarks
 }
 
 // ControllerContext holds gateway-specific request data

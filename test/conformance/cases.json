@@ -1169,6 +1169,16 @@
     ]
   },
   {
+    "name": "events_on_unknown_key",
+    "about": "dashboard has call events on: a key refused at the key step answers as without events",
+    "env": "dashboard",
+    "method": "GET",
+    "path": "/conform/v1/public/hello",
+    "headers": {
+      "key": "nosuchkey"
+    }
+  },
+  {
     "name": "urac_public_no_token",
     "about": "dashboard: a public API with the console key needs no user",
     "env": "dashboard",

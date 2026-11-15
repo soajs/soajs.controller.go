@@ -274,6 +274,7 @@ func (m *requestMonitor) respond(code int) {
 		_ = WriteCode(m.w, code)
 		return
 	}
+	noteCode(m.w, code)
 	_, _ = m.w.Write(codeBody(code))
 }
 

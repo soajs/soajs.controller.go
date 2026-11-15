@@ -35,6 +35,8 @@ type Controller struct {
 	mongo *mongo.Client // the provision database, from the profile
 	// cacheStore is the mongo cache store, for /cache/invalidate
 	cacheStore *middleware.MongoCache
+	// events are the call events
+	events *middleware.CallEvents
 
 	clientsMu sync.Mutex
 	clients   map[string]*mongo.Client // one connection per cluster, by connection string
@@ -164,6 +166,8 @@ func (c *Controller) Setup(r *chi.Mux) error {
 	r.Use(middleware.Awareness(c.awareness))
 	r.Use(middleware.AwarenessEnv(c.awarenessEnv))
 	r.Use(middleware.MCPAuthorize(c.registry, c.provision)) // /soajs/mcp: 401 to authorize, the key of an agent's token
+	c.events = c.callEvents()
+	r.Use(c.events.Middleware()) // one call event per request from the key step on
 	r.Use(middleware.Key(c.provision, c.registry, c.cfg.Environment))
 	r.Use(middleware.KeyACL())
 	r.Use(middleware.GotoService(c.registry, c.awareness, middleware.NewMonitor(c.registry.Get, c.awareness, c.logger), c.provision,
@@ -226,6 +230,32 @@ func (c *Controller) ReloadProvision() error {
 // ReloadRegistry reloads the registry data
 func (c *Controller) ReloadRegistry() error {
 	return c.registry.Reload()
+}
+
+// callEvents are the call events of the gateway, written to a core database of the environment
+// (sink mongo) or the log.
+func (c *Controller) callEvents() *middleware.CallEvents {
+	return middleware.NewCallEvents(c.registry, func(name string) (*drv.Database, error) {
+		db, ok := c.registry.Get().CoreDB[name]
+		if !ok {
+			return nil, fmt.Errorf("no core database [%s]", name)
+		}
+		client, err := c.clientFor(db)
+		if err != nil {
+			return nil, err
+		}
+		return client.Database(), nil
+	}, middleware.GatewayService{Name: c.cfg.ServiceName, Version: c.cfg.ServiceVersion}, c.cfg.Environment, c.logger)
+}
+
+// CloseEvents writes the call events still queued and stops their worker.
+func (c *Controller) CloseEvents() {
+	if c.events == nil {
+		return
+	}
+	if em := c.events.Emitter(); em != nil {
+		em.Close()
+	}
 }
 
 // cacheModels are the response cache stores (mw/cache/model): memory, and mongo in the

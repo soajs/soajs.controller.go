@@ -21,6 +21,7 @@ type Server struct {
 	router      *chi.Mux
 	httpServer  *http.Server
 	maintServer *http.Server
+	ctrl        *Controller
 }
 
 // New creates a new server instance
@@ -38,6 +39,7 @@ func New(cfg *config.Config, logger *zap.Logger) *Server {
 func (s *Server) Run(ctx context.Context) error {
 	// Initialize controller
 	ctrl, err := NewController(s.cfg, s.logger)
+	s.ctrl = ctrl
 	if err != nil {
 		return fmt.Errorf("failed to initialize controller: %w", err)
 	}
@@ -137,6 +139,10 @@ func (s *Server) shutdown() error {
 	// Shutdown main server
 	if err := s.httpServer.Shutdown(ctx); err != nil {
 		s.logger.Error("HTTP server shutdown error", zap.Error(err))
+	}
+	// the requests are answered: write the call events still queued
+	if s.ctrl != nil {
+		s.ctrl.CloseEvents()
 	}
 
 	// Shutdown maintenance server
