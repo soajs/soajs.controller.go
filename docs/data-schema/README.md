@@ -43,6 +43,7 @@ The driver joins prefix and name with no separator (soajs.mongo/index.js:1509-15
 | oauth_token | oauth | access tokens | yes | oauth | [oauth_token.md](oauth_token.md) |
 | users, groups | urac | the user record and its groups | yes | urac; oauth (social login, lastLogin) | [urac.md](urac.md) |
 | throttling_monitor, throttling_error, idempotency_store, cache_store, cache_invalidation | gateway | throttling, idempotency, response cache | yes | the gateway | [gateway-stores.md](gateway-stores.md) |
+| call_events | the core database `gateway.events.mongo.db` names | call events | no (write only) | the gateway | [call_events.md](call_events.md) |
 
 Not used by the gateway:
 - `oauth_urac` and `daemon_grpconf`: Node.js only creates indexes on them.

@@ -167,6 +167,7 @@ func Cache(reg registry.Registry, models map[string]CacheModel, logger *zap.Logg
 			}
 			key := cacheKey{l1: soajsCtx.Tenant.ID, l2: l2}
 			if cached := model.Get(key); cached != nil && cached.Response != nil {
+				soajsCtx.Marks.Cache = "HIT"
 				w.Header().Set("X-Cache", "HIT")
 				w.Header().Set("X-Cache-Age", strconv.FormatInt(int64(time.Since(cached.CachedAt)/time.Second), 10))
 				replayRecorded(w, cached.Response)

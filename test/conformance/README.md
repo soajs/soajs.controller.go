@@ -8,6 +8,7 @@ The Go gateway must answer as the Node.js gateway (`soajs.controller`) does, byt
 | `golden/` | Node.js's answers: status, compared headers and body. |
 | `pending.json` | Cases the Go gateway does not pass yet, each with the pull request that ports it. It is empty: Go passes every case. |
 | `fixture/` | The data both gateways run on, in the shapes of the live `core_provision` data. Every value in it is a test value. |
+| | Call events (`gateway.events`) are off in dev, so its answers are those of a gateway without them, and on in dashboard (sink `mongo`, `conformance_gateway.call_events`), so the dashboard cases show the answers do not change with them. |
 | `cmd/fixture` | Loads the fixture. It writes only the `conformance_*` databases, and only on a local MongoDB. |
 | `cmd/mockservice` | The fixture's services: `conform` (24100, maintenance 25100), `other` (24200, maintenance 25200) and `open`, whose version needs no key (24400, maintenance 25400). They answer with the method, path, query and body they received and the `soajsinjectobj` the gateway sent; their maintenance port serves the MCP tools (`-tools soajs`, `-tools swagger`). |
 | `run.sh` | Loads the fixture, starts the mocks and the gateways (dev on 24000/25000, dashboard on 26000/27000), and runs the cases. |

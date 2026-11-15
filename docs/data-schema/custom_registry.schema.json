@@ -230,6 +230,76 @@
                   "services"
                 ]
               },
+              "events": {
+                "type": "object",
+                "properties": {
+                  "enabled": {
+                    "type": "boolean"
+                  },
+                  "sink": {
+                    "enum": [
+                      "mongo",
+                      "log"
+                    ]
+                  },
+                  "mongo": {
+                    "type": "object",
+                    "properties": {
+                      "db": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "collection": {
+                        "type": "string",
+                        "minLength": 1
+                      }
+                    },
+                    "additionalProperties": false,
+                    "required": [
+                      "db",
+                      "collection"
+                    ]
+                  },
+                  "queueSize": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "services": {
+                    "type": "object",
+                    "additionalProperties": {
+                      "type": "object",
+                      "properties": {
+                        "enabled": {
+                          "type": "boolean"
+                        }
+                      },
+                      "additionalProperties": false,
+                      "required": [
+                        "enabled"
+                      ]
+                    }
+                  }
+                },
+                "additionalProperties": false,
+                "required": [
+                  "enabled"
+                ],
+                "if": {
+                  "properties": {
+                    "enabled": {
+                      "const": true
+                    }
+                  },
+                  "required": [
+                    "enabled"
+                  ]
+                },
+                "then": {
+                  "required": [
+                    "sink"
+                  ]
+                }
+              },
               "lastSeen": {
                 "type": "object",
                 "properties": {

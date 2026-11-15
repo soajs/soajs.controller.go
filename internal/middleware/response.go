@@ -154,6 +154,7 @@ func WriteSuccess(w http.ResponseWriter, data interface{}) error {
 
 // WriteError writes an error SOAJS response
 func WriteError(w http.ResponseWriter, status int, code int, message string) error {
+	noteCode(w, code)
 	return WriteJSON(w, status, SOAJSResponse{
 		Result: false,
 		Errors: NewSOAJSError(code, message),
@@ -164,6 +165,7 @@ func WriteError(w http.ResponseWriter, status int, code int, message string) err
 // and status of the code, 500 when the code has no status. A code without a message is answered
 // as the bare object {"code":...,"status":...}.
 func WriteCode(w http.ResponseWriter, code int) error {
+	noteCode(w, code)
 	e := soajserr.Get(code)
 	status := e.Status
 	if status == 0 {
