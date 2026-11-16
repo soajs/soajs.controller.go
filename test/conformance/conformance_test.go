@@ -92,9 +92,6 @@ type Case struct {
 	// DropFields are keys removed, at any depth, from both bodies before a JSON compare: values
 	// a gateway deliberately leaves out.
 	DropFields []string `json:"dropFields,omitempty"`
-	// SortArrays sorts the arrays of strings of both bodies before a JSON compare: lists whose
-	// order follows a map in Go and the document in Node.js.
-	SortArrays bool `json:"sortArrays,omitempty"`
 }
 
 // Answer is what a gateway answered.
@@ -265,7 +262,11 @@ func compare(c Case, want, got Answer) string {
 	wantBody, gotBody := mask(want.Body, c.IgnoreFields), mask(got.Body, c.IgnoreFields)
 	// each gateway reports its own version on the maintenance port
 	wantBody, gotBody = serviceVersion.ReplaceAllString(wantBody, "${1}null"), serviceVersion.ReplaceAllString(gotBody, "${1}null")
-	if c.CompareJSON {
+	if aclRoute.MatchString(c.Path) {
+		if aclEqual(wantBody, gotBody) {
+			gotBody = wantBody
+		}
+	} else if c.CompareJSON {
 		var w, g interface{}
 		if json.Unmarshal([]byte(wantBody), &w) == nil && json.Unmarshal([]byte(gotBody), &g) == nil && reflect.DeepEqual(normalize(w, c), normalize(g, c)) {
 			gotBody = wantBody
@@ -283,41 +284,46 @@ func headerNames(c Case) []string {
 	return names
 }
 
-// drop removes the keys, at any depth.
-// normalize applies a case's dropFields and sortArrays to a JSON body.
+// normalize applies a case's dropFields to a JSON body.
 func normalize(v interface{}, c Case) interface{} {
-	v = drop(v, c.DropFields)
-	if c.SortArrays {
-		v = sortStrings(v)
+	return drop(v, c.DropFields)
+}
+
+// aclRoute is the gateway's /soajs/acl route, with or without a version segment.
+var aclRoute = regexp.MustCompile(`^/soajs(/v[0-9]+)?/acl(/|\?|$)`)
+
+// aclEqual compares two /soajs/acl answers. Go answers the same content as Node.js with its
+// object keys and finalACL route lists sorted (docs/differences.md); Node.js keeps the stored
+// order. Key order is ignored and each finalACL.<service>.<method> list is compared as a
+// multiset; every other value, arrays included, must be equal.
+func aclEqual(want, got string) bool {
+	var w, g interface{}
+	if json.Unmarshal([]byte(want), &w) != nil || json.Unmarshal([]byte(got), &g) != nil {
+		return false
+	}
+	return reflect.DeepEqual(sortFinalACL(w), sortFinalACL(g))
+}
+
+// sortFinalACL sorts the route lists under finalACL.<service>.<method>.
+func sortFinalACL(v interface{}) interface{} {
+	body, _ := v.(map[string]interface{})
+	final, _ := body["finalACL"].(map[string]interface{})
+	for _, svc := range final {
+		methods, _ := svc.(map[string]interface{})
+		for _, routes := range methods {
+			list, ok := routes.([]interface{})
+			if !ok {
+				continue
+			}
+			sort.SliceStable(list, func(i, j int) bool {
+				return fmt.Sprint(list[i]) < fmt.Sprint(list[j])
+			})
+		}
 	}
 	return v
 }
 
-// sortStrings sorts, at any depth, the arrays whose items are all strings.
-func sortStrings(v interface{}) interface{} {
-	switch t := v.(type) {
-	case map[string]interface{}:
-		for k, e := range t {
-			t[k] = sortStrings(e)
-		}
-	case []interface{}:
-		strs := make([]string, 0, len(t))
-		for i, e := range t {
-			t[i] = sortStrings(e)
-			if s, ok := e.(string); ok {
-				strs = append(strs, s)
-			}
-		}
-		if len(strs) == len(t) {
-			sort.Strings(strs)
-			for i, s := range strs {
-				t[i] = s
-			}
-		}
-	}
-	return v
-}
-
+// drop removes the keys, at any depth.
 func drop(v interface{}, keys []string) interface{} {
 	switch t := v.(type) {
 	case map[string]interface{}:
@@ -448,4 +454,40 @@ func callEvents(t *testing.T, uri string) []json.RawMessage {
 		raw[i] = json.RawMessage(s)
 	}
 	return raw
+}
+
+// The /soajs/acl compare ignores key order and finalACL route order, nothing else.
+func TestACLCompare(t *testing.T) {
+	node := `{"acl":{"svc":{"1":{"get":{"apis":{"/b":{"access":true},"/a":{"access":false}}},"post":{}}}},` +
+		`"finalACL":{"svc":{"version":"1","get":["/b","/a"],"post":["/c"]}},"packages":["P2","P1"]}`
+	tests := []struct {
+		name, got string
+		equal     bool
+	}{
+		{"same bytes", node, true},
+		{"keys and routes sorted", `{"acl":{"svc":{"1":{"get":{"apis":{"/a":{"access":false},"/b":{"access":true}}},"post":{}}}},` +
+			`"finalACL":{"svc":{"get":["/a","/b"],"post":["/c"],"version":"1"}},"packages":["P2","P1"]}`, true},
+		{"a route missing", `{"acl":{"svc":{"1":{"get":{"apis":{"/b":{"access":true},"/a":{"access":false}}},"post":{}}}},` +
+			`"finalACL":{"svc":{"version":"1","get":["/b"],"post":["/c"]}},"packages":["P2","P1"]}`, false},
+		{"a route twice", `{"acl":{"svc":{"1":{"get":{"apis":{"/b":{"access":true},"/a":{"access":false}}},"post":{}}}},` +
+			`"finalACL":{"svc":{"version":"1","get":["/b","/a","/a"],"post":["/c"]}},"packages":["P2","P1"]}`, false},
+		{"a route under another method", `{"acl":{"svc":{"1":{"get":{"apis":{"/b":{"access":true},"/a":{"access":false}}},"post":{}}}},` +
+			`"finalACL":{"svc":{"version":"1","get":["/b"],"post":["/c","/a"]}},"packages":["P2","P1"]}`, false},
+		{"an access changed", `{"acl":{"svc":{"1":{"get":{"apis":{"/b":{"access":true},"/a":{"access":true}}},"post":{}}}},` +
+			`"finalACL":{"svc":{"version":"1","get":["/b","/a"],"post":["/c"]}},"packages":["P2","P1"]}`, false},
+		{"other arrays keep their order", `{"acl":{"svc":{"1":{"get":{"apis":{"/b":{"access":true},"/a":{"access":false}}},"post":{}}}},` +
+			`"finalACL":{"svc":{"version":"1","get":["/b","/a"],"post":["/c"]}},"packages":["P1","P2"]}`, false},
+		{"not JSON", `{"acl":`, false},
+	}
+	for _, tt := range tests {
+		if got := aclEqual(node, tt.got); got != tt.equal {
+			t.Errorf("%s: aclEqual = %v", tt.name, got)
+		}
+	}
+	for path, acl := range map[string]bool{"/soajs/acl": true, "/soajs/v1/acl": true, "/soajs/acl/more": true,
+		"/soajs/acl?x=1": true, "/soajs/aclx": false, "/conform/v1/soajs/acl": false, "/soajs/proxy": false} {
+		if aclRoute.MatchString(path) != acl {
+			t.Errorf("aclRoute %s: want %v", path, acl)
+		}
+	}
 }

@@ -43,6 +43,6 @@ test/conformance/run.sh node    # check the recording is stable
 - `ignoreFields`: JSON fields whose value changes on every call, such as `ts`. They are compared as `null`.
 - `compareJSON`: compare the bodies as JSON values, for answers whose key order follows a map.
 - `dropFields`: keys removed, at any depth, before a JSON compare.
-- `sortArrays`: arrays of strings sorted before a JSON compare.
+- `/soajs/acl` cases (any version or sub-path) need no flag: their bodies are compared as JSON with key order ignored and each `finalACL.<service>.<method>` route list compared in any order, because Go sorts both and Node.js keeps the stored order. Every other value must be equal.
 
 After recording, keep only the golden files whose change is real: answers that carry a timestamp change on every recording.

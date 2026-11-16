@@ -403,8 +403,7 @@
     "path": "/soajs/acl",
     "headers": {
       "key": "$KEY_DEFAULT"
-    },
-    "compareJSON": true
+    }
   },
   {
     "name": "soajs_acl_key_token",
@@ -414,9 +413,7 @@
     "headers": {
       "key": "$KEY_DEFAULT",
       "access_token": "$TOKEN_VALID"
-    },
-    "compareJSON": true,
-    "sortArrays": true
+    }
   },
   {
     "name": "soajs_acl_versioned",
@@ -426,9 +423,7 @@
     "headers": {
       "key": "$KEY_DEFAULT",
       "access_token": "$TOKEN_VALID"
-    },
-    "compareJSON": true,
-    "sortArrays": true
+    }
   },
   {
     "name": "soajs_acl_sub_path",
@@ -438,9 +433,7 @@
     "headers": {
       "key": "$KEY_DEFAULT",
       "access_token": "$TOKEN_VALID"
-    },
-    "compareJSON": true,
-    "sortArrays": true
+    }
   },
   {
     "name": "soajs_proxy_bad_key",

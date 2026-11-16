@@ -43,7 +43,7 @@ Go reads only the latest data schema ([data-schema](data-schema/README.md)). A d
 
 ## Gateway routes
 
-- **`/soajs/acl`:** the finalACL API lists are sorted.
+- **`/soajs/acl`:** the same content as Node.js, with object keys and the finalACL route lists sorted; Node.js keeps the stored order.
 - **`/soajs/proxy`:** an invalid `%` escape in `proxyRoute` answers 139.
 - **`/soajs/mcp`:**
   - a tool call that fails on the network returns Go's error text;
