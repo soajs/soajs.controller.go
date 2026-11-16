@@ -337,6 +337,16 @@
     }
   },
   {
+    "name": "key_empty_device_geo",
+    "about": "an extKey whose device and geo are {}: no restriction, as null",
+    "method": "GET",
+    "path": "/conform/v1/public/hello",
+    "headers": {
+      "key": "$KEY_EMPTY_RULES",
+      "User-Agent": "curl/8.4.0"
+    }
+  },
+  {
     "name": "public_head",
     "about": "from integration http_methods HEAD",
     "method": "HEAD",

@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"go.mongodb.org/mongo-driver/bson"
 	"go.uber.org/zap"
 
 	"github.com/soajs/soajs.controller.go/pkg/types"
@@ -76,6 +77,42 @@ func TestKeyData(t *testing.T) {
 	}
 	if p2.oauths["6a0e00000000000000000001"].Disabled != 0 || p2.codes["6a0e00000000000000000001"] != "CONF" {
 		t.Error("tenant oauth and code are cached")
+	}
+}
+
+// A tenant whose extKey has device and geo as {} decodes through the data schema and its key
+// resolves; {} is no restriction, as null.
+func TestKeyDataEmptyRestrictions(t *testing.T) {
+	doc := `{"_id":{"$oid":"6a0e00000000000000000003"},"code":"CNFE","name":"e","type":"product","console":false,"profile":{},
+		"oauth":{"secret":"s","type":2,"disabled":0,"loginMode":"urac"},
+		"applications":[{"appId":{"$oid":"6a0e000000000000000000a7"},"product":"CONF","package":"CONF_DEFAULT","_TTL":60000,
+		"keys":[{"key":"3d1e2f3a4b5c6d7e8f90a1b2c3d4e5f6","config":{"dev":{"conform":{}}},
+		"extKeys":[{"extKey":"5bbf311a","env":"DEV","device":{},"geo":{},"expDate":null}]}]}]}`
+	var d bson.D
+	if err := bson.UnmarshalExtJSON([]byte(doc), false, &d); err != nil {
+		t.Fatal(err)
+	}
+	raw, err := bson.Marshal(d)
+	if err != nil {
+		t.Fatal(err)
+	}
+	schema, err := schemaFor("tenants")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var tenant tenantDoc
+	if problems, err := schema.Decode(raw, &tenant); err != nil || problems != nil {
+		t.Fatalf("device and geo {} must decode: %v %v", problems, err)
+	}
+	p := newTestProvision()
+	now := time.Now().UnixMilli()
+	p.ingestTenant(&tenant, now)
+	k := keyData(p.keys["3d1e2f3a4b5c6d7e8f90a1b2c3d4e5f6"], "5bbf311a", now)
+	if k == nil {
+		t.Fatal("the extKey resolves")
+	}
+	if len(k.Device) != 0 || len(k.Geo) != 0 {
+		t.Errorf("device and geo carry no rules: %v %v", k.Device, k.Geo)
 	}
 }
 
