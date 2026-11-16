@@ -1,0 +1,7 @@
+{
+  "status": 200,
+  "headers": {
+    "Content-Type": "application/json"
+  },
+  "body": "{\"data\":{\"inject\":{\"application\":{\"appId\":\"6a0e000000000000000000a7\",\"package\":\"CONF_DEFAULT\",\"product\":\"CONF\"},\"device\":\"curl/8.4.0\",\"geo\":{\"ip\":\"127.0.0.1\"},\"key\":{\"config\":{\"conform\":{}},\"eKey\":\"5bbf311a30f4acaec52b7472be854cc9866dc9aaa2a3f7e1dd160e28420fb37dd51951b7363350bc0eeaa974cfdd27cfb4e908a20c4d343dffe53def7de35480a4355ba0bb131925b79f4f3d97453340e997da812c0eb3b4c3dd31cc7b88ff64\",\"iKey\":\"3d1e2f3a4b5c6d7e8f90a1b2c3d4e5f6\"},\"package\":{},\"tenant\":{\"code\":\"CNFE\",\"id\":\"6a0e00000000000000000003\",\"locked\":false,\"name\":\"Conformance empty restrictions\",\"profile\":{},\"type\":\"product\"}},\"method\":\"GET\",\"path\":\"/public/hello\",\"query\":\"\"},\"result\":true}"
+}

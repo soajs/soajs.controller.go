@@ -277,8 +277,7 @@
                               "allow": {},
                               "deny": {}
                             },
-                            "additionalProperties": false,
-                            "minProperties": 1
+                            "additionalProperties": false
                           }
                         ]
                       },
@@ -293,8 +292,7 @@
                               "allow": {},
                               "deny": {}
                             },
-                            "additionalProperties": false,
-                            "minProperties": 1
+                            "additionalProperties": false
                           }
                         ]
                       },

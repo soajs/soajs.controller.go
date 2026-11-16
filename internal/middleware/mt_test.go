@@ -174,6 +174,10 @@ func TestGeoAllowed(t *testing.T) {
 	if !geoAllowed(nil, "1.2.3.4") || !geoAllowed(geo, "10.1.2.3") || geoAllowed(geo, "10.9.9.9") || geoAllowed(geo, "11.0.0.1") {
 		t.Error("geo deny, then allow")
 	}
+	empty := map[string]interface{}{}
+	if !geoAllowed(empty, "1.2.3.4") || deviceCheck(empty, "curl/8.4.0") != 0 {
+		t.Error("an empty geo or device is no restriction, as null")
+	}
 }
 
 // =============================================================================

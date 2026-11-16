@@ -89,6 +89,34 @@ func TestOldShapesRefused(t *testing.T) {
 	}
 }
 
+// An extKey's device and geo may be null, {} or allow/deny lists; {} is what soajs.multitenant
+// writes for no restriction.
+func TestTenantExtKeyRestrictions(t *testing.T) {
+	c := load(t)["tenants"]
+	base := `{"_id":{"$oid":"6a0e00000000000000000003"},"code":"T","name":"t","type":"product","console":false,"profile":{},
+		"oauth":{"secret":"s","type":2,"disabled":0,"loginMode":"urac"},
+		"applications":[{"appId":{"$oid":"6a0e000000000000000000a7"},"product":"P","package":"P_D","_TTL":60000,
+		"keys":[{"key":"3d1e2f3a4b5c6d7e8f90a1b2c3d4e5f6","config":{},"extKeys":[{"extKey":"5bbf311a","env":"DEV","expDate":null,%s}]}]}]}`
+	for _, ok := range []string{
+		`"device":null,"geo":null`,
+		`"device":{},"geo":{}`,
+		`"device":{"allow":[{"family":"Chrome"}]},"geo":{"deny":["10.0.0.0/8"]}`,
+	} {
+		if p := valid(t, c, fmtDoc(base, ok)); p != nil {
+			t.Errorf("%s: %v", ok, p)
+		}
+	}
+	for _, bad := range []string{
+		`"device":{"block":[]},"geo":null`,
+		`"device":null,"geo":{"block":[]}`,
+		`"device":[],"geo":null`,
+	} {
+		if p := valid(t, c, fmtDoc(base, bad)); p == nil {
+			t.Errorf("%s must not validate", bad)
+		}
+	}
+}
+
 // The conformance fixture, when present, follows the schema.
 func TestConformanceFixture(t *testing.T) {
 	dir := filepath.Join(DefaultDir(), "..", "..", "test", "conformance", "fixture")
