@@ -26,10 +26,10 @@ The user record and its groups. When the token's `loginMode` is `urac` and `getU
 | `status` | string | yes | `active`, `inactive`, `pending`, `pendingNew`, `pendingJoin` | Only `active` passes: pending → 405, inactive → 406. The gateway answers 146 for both. |
 | `tenant.id`, `tenant.code` | string | yes | | The user's home tenant. |
 | `tenant.pin` | object | | | PIN state. |
-| `groups` | string[] | yes | group codes | |
+| `groups` | string[] | | group codes | Without readable groups, the key's package ACL applies ([imperfect-data](imperfect-data.md)). |
 | `config.allowedTenants[]` | object | | `tenant{id, code, …}`, `groups`, other fields | Invitations: under an invited tenant, the user takes its `groups`. Other fields, such as Connect's `lastVisit`, `joinedAt` and `via`, are not used by the gateway. |
 | `config.keys.<iKey>.config` | object | | | Merged over the key's configuration for this user. |
-| `profile` | object | yes | free-form | Injected when the service version has `urac_Profile`. |
+| `profile` | object | | free-form | Injected when the service version has `urac_Profile`. |
 | `memberships[]` | object | | `product`, `membership` | Resolved through `custom_registry` `gateway` `membership`. |
 | `ts`, `lastLogin`, `lastNetwork`, `locked`, `ln`, `socialId` | any | | | Not used by the gateway. |
 
@@ -45,10 +45,12 @@ A user document, and every object in it, accepts fields this table does not list
 | `code` | string | yes | | Group code. |
 | `name`, `description`, `locked`, `ts` | any | | | Not used by the gateway. |
 | `tenant.id`, `tenant.code` | string | yes | | The group's tenant. |
-| `config.allowedPackages.<PRODUCT>` | string[] | yes (map may be empty) | package codes | Together across the user's groups: the packages whose ACL applies to the user under that product. |
+| `config.allowedPackages.<PRODUCT>` | string[] | yes (map may be empty) | package codes; a string is read as Node.js reads it ([imperfect-data](imperfect-data.md)) | Together across the user's groups: the packages whose ACL applies to the user under that product. |
 | `config.allowedEnvironments.<ENV>` | object | | | Not used by the gateway. |
 
 A group document, and every object in it, accepts fields this table does not list. Only the fields the gateway reads are checked.
+
+How a user or group that does not match is read: [imperfect-data.md](imperfect-data.md).
 
 ## Not part of this spec
 

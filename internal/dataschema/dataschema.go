@@ -42,6 +42,8 @@ type Collection struct {
 	Database string
 	File     string
 	schema   *jsonschema.Schema
+	// raw is the schema file as JSON values, to read what a failing keyword allows.
+	raw interface{}
 }
 
 // meta is the x-soajs block every schema file carries.
@@ -118,11 +120,16 @@ func LoadFS(fsys fs.FS) ([]*Collection, error) {
 		if err != nil {
 			return nil, fmt.Errorf("%s: %w", filepath.Base(f), err)
 		}
+		var rawSchema interface{}
+		if err := json.Unmarshal(raw, &rawSchema); err != nil {
+			return nil, fmt.Errorf("%s: %w", filepath.Base(f), err)
+		}
 		collections = append(collections, &Collection{
 			Name:     m.XSoajs.Collection,
 			Database: m.XSoajs.Database,
 			File:     filepath.Base(f),
 			schema:   s,
+			raw:      rawSchema,
 		})
 	}
 	return collections, nil
@@ -152,29 +159,6 @@ func (c *Collection) ValidateJSON(doc []byte) ([]Problem, error) {
 		return nil, err
 	}
 	return c.validate(v)
-}
-
-// Decode validates a raw BSON document and, when it matches, decodes it into out through JSON:
-// an ObjectId becomes its hex string and a date the form JSON.stringify writes. A document that
-// does not match returns its problems and leaves out untouched.
-func (c *Collection) Decode(raw bson.Raw, out interface{}) ([]Problem, error) {
-	ext, err := bson.MarshalExtJSON(raw, false, false)
-	if err != nil {
-		return nil, err
-	}
-	var v interface{}
-	if err := json.Unmarshal(ext, &v); err != nil {
-		return nil, err
-	}
-	problems, err := c.validate(v)
-	if err != nil || problems != nil {
-		return problems, err
-	}
-	plain, err := json.Marshal(Plain(v))
-	if err != nil {
-		return nil, err
-	}
-	return nil, json.Unmarshal(plain, out)
 }
 
 // Plain turns relaxed extended JSON into plain JSON values: {"$oid": h} becomes h and

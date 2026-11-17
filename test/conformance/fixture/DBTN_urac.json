@@ -166,6 +166,91 @@
       "config": {},
       "profile": {},
       "ts": 1794666000000
+    },
+    {
+      "_id": {
+        "$oid": "6a0e0000000000000000009c"
+      },
+      "username": "missing_package",
+      "email": "missing_package@conformance.invalid",
+      "firstName": "missing_package",
+      "lastName": "Owner",
+      "password": "$2a$12$conformanceconformanceconformanceconformanceconformance",
+      "status": "active",
+      "tenant": {
+        "id": "6a0e00000000000000000002",
+        "code": "DBTN"
+      },
+      "groups": [
+        "missingpkg"
+      ],
+      "config": {},
+      "profile": {},
+      "ts": 1794666000000
+    },
+    {
+      "_id": {
+        "$oid": "6a0e0000000000000000009d"
+      },
+      "username": "mixed_packages",
+      "email": "mixed_packages@conformance.invalid",
+      "firstName": "mixed_packages",
+      "lastName": "Owner",
+      "password": "$2a$12$conformanceconformanceconformanceconformanceconformance",
+      "status": "active",
+      "tenant": {
+        "id": "6a0e00000000000000000002",
+        "code": "DBTN"
+      },
+      "groups": [
+        "mixedpkg"
+      ],
+      "config": {},
+      "profile": {},
+      "ts": 1794666000000
+    },
+    {
+      "_id": {
+        "$oid": "6a0e00000000000000000096"
+      },
+      "username": "broken_role",
+      "email": "broken_role@conformance.invalid",
+      "firstName": "broken_role",
+      "lastName": "Owner",
+      "password": "$2a$12$conformanceconformanceconformanceconformanceconformance",
+      "status": "active",
+      "tenant": {
+        "id": "6a0e00000000000000000002",
+        "code": "DBTN"
+      },
+      "groups": [
+        "brokenrole"
+      ],
+      "config": {},
+      "profile": {},
+      "ts": 1794666000000
+    },
+    {
+      "_id": {
+        "$oid": "6a0e00000000000000000097"
+      },
+      "username": "broken_and_good_role",
+      "email": "broken_and_good_role@conformance.invalid",
+      "firstName": "broken_and_good_role",
+      "lastName": "Owner",
+      "password": "$2a$12$conformanceconformanceconformanceconformanceconformance",
+      "status": "active",
+      "tenant": {
+        "id": "6a0e00000000000000000002",
+        "code": "DBTN"
+      },
+      "groups": [
+        "brokenrole",
+        "admin"
+      ],
+      "config": {},
+      "profile": {},
+      "ts": 1794666000000
     }
   ],
   "groups": [
@@ -204,6 +289,62 @@
           "DSBRD": [
             "DSBRD_ADMIN"
           ]
+        }
+      }
+    },
+    {
+      "_id": {
+        "$oid": "6a0e0000000000000000009a"
+      },
+      "code": "missingpkg",
+      "name": "missingpkg",
+      "description": "Invited admins",
+      "tenant": {
+        "id": "6a0e00000000000000000002",
+        "code": "DBTN"
+      },
+      "config": {
+        "allowedPackages": {
+          "DSBRD": [
+            "DSBRD_GHOST"
+          ]
+        }
+      }
+    },
+    {
+      "_id": {
+        "$oid": "6a0e0000000000000000009b"
+      },
+      "code": "mixedpkg",
+      "name": "mixedpkg",
+      "description": "Invited admins",
+      "tenant": {
+        "id": "6a0e00000000000000000002",
+        "code": "DBTN"
+      },
+      "config": {
+        "allowedPackages": {
+          "DSBRD": [
+            "DSBRD_GHOST",
+            "DSBRD_ADMIN"
+          ]
+        }
+      }
+    },
+    {
+      "_id": {
+        "$oid": "6a0e00000000000000000095"
+      },
+      "code": "brokenrole",
+      "name": "brokenrole",
+      "description": "Invited admins",
+      "tenant": {
+        "id": "6a0e00000000000000000002",
+        "code": "DBTN"
+      },
+      "config": {
+        "allowedPackages": {
+          "DSBRD": "DSBRD_ADMIN"
         }
       }
     }

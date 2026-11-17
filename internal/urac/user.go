@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 
+	"github.com/soajs/soajs.controller.go/internal/dataschema"
 	"github.com/soajs/soajs.controller.go/internal/provision"
 	"github.com/soajs/soajs.controller.go/pkg/types"
 	"go.uber.org/zap"
@@ -163,9 +164,24 @@ func (u *User) resolveACL() {
 		return
 	}
 	var packages []*types.Package
+	var missing []dataschema.Finding
+	defer func() { u.reportMissing(missing) }()
+	notFound := func(code string, err error) bool {
+		var ce *provision.CodeError
+		if !errors.As(err, &ce) || ce.Code != 201 {
+			return false
+		}
+		missing = append(missing, dataschema.Finding{Collection: "users", ID: u.id,
+			Path:   dataschema.Pointer([]string{"groupsConfig", "allowedPackages", u.req.Product}),
+			Rule:   "package " + code + " does not exist (soajs.provision getPackagesData)",
+			Action: dataschema.DataProblem})
+		return true
+	}
 	if len(codes) == 1 {
 		p, err := u.req.Packages(codes[0])
 		if err != nil {
+			// as Node.js: no user ACL, so the key's package ACL applies
+			notFound(codes[0], err)
 			return
 		}
 		packages = append(packages, p)
@@ -173,8 +189,7 @@ func (u *User) resolveACL() {
 		for _, c := range codes {
 			p, err := u.req.Packages(c)
 			if err != nil {
-				var ce *provision.CodeError
-				if errors.As(err, &ce) && ce.Code == 201 {
+				if notFound(c, err) {
 					u.req.Logger.Error("unable to load all packages from provision: cannot find package", zap.String("package", c))
 					continue
 				}
@@ -183,7 +198,56 @@ func (u *User) resolveACL() {
 			packages = append(packages, p)
 		}
 	}
-	u.acl = MergeACL(packages)
+	env := ""
+	if u.req.Registry != nil {
+		env = u.req.Registry.Environment
+	}
+	u.acl = applyDamage(MergeACL(packages), packages, env)
+}
+
+// reportMissing reports, on /schemaProblems, the packages the user's groups name that do not exist.
+func (u *User) reportMissing(missing []dataschema.Finding) {
+	if u.id == "" {
+		return
+	}
+	dataschema.Problems.ReportData(u.req.Logger, "users", u.id, missing)
+}
+
+// applyDamage refuses what the gateway left out of the user's packages because it could not read
+// it (docs/data-schema/imperfect-data.md): never "missing", which would give the key's package
+// ACL instead. A package, or its ACL for the environment, that could not be read refuses
+// everything; a service left out of one package is removed from the merged ACL, even when another
+// package has it, so a lost apisPermission "restricted" cannot widen it.
+func applyDamage(acl *ACL, packages []*types.Package, env string) *ACL {
+	for _, p := range packages {
+		if p != nil && p.Damage.Refuses(env) {
+			return &ACL{ACL: map[string]interface{}{}, ACLAllEnv: map[string]interface{}{}}
+		}
+	}
+	if acl == nil {
+		return nil
+	}
+	for _, p := range packages {
+		if p == nil || p.Damage == nil {
+			continue
+		}
+		for e := range p.Damage.Envs {
+			if acl.ACLAllEnv != nil {
+				acl.ACLAllEnv[e] = map[string]interface{}{}
+			}
+		}
+		for e, services := range p.Damage.Services {
+			for svc := range services {
+				if e == env && acl.ACL != nil {
+					delete(acl.ACL, svc)
+				}
+				if byEnv, ok := acl.ACLAllEnv[e].(map[string]interface{}); ok {
+					delete(byEnv, svc)
+				}
+			}
+		}
+	}
+	return acl
 }
 
 func lastSeenNetwork(reg *types.RegistryData) string {

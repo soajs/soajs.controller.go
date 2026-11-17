@@ -30,7 +30,9 @@ func CORS(reg registry.Registry) Middleware {
 			}
 
 			h := w.Header()
-			h.Set("Access-Control-Allow-Origin", origin)
+			if !cors.OriginRefused {
+				h.Set("Access-Control-Allow-Origin", origin)
+			}
 			h.Set("Access-Control-Allow-Credentials", credentials)
 			if r.Method == http.MethodOptions {
 				h.Set("Access-Control-Allow-Methods", methods)

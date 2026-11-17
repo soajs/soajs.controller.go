@@ -16,6 +16,94 @@
       "id": "6a0e00000000000000000002"
     },
     "user": {
+      "id": "6a0e00000000000000000096",
+      "username": "broken_role"
+    },
+    "version": "1"
+  },
+  {
+    "api": "/private/admin",
+    "appId": "6a0e000000000000000000a6",
+    "env": "dashboard",
+    "ip": "127.0.0.1",
+    "method": "GET",
+    "package": "DSBRD_DEFAULT",
+    "product": "DSBRD",
+    "service": "conform",
+    "status": {
+      "$numberInt": "200"
+    },
+    "tenant": {
+      "code": "DBTN",
+      "id": "6a0e00000000000000000002"
+    },
+    "user": {
+      "id": "6a0e00000000000000000097",
+      "username": "broken_and_good_role"
+    },
+    "version": "1"
+  },
+  {
+    "api": "/private/admin",
+    "appId": "6a0e000000000000000000a6",
+    "env": "dashboard",
+    "ip": "127.0.0.1",
+    "method": "GET",
+    "package": "DSBRD_DEFAULT",
+    "product": "DSBRD",
+    "service": "conform",
+    "status": {
+      "$numberInt": "200"
+    },
+    "tenant": {
+      "code": "DBTN",
+      "id": "6a0e00000000000000000002"
+    },
+    "user": {
+      "id": "6a0e0000000000000000009c",
+      "username": "missing_package"
+    },
+    "version": "1"
+  },
+  {
+    "api": "/private/admin",
+    "appId": "6a0e000000000000000000a6",
+    "env": "dashboard",
+    "ip": "127.0.0.1",
+    "method": "GET",
+    "package": "DSBRD_DEFAULT",
+    "product": "DSBRD",
+    "service": "conform",
+    "status": {
+      "$numberInt": "200"
+    },
+    "tenant": {
+      "code": "DBTN",
+      "id": "6a0e00000000000000000002"
+    },
+    "user": {
+      "id": "6a0e0000000000000000009d",
+      "username": "mixed_packages"
+    },
+    "version": "1"
+  },
+  {
+    "api": "/private/admin",
+    "appId": "6a0e000000000000000000a6",
+    "env": "dashboard",
+    "ip": "127.0.0.1",
+    "method": "GET",
+    "package": "DSBRD_DEFAULT",
+    "product": "DSBRD",
+    "service": "conform",
+    "status": {
+      "$numberInt": "200"
+    },
+    "tenant": {
+      "code": "DBTN",
+      "id": "6a0e00000000000000000002"
+    },
+    "user": {
       "id": "6a0e000000000000000000b5",
       "username": "invited_admin"
     },

@@ -66,6 +66,8 @@ One document per environment. It holds the gateway's registry: its ports, oauth,
 
 `services.config` is passed on to services through `/getRegistry`, without `cors` and `oauth`.
 
+How an environment that does not match is read, field by field: [imperfect-data.md](imperfect-data.md).
+
 ## Not part of this spec
 
 These are Node.js compatibility shapes, refused by the schema:

@@ -2,6 +2,7 @@ package registry
 
 import (
 	"fmt"
+	"github.com/soajs/soajs.controller.go/internal/dataschema"
 	"strings"
 
 	"github.com/soajs/soajs.controller.go/internal/dbconfig"
@@ -143,6 +144,13 @@ func addService(services map[string]*types.ServiceConfig, item *marketItem) {
 	if item.Name == gatewayName {
 		return
 	}
+	// as Node.js: group || "service", requestTimeout || 30 (modules/registry/index.js:187-190)
+	if item.Configuration.Group == "" {
+		item.Configuration.Group = "service"
+	}
+	if item.Configuration.RequestTimeout == 0 {
+		item.Configuration.RequestTimeout = 30
+	}
 	svc := &types.ServiceConfig{
 		Group:                 item.Configuration.Group,
 		Port:                  item.Configuration.Port,
@@ -243,7 +251,7 @@ func available(doc map[string]interface{}, envUpper string) bool {
 		return false
 	}
 	shared, _ := doc["sharedEnvs"].(map[string]interface{})
-	return shared[envUpper] == true
+	return dataschema.Truthy(shared[envUpper])
 }
 
 func contains(list []string, s string) bool {

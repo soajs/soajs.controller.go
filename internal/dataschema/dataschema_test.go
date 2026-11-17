@@ -148,12 +148,23 @@ func TestUracUnknownFields(t *testing.T) {
 	if p := valid(t, byName["groups"], fmtDoc(group, `"config":{"allowedPackages":{"DSBRD":["DSBRD_DEFAULT"]},"other":1},"chat":true`)); p != nil {
 		t.Errorf("groups with extra fields: %v", p)
 	}
-	if p := valid(t, byName["groups"], fmtDoc(group, `"config":{"allowedPackages":{"DSBRD":"DSBRD_DEFAULT"}}`)); p == nil {
-		t.Error("allowedPackages must stay a map of lists")
+	if p := valid(t, byName["groups"], fmtDoc(group, `"config":{"allowedPackages":{"DSBRD":5}}`)); p == nil {
+		t.Error("allowedPackages must stay a map of lists or strings")
 	}
 }
 
-// The conformance fixture, when present, follows the schema.
+// brokenFixture are the conformance fixture's documents that do not match the schema on purpose,
+// with the policy that reads them (docs/data-schema/imperfect-data.md).
+var brokenFixture = map[string]Policy{
+	"tenants/6a0e00000000000000000004":         Tenants,        // CNFB: an extKey with device "chrome" next to a good one
+	"products/6a0e00000000000000000098":        Products,       // CNFP: an API rule without access, a version without methods
+	"marketplace/6a0e000000000000000000b4":     Marketplace,    // oauth: interConnect null
+	"custom_registry/6a0e000000000000000000d4": CustomRegistry, // dashboard gateway: gotoService.monitor "on" next to events
+	"groups/6a0e00000000000000000095":          Groups,         // brokenrole: allowedPackages.DSBRD a string
+}
+
+// The conformance fixture, when present, follows the schema, except the documents broken on purpose,
+// which are read through their policy with findings.
 func TestConformanceFixture(t *testing.T) {
 	dir := filepath.Join(DefaultDir(), "..", "..", "test", "conformance", "fixture")
 	files, _ := filepath.Glob(filepath.Join(dir, "*.json"))
@@ -180,6 +191,14 @@ func TestConformanceFixture(t *testing.T) {
 				raw, err := bson.Marshal(doc)
 				if err != nil {
 					t.Fatal(err)
+				}
+				if policy := brokenFixture[coll.Key+"/"+DocumentID(raw)]; policy != nil {
+					var out map[string]interface{}
+					res := c.Read(raw, policy, &out)
+					if !res.OK || len(res.Findings) == 0 {
+						t.Errorf("%s %s[%d] is broken on purpose and read: %+v", filepath.Base(f), coll.Key, i, res)
+					}
+					continue
 				}
 				problems, err := c.ValidateBSON(raw)
 				if err != nil {

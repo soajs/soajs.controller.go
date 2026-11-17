@@ -91,22 +91,15 @@
     "oauth": {
       "type": "object",
       "properties": {
-        "secret": {
-          "type": "string",
-          "minLength": 1
-        },
-        "type": {
-          "const": 2
-        },
+        "secret": {},
+        "type": {},
         "disabled": {
           "enum": [
             0,
             1
           ]
         },
-        "loginMode": {
-          "type": "string"
-        },
+        "loginMode": {},
         "grants": {},
         "redirectURI": {},
         "pin": {
@@ -125,12 +118,7 @@
           }
         }
       },
-      "additionalProperties": false,
-      "required": [
-        "secret",
-        "type",
-        "disabled"
-      ]
+      "additionalProperties": false
     },
     "applications": {
       "type": "array",
@@ -309,10 +297,7 @@
                     "additionalProperties": false,
                     "required": [
                       "extKey",
-                      "env",
-                      "device",
-                      "geo",
-                      "expDate"
+                      "env"
                     ]
                   }
                 }
@@ -341,29 +326,6 @@
   "required": [
     "_id",
     "code",
-    "name",
-    "type",
-    "console",
-    "oauth",
-    "applications"
-  ],
-  "if": {
-    "properties": {
-      "type": {
-        "const": "client"
-      }
-    }
-  },
-  "then": {
-    "required": [
-      "tenant"
-    ]
-  },
-  "else": {
-    "not": {
-      "required": [
-        "tenant"
-      ]
-    }
-  }
+    "type"
+  ]
 }

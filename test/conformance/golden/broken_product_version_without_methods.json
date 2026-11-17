@@ -1,0 +1,7 @@
+{
+  "status": 200,
+  "headers": {
+    "Content-Type": "application/json"
+  },
+  "body": "{\"data\":{\"inject\":{\"application\":{\"appId\":\"6a0e00000000000000000099\",\"package\":\"CNFP_DEFAULT\",\"product\":\"CNFP\"},\"device\":\"Go-http-client/1.1\",\"geo\":{\"ip\":\"127.0.0.1\"},\"key\":{\"config\":{},\"eKey\":\"5bbf311a30f4acaec52b7472be854cc9721cd4b1dbd73f71ca0f728839e30f3969c29d58bf58d6e2aac12fb28d2c3c4a3075bf9e50f4c7ae646835c4d69a436fbfdf37fce7dd086fcc1cae885340c2210488a82cf18f6ad12d3c7ca4922eaaaf\",\"iKey\":\"4d1e2f3a4b5c6d7e8f90a1b2c3d4e5f6\"},\"package\":{},\"tenant\":{\"code\":\"CNFB\",\"id\":\"6a0e00000000000000000004\",\"locked\":false,\"name\":\"Conformance broken pieces\",\"type\":\"product\"}},\"method\":\"GET\",\"path\":\"/hello\",\"query\":\"\"},\"result\":true}"
+}

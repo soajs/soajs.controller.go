@@ -157,9 +157,6 @@
     "_id",
     "username",
     "status",
-    "tenant",
-    "groups",
-    "config",
-    "profile"
+    "tenant"
   ]
 }

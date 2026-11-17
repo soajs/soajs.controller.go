@@ -9,9 +9,11 @@ import (
 	"net/url"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/soajs/soajs.controller.go/internal/awareness"
+	"github.com/soajs/soajs.controller.go/internal/dataschema"
 	"github.com/soajs/soajs.controller.go/internal/lib"
 	"github.com/soajs/soajs.controller.go/internal/middleware"
 	"github.com/soajs/soajs.controller.go/internal/registry"
@@ -90,6 +92,12 @@ func (h *maintenanceHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.getRegistry(w, pathname, query)
 	case "/cache/invalidate":
 		h.cacheInvalidate(w, r, pathname)
+	case "/schemaProblems":
+		// Go only: the data problems found in the documents read (docs/data-schema/imperfect-data.md)
+		resp := h.response(pathname)
+		resp.Result = true
+		resp.Data = schemaProblems(dataschema.Problems.List(), query["collection"])
+		h.write(w, resp, true)
 	default:
 		resp := h.response(pathname)
 		resp.Result = true
@@ -202,6 +210,9 @@ func (h *maintenanceHandler) awarenessStat(w http.ResponseWriter, route string, 
 	reg := h.ctrl.Registry().Get()
 	if reg != nil {
 		services, daemons := awareness.RegistryWithStats(reg, h.ctrl.Awareness().Stats())
+		if controller, ok := services["controller"].(map[string]interface{}); ok {
+			patchRaw(controller, reg.RawEnv, "/services/controller/")
+		}
 		resp.Result = true
 		resp.Data = map[string]interface{}{"services": services, "daemons": daemons}
 	}
@@ -405,6 +416,31 @@ func deepCopy(v interface{}) interface{} {
 	return out
 }
 
+// patchRaw gives a dump the environment values a Node.js reading replaced, as Node.js dumps them:
+// raw holds them by JSON pointer in the environment document, under prefix.
+func patchRaw(dump map[string]interface{}, raw map[string]interface{}, prefix string) {
+	for pointer, value := range raw {
+		if !strings.HasPrefix(pointer, prefix) {
+			continue
+		}
+		path := dataschema.Segments(strings.TrimPrefix(pointer, prefix[:len(prefix)-1]))
+		cur := dump
+		for i, seg := range path {
+			if i == len(path)-1 {
+				if _, ok := cur[seg]; ok {
+					cur[seg] = value
+				}
+				break
+			}
+			next, ok := cur[seg].(map[string]interface{})
+			if !ok {
+				break
+			}
+			cur = next
+		}
+	}
+}
+
 // cloneAndFilterRegistry is the registry a service receives (server/maintenance.js
 // cloneAndFilterRegistry): the environment, its databases as the Node.js registry gives them (with
 // coreDB.session), serviceConfig without cors, and without oauth except for the oauth service, the
@@ -441,6 +477,7 @@ func cloneAndFilterRegistry(reg *types.RegistryData, reqServiceName, reqServiceT
 	filtered["tenantMetaDB"] = meta
 	if reg.ServiceConfig != nil {
 		serviceConfig, _ := deepCopy(reg.ServiceConfig).(map[string]interface{})
+		patchRaw(serviceConfig, reg.RawEnv, "/services/config/")
 		delete(serviceConfig, "cors")
 		if reqServiceName != "oauth" {
 			delete(serviceConfig, "oauth")
@@ -476,7 +513,9 @@ func cloneAndFilterRegistry(reg *types.RegistryData, reqServiceName, reqServiceT
 
 	services := map[string]interface{}{}
 	if gw, ok := reg.Services["controller"]; ok {
-		services["controller"] = gw
+		controller, _ := deepCopy(gw).(map[string]interface{})
+		patchRaw(controller, reg.RawEnv, "/services/controller/")
+		services["controller"] = controller
 	}
 	switch reqServiceType {
 	case "service":
@@ -495,4 +534,27 @@ func cloneAndFilterRegistry(reg *types.RegistryData, reqServiceName, reqServiceT
 	}
 	filtered["services"] = services
 	return filtered
+}
+
+// schemaProblemsAnswer is the /schemaProblems data: every current finding, by collection, _id and
+// path, and how many documents and findings there are of each action.
+type schemaProblemsAnswer struct {
+	Documents int                  `json:"documents"`
+	Actions   map[string]int       `json:"actions"`
+	Problems  []dataschema.Finding `json:"problems"`
+}
+
+func schemaProblems(all []dataschema.Finding, collection string) schemaProblemsAnswer {
+	out := schemaProblemsAnswer{Actions: map[string]int{}, Problems: []dataschema.Finding{}}
+	docs := map[string]bool{}
+	for _, f := range all {
+		if collection != "" && f.Collection != collection {
+			continue
+		}
+		out.Problems = append(out.Problems, f)
+		out.Actions[string(f.Action)]++
+		docs[f.Collection+"/"+f.ID] = true
+	}
+	out.Documents = len(docs)
+	return out
 }

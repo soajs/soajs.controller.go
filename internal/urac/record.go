@@ -10,6 +10,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/dlclark/regexp2/v2"
@@ -293,25 +294,47 @@ func assureConfig(record map[string]interface{}) {
 	for _, g := range groups {
 		config, _ := g["config"].(map[string]interface{})
 		packages, _ := config["allowedPackages"].(map[string]interface{})
-		for product, list := range packages {
-			codes, _ := list.([]interface{})
-			current, ok := merged[product].([]interface{})
-			if !ok {
-				merged[product] = codes
+		for product, value := range packages {
+			// as Node.js: the first truthy value as it is, then [...new Set([...current, ...value])],
+			// where spreading a string gives its characters
+			current, has := merged[product]
+			if !has || !dataschema.Truthy(current) {
+				merged[product] = value
 				continue
 			}
-			merged[product] = union(current, codes)
+			merged[product] = union(spread(current), spread(value))
 		}
 	}
 	record["groupsConfig"] = map[string]interface{}{"allowedPackages": merged}
 }
 
-// union is [...new Set([...a, ...b])].
+// spread is [...v]: a list's items, a string's characters (code points).
+func spread(v interface{}) []interface{} {
+	switch t := v.(type) {
+	case []interface{}:
+		return t
+	case string:
+		out := make([]interface{}, 0, len(t))
+		for _, r := range t {
+			out = append(out, string(r))
+		}
+		return out
+	}
+	return nil
+}
+
+// union is [...new Set([...a, ...b])]: SameValueZero for strings, numbers and booleans; objects and
+// lists are never the same.
 func union(a, b []interface{}) []interface{} {
 	out := []interface{}{}
 	seen := map[interface{}]bool{}
 	for _, list := range [][]interface{}{a, b} {
 		for _, v := range list {
+			switch v.(type) {
+			case map[string]interface{}, []interface{}:
+				out = append(out, v)
+				continue
+			}
 			if !seen[v] {
 				seen[v] = true
 				out = append(out, v)
@@ -341,7 +364,7 @@ func (s *mongoStore) FindUser(ctx context.Context, filter bson.M) (map[string]in
 	if err != nil {
 		return nil, err
 	}
-	return s.decode("users", raw)
+	return s.read("users", dataschema.Users, raw)
 }
 
 func (s *mongoStore) FindGroups(ctx context.Context, filter bson.M) ([]map[string]interface{}, error) {
@@ -352,7 +375,9 @@ func (s *mongoStore) FindGroups(ctx context.Context, filter bson.M) ([]map[strin
 	defer cur.Close(ctx)
 	var out []map[string]interface{}
 	for cur.Next(ctx) {
-		g, err := s.decode("groups", cur.Current)
+		// a group that cannot be read gives no packages, nor does an allowedPackages entry that
+		// cannot be read: as Node.js, the key's package ACL applies when nothing else gives one
+		g, err := s.read("groups", dataschema.Groups, cur.Current)
 		if err != nil {
 			return nil, err
 		}
@@ -363,7 +388,11 @@ func (s *mongoStore) FindGroups(ctx context.Context, filter bson.M) ([]map[strin
 	return out, cur.Err()
 }
 
-func (s *mongoStore) decode(coll string, raw bson.Raw) (map[string]interface{}, error) {
+// read reads a users or groups document through its policy and reports what it found
+// (/schemaProblems). It returns nil for a document that cannot be read. What was left out of a
+// user's roles (its groups, a group, a group's allowedPackages entry) is reported as falling back
+// to the key's package: the gateway follows Node.js there (docs/data-schema/imperfect-data.md).
+func (s *mongoStore) read(coll string, policy dataschema.Policy, raw bson.Raw) (map[string]interface{}, error) {
 	schemas, err := dataschema.Embedded()
 	if err != nil {
 		return nil, err
@@ -373,19 +402,21 @@ func (s *mongoStore) decode(coll string, raw bson.Raw) (map[string]interface{}, 
 		return nil, fmt.Errorf("no data schema for %s", coll)
 	}
 	var doc map[string]interface{}
-	problems, err := schema.Decode(raw, &doc)
-	if err != nil {
-		return nil, err
-	}
-	if problems != nil {
-		id := ""
-		if v, e := raw.LookupErr("_id"); e == nil {
-			if oid, ok := v.ObjectIDOK(); ok {
-				id = oid.Hex()
-			}
+	res := schema.Read(raw, policy, &doc)
+	for i, f := range res.Findings {
+		piece := f.Piece
+		if piece == "" {
+			piece = f.Path
 		}
-		s.logger.Error("document skipped, it does not match the data schema",
-			zap.String("collection", coll), zap.String("_id", id), zap.Any("problems", problems))
+		switch {
+		case coll == "groups" && f.Action == dataschema.SkippedDocument,
+			coll == "groups" && f.Action == dataschema.DroppedPiece && strings.HasPrefix(piece, "/config/allowedPackages/"),
+			coll == "users" && f.Action == dataschema.DroppedPiece && (piece == "/groups" || strings.HasPrefix(piece, "/groups/")):
+			res.Findings[i].Action = dataschema.FellBackToKeyPackage
+		}
+	}
+	dataschema.Problems.ReportResult(s.logger, res)
+	if !res.OK {
 		return nil, nil
 	}
 	return doc, nil

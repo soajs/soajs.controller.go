@@ -168,11 +168,23 @@ func (r *MongoRegistry) build(env string) (*types.RegistryData, error) {
 	if err != nil {
 		return nil, fmt.Errorf("environment %s: %w", envUpper, err)
 	}
-	if problems, err := schemas[CollEnvironment].Decode(raw, &e); err != nil || problems != nil {
-		return nil, fmt.Errorf("environment %s does not match the data schema: %v %v", envUpper, problems, err)
+	if env == r.GetEnvironment() || r.GetEnvironment() == "" {
+		// the gateway's own registry: its documents' findings are reset at each build
+		dataschema.Problems.BeginLoad(registryCollections...)
+		defer dataschema.Problems.EndLoad(registryCollections...)
+	}
+	envRes := r.readResult(schemas, CollEnvironment, raw, &e)
+	if !envRes.OK {
+		return nil, fmt.Errorf("environment %s cannot be read: see /schemaProblems", envUpper)
+	}
+	for _, f := range envRes.Findings {
+		if f.Path == "/services/config/cors/origin" && f.Rule == dataschema.CORSOriginRefused {
+			e.Services.Config.CORS.OriginRefused = true
+		}
 	}
 
 	reg := &types.RegistryData{
+		RawEnv:         envRes.Raw,
 		TimeLoaded:     timeLoaded,
 		Name:           env,
 		Environment:    env,
@@ -250,7 +262,7 @@ func (r *MongoRegistry) build(env string) (*types.RegistryData, error) {
 		var hosts []*types.HostRecord
 		if err := r.eachRaw(ctx, schemas, CollHosts, bson.M{"env": env}, func(raw bson.Raw) {
 			var h types.HostRecord
-			if problems, err := schemas[CollHosts].Decode(raw, &h); err == nil && problems == nil {
+			if r.read(schemas, CollHosts, raw, &h) {
 				hosts = append(hosts, &h)
 			}
 		}); err != nil {
@@ -283,8 +295,7 @@ func (r *MongoRegistry) loadInfra(ctx context.Context, schemas map[string]*datas
 		return err
 	}
 	var infra map[string]interface{}
-	if problems, err := schemas[CollInfra].Decode(raw, &infra); err != nil || problems != nil {
-		r.logger.Error("the deployer's infra account does not match the data schema", zap.String("id", id), zap.Any("problems", problems), zap.Error(err))
+	if !r.read(schemas, CollInfra, raw, &infra) {
 		return nil
 	}
 	k8s["configuration"] = infra["configuration"]
@@ -296,9 +307,7 @@ func (r *MongoRegistry) loadInfra(ctx context.Context, schemas map[string]*datas
 func (r *MongoRegistry) each(ctx context.Context, schemas map[string]*dataschema.Collection, coll string, filter interface{}, fn func(map[string]interface{})) error {
 	return r.eachRaw(ctx, schemas, coll, filter, func(raw bson.Raw) {
 		var doc map[string]interface{}
-		problems, err := schemas[coll].Decode(raw, &doc)
-		if err != nil || problems != nil {
-			r.skip(coll, raw, problems, err)
+		if !r.read(schemas, coll, raw, &doc) {
 			return
 		}
 		fn(doc)
@@ -309,10 +318,21 @@ func (r *MongoRegistry) each(ctx context.Context, schemas map[string]*dataschema
 func (r *MongoRegistry) eachTyped(ctx context.Context, schemas map[string]*dataschema.Collection, coll string, filter interface{}, fn func(*marketItem)) error {
 	return r.eachRaw(ctx, schemas, coll, filter, func(raw bson.Raw) {
 		var item marketItem
-		problems, err := schemas[coll].Decode(raw, &item)
-		if err != nil || problems != nil {
-			r.skip(coll, raw, problems, err)
+		res := r.readResult(schemas, coll, raw, &item)
+		if !res.OK {
 			return
+		}
+		for i := range item.Versions {
+			v := &item.Versions[i]
+			for key, value := range res.Raw {
+				prefix := dataschema.MarketRawKey(v.Version, "")
+				if strings.HasPrefix(key, prefix) {
+					if v.Raw == nil {
+						v.Raw = map[string]interface{}{}
+					}
+					v.Raw[strings.TrimPrefix(key, prefix)] = value
+				}
+			}
 		}
 		fn(&item)
 	})
@@ -333,16 +353,19 @@ func (r *MongoRegistry) eachRaw(ctx context.Context, schemas map[string]*datasch
 	return cursor.Err()
 }
 
-// skip logs a document that does not match the data schema: its _id and where, never its values.
-func (r *MongoRegistry) skip(coll string, raw bson.Raw, problems []dataschema.Problem, err error) {
-	id := ""
-	if v, e := raw.LookupErr("_id"); e == nil {
-		if oid, ok := v.ObjectIDOK(); ok {
-			id = oid.Hex()
-		}
-	}
-	r.logger.Error("document skipped, it does not match the data schema",
-		zap.String("collection", coll), zap.String("_id", id), zap.Any("problems", problems), zap.Error(err))
+// registryCollections are the collections a registry build reads.
+var registryCollections = []string{CollEnvironment, CollInfra, CollResources, CollCustomRegistry, CollMarketplace, CollHosts}
+
+// read reads a document through its collection's policy and reports what it found
+// (/schemaProblems).
+func (r *MongoRegistry) read(schemas map[string]*dataschema.Collection, coll string, raw bson.Raw, out interface{}) bool {
+	return r.readResult(schemas, coll, raw, out).OK
+}
+
+func (r *MongoRegistry) readResult(schemas map[string]*dataschema.Collection, coll string, raw bson.Raw, out interface{}) dataschema.Result {
+	res := schemas[coll].Read(raw, dataschema.PolicyFor(coll), out)
+	dataschema.Problems.ReportResult(r.logger, res)
+	return res
 }
 
 // OtherEnvControllerHosts reads the gateway's hosts of the other environments

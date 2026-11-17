@@ -11,7 +11,7 @@ The shapes come from the Node.js gateway's code (soajs.controller 4.3.28 and the
 ## Rules
 
 1. **Latest shape only.** The compatibility branches Node.js keeps for older data are not part of this spec. Each page lists the ones it leaves out.
-2. **Unexpected data is invalid.** The Go gateway logs a document that does not match and treats it as invalid, by denying or skipping it. It never converts one shape into another.
+2. **Imperfect data is read as Node.js reads it, piece by piece.** A document that does not match is not skipped whole: the Node.js readings apply first, then the smallest piece that still does not match is left out, toward refusal, never toward access. Old shapes are left out, never converted. Fields the spec does not list are ignored. Every problem is logged and listed on the maintenance route `/schemaProblems`. See [imperfect-data.md](imperfect-data.md).
 3. Fields the gateway does not use are listed as **not used by the gateway**. Most are allowed and not constrained, so the services that own them (console, oauth, urac, …) can change them.
 4. Placeholders such as `<id>` and `<extKey>` in the examples stand for real values. No real tenant, user, key or secret appears in these pages.
 5. **Users and groups are open.** Their services add fields of their own (Connect writes `lastVisit`, `joinedAt` and `via` in `config.allowedTenants[]`), so a users or groups document, and every object in it, accepts fields this spec does not list, and only the fields the gateway reads are checked. The same goes for a token's `user`. See [urac.md](urac.md).
