@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/soajs/soajs.controller.go/internal/awareness"
+	"github.com/soajs/soajs.controller.go/internal/dataschema"
 	"github.com/soajs/soajs.controller.go/internal/lib"
 	"github.com/soajs/soajs.controller.go/internal/middleware"
 	"github.com/soajs/soajs.controller.go/internal/registry"
@@ -90,6 +91,12 @@ func (h *maintenanceHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.getRegistry(w, pathname, query)
 	case "/cache/invalidate":
 		h.cacheInvalidate(w, r, pathname)
+	case "/schemaProblems":
+		// Go only: the data problems found in the documents read (docs/data-schema/imperfect-data.md)
+		resp := h.response(pathname)
+		resp.Result = true
+		resp.Data = schemaProblems(dataschema.Problems.List(), query["collection"])
+		h.write(w, resp, true)
 	default:
 		resp := h.response(pathname)
 		resp.Result = true
@@ -495,4 +502,27 @@ func cloneAndFilterRegistry(reg *types.RegistryData, reqServiceName, reqServiceT
 	}
 	filtered["services"] = services
 	return filtered
+}
+
+// schemaProblemsAnswer is the /schemaProblems data: every current finding, by collection, _id and
+// path, and how many documents and findings there are of each action.
+type schemaProblemsAnswer struct {
+	Documents int                  `json:"documents"`
+	Actions   map[string]int       `json:"actions"`
+	Problems  []dataschema.Finding `json:"problems"`
+}
+
+func schemaProblems(all []dataschema.Finding, collection string) schemaProblemsAnswer {
+	out := schemaProblemsAnswer{Actions: map[string]int{}, Problems: []dataschema.Finding{}}
+	docs := map[string]bool{}
+	for _, f := range all {
+		if collection != "" && f.Collection != collection {
+			continue
+		}
+		out.Problems = append(out.Problems, f)
+		out.Actions[string(f.Action)]++
+		docs[f.Collection+"/"+f.ID] = true
+	}
+	out.Documents = len(docs)
+	return out
 }

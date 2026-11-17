@@ -588,7 +588,6 @@ func schemaFor(coll string) (*dataschema.Collection, error) {
 	return s, nil
 }
 
-
 // copyMap deep-copies a decoded JSON object: maps and arrays are copied, other values are
 // immutable.
 func copyMap(m map[string]interface{}) map[string]interface{} {

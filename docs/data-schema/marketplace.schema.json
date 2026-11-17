@@ -94,10 +94,7 @@
             },
             "additionalProperties": false,
             "required": [
-              "group",
-              "port",
-              "requestTimeout",
-              "requestTimeoutRenewal"
+              "port"
             ]
           },
           "versions": {
@@ -255,19 +252,7 @@
               },
               "additionalProperties": false,
               "required": [
-                "version",
-                "interConnect",
-                "maintenance",
-                "apis",
-                "extKeyRequired",
-                "oauth",
-                "urac",
-                "urac_Profile",
-                "urac_ACL",
-                "urac_Config",
-                "urac_GroupConfig",
-                "tenant_Profile",
-                "provision_ACL"
+                "version"
               ]
             }
           }
@@ -300,7 +285,6 @@
             },
             "additionalProperties": false,
             "required": [
-              "group",
               "port"
             ]
           },
@@ -348,8 +332,7 @@
               },
               "additionalProperties": false,
               "required": [
-                "version",
-                "maintenance"
+                "version"
               ]
             }
           }

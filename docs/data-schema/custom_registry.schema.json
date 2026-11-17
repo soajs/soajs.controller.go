@@ -62,9 +62,6 @@
     "_id",
     "name",
     "created",
-    "plugged",
-    "shared",
-    "sharedEnvs",
     "value"
   ],
   "allOf": [

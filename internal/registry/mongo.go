@@ -168,8 +168,8 @@ func (r *MongoRegistry) build(env string) (*types.RegistryData, error) {
 	if err != nil {
 		return nil, fmt.Errorf("environment %s: %w", envUpper, err)
 	}
-	if problems, err := schemas[CollEnvironment].Decode(raw, &e); err != nil || problems != nil {
-		return nil, fmt.Errorf("environment %s does not match the data schema: %v %v", envUpper, problems, err)
+	if !r.read(schemas, CollEnvironment, raw, &e) {
+		return nil, fmt.Errorf("environment %s cannot be read: see /schemaProblems", envUpper)
 	}
 
 	reg := &types.RegistryData{
@@ -250,7 +250,7 @@ func (r *MongoRegistry) build(env string) (*types.RegistryData, error) {
 		var hosts []*types.HostRecord
 		if err := r.eachRaw(ctx, schemas, CollHosts, bson.M{"env": env}, func(raw bson.Raw) {
 			var h types.HostRecord
-			if problems, err := schemas[CollHosts].Decode(raw, &h); err == nil && problems == nil {
+			if r.read(schemas, CollHosts, raw, &h) {
 				hosts = append(hosts, &h)
 			}
 		}); err != nil {
@@ -283,8 +283,7 @@ func (r *MongoRegistry) loadInfra(ctx context.Context, schemas map[string]*datas
 		return err
 	}
 	var infra map[string]interface{}
-	if problems, err := schemas[CollInfra].Decode(raw, &infra); err != nil || problems != nil {
-		r.logger.Error("the deployer's infra account does not match the data schema", zap.String("id", id), zap.Any("problems", problems), zap.Error(err))
+	if !r.read(schemas, CollInfra, raw, &infra) {
 		return nil
 	}
 	k8s["configuration"] = infra["configuration"]
@@ -296,9 +295,7 @@ func (r *MongoRegistry) loadInfra(ctx context.Context, schemas map[string]*datas
 func (r *MongoRegistry) each(ctx context.Context, schemas map[string]*dataschema.Collection, coll string, filter interface{}, fn func(map[string]interface{})) error {
 	return r.eachRaw(ctx, schemas, coll, filter, func(raw bson.Raw) {
 		var doc map[string]interface{}
-		problems, err := schemas[coll].Decode(raw, &doc)
-		if err != nil || problems != nil {
-			r.skip(coll, raw, problems, err)
+		if !r.read(schemas, coll, raw, &doc) {
 			return
 		}
 		fn(doc)
@@ -309,9 +306,7 @@ func (r *MongoRegistry) each(ctx context.Context, schemas map[string]*dataschema
 func (r *MongoRegistry) eachTyped(ctx context.Context, schemas map[string]*dataschema.Collection, coll string, filter interface{}, fn func(*marketItem)) error {
 	return r.eachRaw(ctx, schemas, coll, filter, func(raw bson.Raw) {
 		var item marketItem
-		problems, err := schemas[coll].Decode(raw, &item)
-		if err != nil || problems != nil {
-			r.skip(coll, raw, problems, err)
+		if !r.read(schemas, coll, raw, &item) {
 			return
 		}
 		fn(&item)
@@ -333,16 +328,34 @@ func (r *MongoRegistry) eachRaw(ctx context.Context, schemas map[string]*datasch
 	return cursor.Err()
 }
 
-// skip logs a document that does not match the data schema: its _id and where, never its values.
-func (r *MongoRegistry) skip(coll string, raw bson.Raw, problems []dataschema.Problem, err error) {
+// policies are how each registry collection is read when a document does not match its schema
+// (docs/data-schema/imperfect-data.md).
+var policies = map[string]dataschema.Policy{
+	CollEnvironment:    dataschema.Environment,
+	CollCustomRegistry: dataschema.CustomRegistry,
+	CollMarketplace:    dataschema.Marketplace,
+}
+
+// read reads a document through its collection's policy and reports what it found
+// (/schemaProblems).
+func (r *MongoRegistry) read(schemas map[string]*dataschema.Collection, coll string, raw bson.Raw, out interface{}) bool {
+	policy := policies[coll]
+	if policy == nil {
+		policy = dataschema.WholeDocument
+	}
+	findings, ok, err := schemas[coll].Read(raw, policy, out)
+	if err != nil {
+		r.logger.Error("unable to read a document", zap.String("collection", coll), zap.Error(err))
+		return false
+	}
 	id := ""
 	if v, e := raw.LookupErr("_id"); e == nil {
-		if oid, ok := v.ObjectIDOK(); ok {
+		if oid, isOID := v.ObjectIDOK(); isOID {
 			id = oid.Hex()
 		}
 	}
-	r.logger.Error("document skipped, it does not match the data schema",
-		zap.String("collection", coll), zap.String("_id", id), zap.Any("problems", problems), zap.Error(err))
+	dataschema.Problems.Report(r.logger, coll, id, findings)
+	return ok
 }
 
 // OtherEnvControllerHosts reads the gateway's hosts of the other environments

@@ -279,6 +279,10 @@ func checkUserTenantAccess(record map[string]interface{}, tenant Tenant, autoRoa
 	return nil
 }
 
+// damagedGroups marks a user record one of whose groups could not be read in full: its ACL
+// refuses everything (docs/data-schema/imperfect-data.md). It is never injected.
+const damagedGroups = "\x00damagedGroups"
+
 // assureConfig merges the allowed packages of the user's groups, by product
 // (soajs.urac.driver lib/user.js assureConfig).
 func assureConfig(record map[string]interface{}) {
@@ -291,6 +295,10 @@ func assureConfig(record map[string]interface{}) {
 	}
 	merged := map[string]interface{}{}
 	for _, g := range groups {
+		if g[damagedGroups] == true {
+			record[damagedGroups] = true
+			continue
+		}
 		config, _ := g["config"].(map[string]interface{})
 		packages, _ := config["allowedPackages"].(map[string]interface{})
 		for product, list := range packages {
@@ -341,7 +349,8 @@ func (s *mongoStore) FindUser(ctx context.Context, filter bson.M) (map[string]in
 	if err != nil {
 		return nil, err
 	}
-	return s.decode("users", raw)
+	u, _, err := s.read("users", dataschema.Users, raw)
+	return u, err
 }
 
 func (s *mongoStore) FindGroups(ctx context.Context, filter bson.M) ([]map[string]interface{}, error) {
@@ -352,41 +361,51 @@ func (s *mongoStore) FindGroups(ctx context.Context, filter bson.M) ([]map[strin
 	defer cur.Close(ctx)
 	var out []map[string]interface{}
 	for cur.Next(ctx) {
-		g, err := s.decode("groups", cur.Current)
+		g, damaged, err := s.read("groups", dataschema.Groups, cur.Current)
 		if err != nil {
 			return nil, err
 		}
-		if g != nil {
-			out = append(out, g)
+		if damaged {
+			// a group whose packages could not be read refuses, it is not left out
+			out = append(out, map[string]interface{}{damagedGroups: true})
+			continue
 		}
+		out = append(out, g)
 	}
 	return out, cur.Err()
 }
 
-func (s *mongoStore) decode(coll string, raw bson.Raw) (map[string]interface{}, error) {
+// read reads a users or groups document through its policy and reports what it found
+// (/schemaProblems). It returns nil for a document that cannot be read, and damaged when a group
+// lost part of its allowedPackages or could not be read.
+func (s *mongoStore) read(coll string, policy dataschema.Policy, raw bson.Raw) (map[string]interface{}, bool, error) {
 	schemas, err := dataschema.Embedded()
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	schema := schemas[coll]
 	if schema == nil {
-		return nil, fmt.Errorf("no data schema for %s", coll)
+		return nil, false, fmt.Errorf("no data schema for %s", coll)
 	}
 	var doc map[string]interface{}
-	problems, err := schema.Decode(raw, &doc)
-	if err != nil {
-		return nil, err
-	}
-	if problems != nil {
-		id := ""
-		if v, e := raw.LookupErr("_id"); e == nil {
-			if oid, ok := v.ObjectIDOK(); ok {
-				id = oid.Hex()
-			}
+	damaged := false
+	findings, ok, err := schema.ReadWith(raw, policy, &doc, func(_ *dataschema.Reading, piece []string) {
+		if len(piece) >= 2 && piece[0] == "config" && piece[1] == "allowedPackages" {
+			damaged = true
 		}
-		s.logger.Error("document skipped, it does not match the data schema",
-			zap.String("collection", coll), zap.String("_id", id), zap.Any("problems", problems))
-		return nil, nil
+	})
+	if err != nil {
+		return nil, false, err
 	}
-	return doc, nil
+	id := ""
+	if v, e := raw.LookupErr("_id"); e == nil {
+		if oid, isOID := v.ObjectIDOK(); isOID {
+			id = oid.Hex()
+		}
+	}
+	dataschema.Problems.Report(s.logger, coll, id, findings)
+	if !ok {
+		return nil, coll == "groups", nil
+	}
+	return doc, damaged, nil
 }

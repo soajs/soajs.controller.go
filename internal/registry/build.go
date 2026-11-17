@@ -143,6 +143,13 @@ func addService(services map[string]*types.ServiceConfig, item *marketItem) {
 	if item.Name == gatewayName {
 		return
 	}
+	// as Node.js: group || "service", requestTimeout || 30 (modules/registry/index.js:187-190)
+	if item.Configuration.Group == "" {
+		item.Configuration.Group = "service"
+	}
+	if item.Configuration.RequestTimeout == 0 {
+		item.Configuration.RequestTimeout = 30
+	}
 	svc := &types.ServiceConfig{
 		Group:                 item.Configuration.Group,
 		Port:                  item.Configuration.Port,

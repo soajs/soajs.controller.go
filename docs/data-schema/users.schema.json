@@ -158,8 +158,6 @@
     "username",
     "status",
     "tenant",
-    "groups",
-    "config",
-    "profile"
+    "groups"
   ]
 }
