@@ -285,7 +285,8 @@ func (c *Collection) read(r *Reading, p Policy) bool {
 				r.add(b.path, b.rule, SkippedDocument, nil)
 				return false
 			}
-			if len(unit) == 0 {
+			if _, present := r.Get(unit...); len(unit) == 0 || !present {
+				// nothing to leave out: a field the document needs is missing
 				r.add(b.path, b.rule, SkippedDocument, nil)
 				return false
 			}

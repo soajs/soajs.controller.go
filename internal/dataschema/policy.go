@@ -136,14 +136,19 @@ func tenantUnit(r *Reading, path []string) []string {
 		case "description":
 			return cut(path, 3)
 		case "keys":
-			if len(path) <= 4 {
-				return cut(path, len(path))
+			if len(path) == 3 {
+				// keys missing or not a list: the application
+				return cut(path, 2)
 			}
-			if path[4] != "extKeys" {
+			if len(path) == 4 || path[4] != "extKeys" {
 				return cut(path, 4)
 			}
-			if len(path) <= 6 {
-				return cut(path, len(path))
+			if len(path) == 5 {
+				// extKeys missing or not a list: the key
+				return cut(path, 4)
+			}
+			if len(path) == 6 {
+				return cut(path, 6)
 			}
 			if path[6] == "label" || path[6] == "dashboardAccess" {
 				return cut(path, 7)
