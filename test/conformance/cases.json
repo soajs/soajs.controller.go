@@ -1236,6 +1236,17 @@
     }
   },
   {
+    "name": "urac_invited_extra_fields",
+    "about": "dashboard: a user whose invitation carries fields the gateway does not read (lastVisit, joinedAt, via) and an extra top-level field: read as Node.js reads it",
+    "env": "dashboard",
+    "method": "GET",
+    "path": "/conform/v1/private/admin",
+    "headers": {
+      "key": "$KEY_CONSOLE",
+      "Authorization": "Bearer $TOKEN_U_CONNECT"
+    }
+  },
+  {
     "name": "urac_paused",
     "about": "dashboard: an inactive user is refused on the next call (146)",
     "env": "dashboard",

@@ -111,6 +111,44 @@
     },
     {
       "_id": {
+        "$oid": "6a0e000000000000000000b7"
+      },
+      "username": "invited_connect",
+      "email": "connect@conformance.invalid",
+      "firstName": "invited_connect",
+      "lastName": "Conformance",
+      "status": "active",
+      "tenant": {
+        "id": "6a0e00000000000000000001",
+        "code": "CONF"
+      },
+      "groups": [],
+      "config": {
+        "allowedTenants": [
+          {
+            "tenant": {
+              "id": "6a0e00000000000000000002",
+              "code": "DBTN"
+            },
+            "groups": [
+              "admin"
+            ],
+            "lastVisit": 1794666000000,
+            "joinedAt": 1794666000000,
+            "via": {
+              "tenantId": "6a0e00000000000000000001"
+            }
+          }
+        ]
+      },
+      "profile": {},
+      "ts": 1794666000000,
+      "preferences": {
+        "theme": "dark"
+      }
+    },
+    {
+      "_id": {
         "$oid": "6a0e000000000000000000b6"
       },
       "username": "console_moved",

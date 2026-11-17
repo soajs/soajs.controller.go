@@ -30,18 +30,14 @@
     "phone": {
       "type": "string"
     },
-    "ln": {
-      "type": "string"
-    },
+    "ln": {},
     "firstName": {
       "type": "string"
     },
     "lastName": {
       "type": "string"
     },
-    "password": {
-      "type": "string"
-    },
+    "password": {},
     "status": {
       "enum": [
         "active",
@@ -64,7 +60,6 @@
         },
         "pin": {}
       },
-      "additionalProperties": false,
       "required": [
         "id",
         "code"
@@ -108,7 +103,6 @@
                 }
               }
             },
-            "additionalProperties": false,
             "required": [
               "tenant"
             ]
@@ -123,14 +117,12 @@
                 "type": "object"
               }
             },
-            "additionalProperties": false,
             "required": [
               "config"
             ]
           }
         }
-      },
-      "additionalProperties": false
+      }
     },
     "profile": {
       "type": "object"
@@ -149,26 +141,18 @@
             "minLength": 1
           }
         },
-        "additionalProperties": false,
         "required": [
           "product",
           "membership"
         ]
       }
     },
-    "ts": {
-      "type": "number"
-    },
-    "lastLogin": {
-      "type": "number"
-    },
+    "ts": {},
+    "lastLogin": {},
     "lastNetwork": {},
-    "locked": {
-      "type": "boolean"
-    },
+    "locked": {},
     "socialId": {}
   },
-  "additionalProperties": false,
   "required": [
     "_id",
     "username",
