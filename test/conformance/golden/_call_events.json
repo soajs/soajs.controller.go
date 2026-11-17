@@ -22,6 +22,28 @@
     "version": "1"
   },
   {
+    "api": "/private/admin",
+    "appId": "6a0e000000000000000000a6",
+    "env": "dashboard",
+    "ip": "127.0.0.1",
+    "method": "GET",
+    "package": "DSBRD_DEFAULT",
+    "product": "DSBRD",
+    "service": "conform",
+    "status": {
+      "$numberInt": "200"
+    },
+    "tenant": {
+      "code": "DBTN",
+      "id": "6a0e00000000000000000002"
+    },
+    "user": {
+      "id": "6a0e000000000000000000b7",
+      "username": "invited_connect"
+    },
+    "version": "1"
+  },
+  {
     "api": "/private/hello",
     "appId": "6a0e000000000000000000a6",
     "code": {

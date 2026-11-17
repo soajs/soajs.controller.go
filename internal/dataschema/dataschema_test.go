@@ -117,6 +117,42 @@ func TestTenantExtKeyRestrictions(t *testing.T) {
 	}
 }
 
+// Users and groups are extended by the services that own them (Connect writes lastVisit, joinedAt
+// and via in an invitation): fields the gateway does not read are accepted, the ones it reads are
+// still checked.
+func TestUracUnknownFields(t *testing.T) {
+	byName := load(t)
+	user := `{"_id":{"$oid":"6a0e000000000000000000b7"},"username":"u","status":"active",
+		"tenant":{"id":"6a0e00000000000000000001","code":"CONF","extra":1},"groups":[],"profile":{},%s}`
+	for _, ok := range []string{
+		`"config":{"allowedTenants":[{"tenant":{"id":"6a0e00000000000000000002","code":"DBTN"},"groups":["admin"],` +
+			`"lastVisit":1794666000000,"joinedAt":1794666000000,"via":{"tenantId":"6a0e00000000000000000001"}}]}`,
+		`"config":{"other":true},"preferences":{"theme":"dark"}`,
+		`"config":{},"lastLogin":{"$date":"2026-11-17T00:00:00Z"},"locked":"no","ts":"x"`,
+		`"config":{},"memberships":[{"product":"P","membership":"m","since":1}]`,
+	} {
+		if p := valid(t, byName["users"], fmtDoc(user, ok)); p != nil {
+			t.Errorf("users %s: %v", ok, p)
+		}
+	}
+	for _, bad := range []string{
+		`"config":{"allowedTenants":[{"tenant":{"id":"6a0e00000000000000000002"},"lastVisit":1}]}`,
+		`"config":{"allowedTenants":[{"groups":["admin"],"lastVisit":1}]}`,
+		`"config":{"allowedTenants":[{"tenant":{"id":"6a0e00000000000000000002","code":"DBTN"},"groups":"admin"}]}`,
+	} {
+		if p := valid(t, byName["users"], fmtDoc(user, bad)); p == nil {
+			t.Errorf("users %s must not validate", bad)
+		}
+	}
+	group := `{"_id":{"$oid":"6a0e000000000000000000c7"},"code":"admin","tenant":{"id":"6a0e00000000000000000002","code":"DBTN","extra":1},%s}`
+	if p := valid(t, byName["groups"], fmtDoc(group, `"config":{"allowedPackages":{"DSBRD":["DSBRD_DEFAULT"]},"other":1},"chat":true`)); p != nil {
+		t.Errorf("groups with extra fields: %v", p)
+	}
+	if p := valid(t, byName["groups"], fmtDoc(group, `"config":{"allowedPackages":{"DSBRD":"DSBRD_DEFAULT"}}`)); p == nil {
+		t.Error("allowedPackages must stay a map of lists")
+	}
+}
+
 // The conformance fixture, when present, follows the schema.
 func TestConformanceFixture(t *testing.T) {
 	dir := filepath.Join(DefaultDir(), "..", "..", "test", "conformance", "fixture")

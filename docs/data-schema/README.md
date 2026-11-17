@@ -14,6 +14,7 @@ The shapes come from the Node.js gateway's code (soajs.controller 4.3.28 and the
 2. **Unexpected data is invalid.** The Go gateway logs a document that does not match and treats it as invalid, by denying or skipping it. It never converts one shape into another.
 3. Fields the gateway does not use are listed as **not used by the gateway**. Most are allowed and not constrained, so the services that own them (console, oauth, urac, …) can change them.
 4. Placeholders such as `<id>` and `<extKey>` in the examples stand for real values. No real tenant, user, key or secret appears in these pages.
+5. **Users and groups are open.** Their services add fields of their own (Connect writes `lastVisit`, `joinedAt` and `via` in `config.allowedTenants[]`), so a users or groups document, and every object in it, accepts fields this spec does not list, and only the fields the gateway reads are checked. The same goes for a token's `user`. See [urac.md](urac.md).
 
 ## Databases
 

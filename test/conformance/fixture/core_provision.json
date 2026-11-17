@@ -1383,6 +1383,34 @@
     },
     {
       "_id": {
+        "$oid": "6a0e000000000000000000f7"
+      },
+      "type": "accessToken",
+      "token": "d0a000000000000000000000000000000000000b",
+      "expires": {
+        "$date": "2099-01-01T00:00:00Z"
+      },
+      "clientId": "6a0e00000000000000000002",
+      "env": "dashboard",
+      "user": {
+        "_id": {
+          "$oid": "6a0e000000000000000000b7"
+        },
+        "id": "6a0e000000000000000000b7",
+        "loginMode": "urac",
+        "deviceId": null,
+        "agent": null,
+        "username": "invited_connect",
+        "email": "connect@conformance.invalid",
+        "groups": [],
+        "tenant": {
+          "id": "6a0e00000000000000000001",
+          "code": "CONF"
+        }
+      }
+    },
+    {
+      "_id": {
         "$oid": "6a0e000000000000000000f6"
       },
       "type": "accessToken",

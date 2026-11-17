@@ -22,16 +22,18 @@ The user record and its groups. When the token's `loginMode` is `urac` and `getU
 | `username` | string | yes | | |
 | `email`, `phone` | string | | | Compared with the token when `validateTokenAccount` is on (146). |
 | `firstName`, `lastName` | string | | | Injected. |
-| `password` | string | | bcrypt | Not used by the gateway; never injected. |
+| `password` | any | | bcrypt | Not used by the gateway; never injected. |
 | `status` | string | yes | `active`, `inactive`, `pending`, `pendingNew`, `pendingJoin` | Only `active` passes: pending → 405, inactive → 406. The gateway answers 146 for both. |
 | `tenant.id`, `tenant.code` | string | yes | | The user's home tenant. |
 | `tenant.pin` | object | | | PIN state. |
 | `groups` | string[] | yes | group codes | |
-| `config.allowedTenants[]` | object | | `tenant{id, code, …}`, `groups` | Invitations: under an invited tenant, the user takes its `groups`. |
+| `config.allowedTenants[]` | object | | `tenant{id, code, …}`, `groups`, other fields | Invitations: under an invited tenant, the user takes its `groups`. Other fields, such as Connect's `lastVisit`, `joinedAt` and `via`, are not used by the gateway. |
 | `config.keys.<iKey>.config` | object | | | Merged over the key's configuration for this user. |
 | `profile` | object | yes | free-form | Injected when the service version has `urac_Profile`. |
 | `memberships[]` | object | | `product`, `membership` | Resolved through `custom_registry` `gateway` `membership`. |
-| `ts`, `lastLogin`, `lastNetwork`, `locked`, `ln`, `socialId` | | | | Not used by the gateway. |
+| `ts`, `lastLogin`, `lastNetwork`, `locked`, `ln`, `socialId` | any | | | Not used by the gateway. |
+
+A user document, and every object in it, accepts fields this table does not list: the urac service and Connect add their own. They are not used by the gateway, and they are injected with `config` as Node.js injects them. Only the fields the gateway reads are checked.
 
 ## groups
 
@@ -41,11 +43,12 @@ The user record and its groups. When the token's `loginMode` is `urac` and `getU
 |---|---|---|---|---|
 | `_id` | ObjectId | yes | | |
 | `code` | string | yes | | Group code. |
-| `name` | string | yes | | |
-| `description`, `locked`, `ts` | | | | Not used by the gateway. |
+| `name`, `description`, `locked`, `ts` | any | | | Not used by the gateway. |
 | `tenant.id`, `tenant.code` | string | yes | | The group's tenant. |
 | `config.allowedPackages.<PRODUCT>` | string[] | yes (map may be empty) | package codes | Together across the user's groups: the packages whose ACL applies to the user under that product. |
 | `config.allowedEnvironments.<ENV>` | object | | | Not used by the gateway. |
+
+A group document, and every object in it, accepts fields this table does not list. Only the fields the gateway reads are checked.
 
 ## Not part of this spec
 

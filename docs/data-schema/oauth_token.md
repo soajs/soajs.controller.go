@@ -25,7 +25,7 @@ Access and refresh tokens issued by the oauth service. The gateway reads access 
 | `user.username` | string | yes | | |
 | `user.loginMode` | string | yes | `urac` \| `oauth` | `urac`: the gateway reads the user from urac on each call, unless `getUserFromToken`. `oauth`: the token's user is the user record, the default for restricted and guest tokens. |
 | `user.tenant.id`, `user.tenant.code` | string | yes | | The user's tenant. |
-| `user.tenant.pin` | object | | | Not used by the gateway. |
+| `user.tenant.pin` | object | | | Not used by the gateway. Other fields of `user` and `user.tenant` are accepted and not used. |
 | `user.deviceId` | string \| null | yes | | When a string, it must equal the `device-id` header (156). `null`: the token is not bound to a device. |
 | `user.agent` | string \| null | | | Not used by the gateway (see `restrictedTo.agent`). |
 | `user.restrictedTo` | object | | | A restricted token: each key present must match the request (147). |
