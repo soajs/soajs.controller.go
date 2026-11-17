@@ -95,18 +95,21 @@ type Command struct {
 // Present, when set, names the fields a registration gave (/register): the others are written out
 // of the registry dump, as Node.js writes undefined ones, and read as false.
 type VersionInfo struct {
-	Present         map[string]bool    `json:"-"`
-	ExtKeyRequired  bool               `json:"extKeyRequired"`
-	Urac            bool               `json:"urac"`
-	UracProfile     bool               `json:"urac_Profile"`
-	UracACL         bool               `json:"urac_ACL"`
-	UracConfig      bool               `json:"urac_Config"`
-	UracGroupConfig bool               `json:"urac_GroupConfig"`
-	TenantProfile   bool               `json:"tenant_Profile"`
-	ProvisionACL    bool               `json:"provision_ACL"`
-	OAuth           bool               `json:"oauth"`
-	InterConnect    []InterConnectItem `json:"interConnect"`
-	Maintenance     *MaintenanceInfo   `json:"maintenance"`
+	Present map[string]bool `json:"-"`
+	// Raw are the flags whose marketplace value is truthy but not a boolean: Node.js keeps that
+	// value in the registry (value || false), the gateway decides on the boolean.
+	Raw             map[string]interface{} `json:"-"`
+	ExtKeyRequired  bool                   `json:"extKeyRequired"`
+	Urac            bool                   `json:"urac"`
+	UracProfile     bool                   `json:"urac_Profile"`
+	UracACL         bool                   `json:"urac_ACL"`
+	UracConfig      bool                   `json:"urac_Config"`
+	UracGroupConfig bool                   `json:"urac_GroupConfig"`
+	TenantProfile   bool                   `json:"tenant_Profile"`
+	ProvisionACL    bool                   `json:"provision_ACL"`
+	OAuth           bool                   `json:"oauth"`
+	InterConnect    []InterConnectItem     `json:"interConnect"`
+	Maintenance     *MaintenanceInfo       `json:"maintenance"`
 }
 
 // InterConnectItem is a peer a service calls directly. An empty Version means the peer's latest.
@@ -153,7 +156,11 @@ func (v VersionInfo) MarshalJSON() ([]byte, error) {
 			b.WriteByte(',')
 		}
 		first = false
-		raw, err := json.Marshal(f.value)
+		value := f.value
+		if r, ok := v.Raw[f.key]; ok {
+			value = r
+		}
+		raw, err := json.Marshal(value)
 		if err != nil {
 			return nil, err
 		}

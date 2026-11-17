@@ -21,11 +21,8 @@ func readDoc(t *testing.T, coll string, policy Policy, doc string) ([]Finding, b
 		t.Fatal(err)
 	}
 	var out map[string]interface{}
-	findings, ok, err := c.Read(raw, policy, &out)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return findings, ok, out
+	res := c.Read(raw, policy, &out)
+	return res.Findings, res.OK, out
 }
 
 func has(findings []Finding, path string, action Action) bool {
@@ -230,6 +227,8 @@ func TestProductOldShapes(t *testing.T) {
 func TestProductUnits(t *testing.T) {
 	doc := `{"_id":{"$oid":"6a0e000000000000000000b1"},"code":"P","packages":[
 		{"code":"P_A","_TTL":"x","acl":{}},
+		{"code":"P_N","_TTL":"120000","acl":{}},
+		{"code":"P_W","_TTL":true,"acl":{"dev":5}},
 		{"code":"P_B","acl":"none"},
 		{"code":"P_C","name":5,"acl":{"DEV":{},"dev":{"svc":{"1x0":{"access":true}},"ok":{"1":{"access":true}}}}}]}`
 	findings, ok, out := readDoc(t, "products", Products, doc)
@@ -237,8 +236,13 @@ func TestProductUnits(t *testing.T) {
 		t.Fatalf("read: %+v", findings)
 	}
 	pkgs := out["packages"].([]interface{})
-	if len(pkgs) != 1 || dig(pkgs[0], "code") != "P_C" || dig(pkgs[0], "acl", "DEV") != nil ||
-		dig(pkgs[0], "acl", "dev", "svc") != nil || dig(pkgs[0], "acl", "dev", "ok") == nil {
+	// _TTL as Node.js uses it: a numeric string is its number, anything else reloads soon
+	if len(pkgs) != 4 || dig(pkgs[0], "_TTL") != float64(UnreadableTTL) || dig(pkgs[1], "_TTL") != 120000.0 ||
+		dig(pkgs[2], "_TTL") != float64(UnreadableTTL) || dig(pkgs[2], "acl", "dev") != nil {
+		t.Errorf("_TTL and environment units: %s", asJSON(out))
+	}
+	last := pkgs[3]
+	if dig(last, "code") != "P_C" || dig(last, "acl", "DEV") != nil || dig(last, "acl", "dev", "svc") != nil || dig(last, "acl", "dev", "ok") == nil {
 		t.Errorf("units: %s", asJSON(out))
 	}
 	if findings, ok, _ := readDoc(t, "products", Products, `{"_id":{"$oid":"6a0e000000000000000000b1"},"code":"P"}`); ok {

@@ -1575,6 +1575,62 @@
     },
     {
       "_id": {
+        "$oid": "6a0e00000000000000000093"
+      },
+      "type": "accessToken",
+      "token": "d0a000000000000000000000000000000000000e",
+      "expires": {
+        "$date": "2099-01-01T00:00:00Z"
+      },
+      "clientId": "6a0e00000000000000000002",
+      "env": "dashboard",
+      "user": {
+        "_id": {
+          "$oid": "6a0e00000000000000000096"
+        },
+        "id": "6a0e00000000000000000096",
+        "loginMode": "urac",
+        "deviceId": null,
+        "agent": null,
+        "username": "broken_role",
+        "email": "broken_role@conformance.invalid",
+        "groups": [],
+        "tenant": {
+          "id": "6a0e00000000000000000002",
+          "code": "DBTN"
+        }
+      }
+    },
+    {
+      "_id": {
+        "$oid": "6a0e00000000000000000094"
+      },
+      "type": "accessToken",
+      "token": "d0a000000000000000000000000000000000000f",
+      "expires": {
+        "$date": "2099-01-01T00:00:00Z"
+      },
+      "clientId": "6a0e00000000000000000002",
+      "env": "dashboard",
+      "user": {
+        "_id": {
+          "$oid": "6a0e00000000000000000097"
+        },
+        "id": "6a0e00000000000000000097",
+        "loginMode": "urac",
+        "deviceId": null,
+        "agent": null,
+        "username": "broken_and_good_role",
+        "email": "broken_and_good_role@conformance.invalid",
+        "groups": [],
+        "tenant": {
+          "id": "6a0e00000000000000000002",
+          "code": "DBTN"
+        }
+      }
+    },
+    {
+      "_id": {
         "$oid": "6a0e000000000000000000f6"
       },
       "type": "accessToken",

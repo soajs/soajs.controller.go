@@ -45,9 +45,7 @@
       "propertyNames": {
         "pattern": "^[A-Z0-9]+$"
       },
-      "additionalProperties": {
-        "type": "boolean"
-      }
+      "additionalProperties": {}
     },
     "value": {
       "type": [
@@ -81,44 +79,16 @@
               "traffic": {
                 "type": "object",
                 "properties": {
-                  "model": {
-                    "enum": [
-                      "memory",
-                      "mongo"
-                    ]
-                  },
+                  "model": {},
                   "ip2ban": {
                     "type": "array",
                     "items": {
                       "type": "string"
                     }
                   },
-                  "throttling": {
-                    "type": "object",
-                    "additionalProperties": {
-                      "type": "object",
-                      "properties": {
-                        "publicAPIStrategy": {
-                          "type": "string"
-                        },
-                        "privateAPIStrategy": {
-                          "type": "string"
-                        },
-                        "apis": {
-                          "type": "array",
-                          "items": {
-                            "type": "string"
-                          }
-                        }
-                      },
-                      "additionalProperties": false
-                    }
-                  }
+                  "throttling": {}
                 },
-                "additionalProperties": false,
-                "required": [
-                  "model"
-                ]
+                "additionalProperties": false
               },
               "idempotency": {
                 "type": "object",
@@ -495,9 +465,7 @@
               "maintenanceMode": {
                 "type": "object",
                 "properties": {
-                  "on": {
-                    "type": "boolean"
-                  },
+                  "on": {},
                   "status": {
                     "type": "integer"
                   },
@@ -508,10 +476,7 @@
                     "type": "integer"
                   }
                 },
-                "additionalProperties": false,
-                "required": [
-                  "on"
-                ]
+                "additionalProperties": false
               },
               "gotoService": {
                 "type": "object",
@@ -579,12 +544,8 @@
                           "type": "string"
                         }
                       },
-                      "acl": {
-                        "type": "boolean"
-                      },
-                      "oauth": {
-                        "type": "boolean"
-                      }
+                      "acl": {},
+                      "oauth": {}
                     },
                     "additionalProperties": false,
                     "required": [
@@ -597,9 +558,7 @@
               "oauth": {
                 "type": "object",
                 "properties": {
-                  "deviceIdCheck": {
-                    "type": "boolean"
-                  }
+                  "deviceIdCheck": {}
                 },
                 "additionalProperties": false
               }

@@ -7,14 +7,18 @@ import (
 // RegistryData is the registry of one environment, built as the Node.js gateway builds it
 // (modules/registry/index.js). Its JSON is what /getRegistry gives services, after filtering.
 type RegistryData struct {
-	TimeLoaded  int64  `json:"timeLoaded"`
-	Name        string `json:"name"`
-	Environment string `json:"environment"`
-	Domain      string `json:"domain,omitempty"`
-	SitePrefix  string `json:"sitePrefix,omitempty"`
-	APIPrefix   string `json:"apiPrefix,omitempty"`
-	Protocol    string `json:"protocol,omitempty"`
-	Port        int    `json:"port,omitempty"`
+	// RawEnv are environment values a Node.js reading replaced, by JSON pointer in the
+	// environment document: registry dumps give them as Node.js does, the gateway decides on the
+	// reading.
+	RawEnv      map[string]interface{} `json:"-"`
+	TimeLoaded  int64                  `json:"timeLoaded"`
+	Name        string                 `json:"name"`
+	Environment string                 `json:"environment"`
+	Domain      string                 `json:"domain,omitempty"`
+	SitePrefix  string                 `json:"sitePrefix,omitempty"`
+	APIPrefix   string                 `json:"apiPrefix,omitempty"`
+	Protocol    string                 `json:"protocol,omitempty"`
+	Port        int                    `json:"port,omitempty"`
 	// CoreDB holds provision (from the profile) and every tenantSpecific:false database of the
 	// environment, by name.
 	CoreDB map[string]*dbconfig.DB `json:"coreDB"`
@@ -80,12 +84,15 @@ type FormatterConfig struct {
 
 // CORSConfig holds the CORS settings.
 type CORSConfig struct {
-	Enabled     bool   `json:"enabled"`
-	Origin      string `json:"origin"`
-	Credentials bool   `json:"credentials"`
-	Methods     string `json:"methods"`
-	Headers     string `json:"headers"`
-	MaxAge      int    `json:"maxage"`
+	// OriginRefused: the environment's origin is not a string Node.js would send as a valid
+	// header, so no Access-Control-Allow-Origin is sent (docs/data-schema/imperfect-data.md).
+	OriginRefused bool   `json:"-"`
+	Enabled       bool   `json:"enabled"`
+	Origin        string `json:"origin"`
+	Credentials   bool   `json:"credentials"`
+	Methods       string `json:"methods"`
+	Headers       string `json:"headers"`
+	MaxAge        int    `json:"maxage"`
 }
 
 // OAuthConfig holds the oauth settings.

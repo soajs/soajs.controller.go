@@ -58,17 +58,19 @@ var vars = map[string]string{
 	"TOKEN_LIST_AGENT": "a9e0000000000000000000000000000000000002",
 	"TOKEN_STG_AGENT":  "a9e0000000000000000000000000000000000003",
 	// the console key and urac tokens of the dashboard environment
-	"KEY_CONSOLE":      "5bbf311a30f4acaec52b7472be854cc92a688050ab8b4c65b32000cbc9699d1d3a106575479749cdb84c50721a91114c6b37466822a73afe81da0776a62d7660f95628343b1423d438eef3b40607777da2c6028b062e623f33ce704ed2d6c2fabfc8ce466e1a8887e8f9c16a566ca64c",
-	"TOKEN_U_OWNER":    "d0a0000000000000000000000000000000000001",
-	"TOKEN_U_PAUSED":   "d0a0000000000000000000000000000000000002",
-	"TOKEN_U_PENDING":  "d0a0000000000000000000000000000000000003",
-	"TOKEN_U_GHOST":    "d0a0000000000000000000000000000000000004",
-	"TOKEN_U_OUTSIDER": "d0a0000000000000000000000000000000000005",
-	"TOKEN_U_INVITED":  "d0a0000000000000000000000000000000000006",
-	"TOKEN_U_MOVED":    "d0a0000000000000000000000000000000000007",
-	"TOKEN_U_CONNECT":  "d0a000000000000000000000000000000000000b",
-	"TOKEN_U_MISSPKG":  "d0a000000000000000000000000000000000000c",
-	"TOKEN_U_MIXPKG":   "d0a000000000000000000000000000000000000d",
+	"KEY_CONSOLE":         "5bbf311a30f4acaec52b7472be854cc92a688050ab8b4c65b32000cbc9699d1d3a106575479749cdb84c50721a91114c6b37466822a73afe81da0776a62d7660f95628343b1423d438eef3b40607777da2c6028b062e623f33ce704ed2d6c2fabfc8ce466e1a8887e8f9c16a566ca64c",
+	"TOKEN_U_OWNER":       "d0a0000000000000000000000000000000000001",
+	"TOKEN_U_PAUSED":      "d0a0000000000000000000000000000000000002",
+	"TOKEN_U_PENDING":     "d0a0000000000000000000000000000000000003",
+	"TOKEN_U_GHOST":       "d0a0000000000000000000000000000000000004",
+	"TOKEN_U_OUTSIDER":    "d0a0000000000000000000000000000000000005",
+	"TOKEN_U_INVITED":     "d0a0000000000000000000000000000000000006",
+	"TOKEN_U_MOVED":       "d0a0000000000000000000000000000000000007",
+	"TOKEN_U_CONNECT":     "d0a000000000000000000000000000000000000b",
+	"TOKEN_U_MISSPKG":     "d0a000000000000000000000000000000000000c",
+	"TOKEN_U_MIXPKG":      "d0a000000000000000000000000000000000000d",
+	"TOKEN_U_BADROLE":     "d0a000000000000000000000000000000000000e",
+	"TOKEN_U_BADGOODROLE": "d0a000000000000000000000000000000000000f",
 	// dashboard tokens in the dev token database: roaming
 	"TOKEN_R_ROAMING": "d0a0000000000000000000000000000000000008",
 	"TOKEN_R_GONE":    "d0a0000000000000000000000000000000000009",
@@ -184,6 +186,66 @@ func TestConformance(t *testing.T) {
 	}
 
 	// the call events the dashboard gateway wrote (events are on there), compared with Node.js's
+	// Go only: after the cases, /schemaProblems lists the fixture's documents broken on purpose,
+	// and the missing packages the urac cases met, with locations and never values
+	t.Run("schema_problems", func(t *testing.T) {
+		if impl != "go" {
+			t.Skip("Go only")
+		}
+		want := map[string][]string{
+			maintenance: {
+				"tenants 6a0e00000000000000000004 /applications/0/keys/0/extKeys/0/device dropped piece",
+				"products 6a0e00000000000000000098 /packages/0/acl/dev/conform/1/get/apis/~1public~1hello/access read-as-node",
+				"marketplace 6a0e000000000000000000b4 /versions/0/interConnect read-as-node",
+			},
+			dashboardMaintenance: {
+				"custom_registry 6a0e000000000000000000d4 /value/gotoService/monitor dropped piece",
+				"users 6a0e0000000000000000009c /groupsConfig/allowedPackages/DSBRD data problem",
+				"users 6a0e0000000000000000009d /groupsConfig/allowedPackages/DSBRD data problem",
+				"groups 6a0e00000000000000000095 /config/allowedPackages/DSBRD fell back to key package",
+			},
+		}
+		for base, lines := range want {
+			if base == "" {
+				continue
+			}
+			resp, err := client.Get(base + "/schemaProblems")
+			if err != nil {
+				t.Fatal(err)
+			}
+			body, _ := io.ReadAll(resp.Body)
+			resp.Body.Close()
+			var answer struct {
+				Result bool `json:"result"`
+				Data   struct {
+					Problems []struct {
+						Collection string `json:"collection"`
+						ID         string `json:"_id"`
+						Path       string `json:"path"`
+						Action     string `json:"action"`
+					} `json:"problems"`
+				} `json:"data"`
+			}
+			if err := json.Unmarshal(body, &answer); err != nil || !answer.Result {
+				t.Fatalf("%s/schemaProblems: %v %s", base, err, body)
+			}
+			got := map[string]bool{}
+			for _, p := range answer.Data.Problems {
+				got[p.Collection+" "+p.ID+" "+p.Path+" "+p.Action] = true
+			}
+			for _, l := range lines {
+				if !got[l] {
+					t.Errorf("%s/schemaProblems lists %q: %s", base, l, body)
+				}
+			}
+			for _, secret := range []string{vars["KEY_BROKEN"], vars["KEY_CONSOLE"], "conformance oauth secret", "conformance fixture key"} {
+				if strings.Contains(string(body), secret) {
+					t.Errorf("%s/schemaProblems shows a value", base)
+				}
+			}
+		}
+	})
+
 	t.Run("call_events", func(t *testing.T) {
 		uri := os.Getenv("CONFORMANCE_MONGO_URI")
 		if uri == "" {

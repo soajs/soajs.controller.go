@@ -54,10 +54,10 @@
             "pattern": "^[A-Z0-9]+$"
           },
           "additionalProperties": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
+            "type": [
+              "array",
+              "string"
+            ]
           }
         },
         "allowedEnvironments": {

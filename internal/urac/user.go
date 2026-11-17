@@ -138,10 +138,6 @@ func (u *User) Init(ctx context.Context) (map[string]interface{}, error) {
 // .users) replaces a package by another. No package, or one that does not load, leaves the user
 // without an ACL; with several, a package that does not exist is skipped.
 func (u *User) resolveACL() {
-	if u.record[damagedGroups] == true {
-		u.acl = &ACL{ACL: map[string]interface{}{}, ACLAllEnv: map[string]interface{}{}}
-		return
-	}
 	allowed := u.AllowedPackages()
 	if allowed == nil {
 		return

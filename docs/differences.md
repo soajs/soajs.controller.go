@@ -25,7 +25,7 @@ Go reads only the latest data schema ([data-schema](data-schema/README.md)). A d
 - **mdaemon `/getRegistry`:** `?type=mdaemon` answers the daemon.
 - **Key order:** JSON key order in registry dumps can differ.
 - **`/schemaProblems`:** Go only. Lists the problems found in the data the gateway read ([imperfect-data](data-schema/imperfect-data.md#schemaproblems)); Node.js answers it as an unknown path, the heartbeat.
-- **Flags read with truthiness:** a non-boolean flag (a tenant's `locked`, a marketplace version's flags, the environment flags) is dumped and injected as a boolean; Node.js passes the value through.
+- **CORS origin that is not a string:** Go sends no `Access-Control-Allow-Origin`; Node.js sends the value as it is, which browsers refuse ([imperfect-data](data-schema/imperfect-data.md)).
 
 ## Awareness
 

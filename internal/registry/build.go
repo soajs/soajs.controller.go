@@ -2,6 +2,7 @@ package registry
 
 import (
 	"fmt"
+	"github.com/soajs/soajs.controller.go/internal/dataschema"
 	"strings"
 
 	"github.com/soajs/soajs.controller.go/internal/dbconfig"
@@ -250,7 +251,7 @@ func available(doc map[string]interface{}, envUpper string) bool {
 		return false
 	}
 	shared, _ := doc["sharedEnvs"].(map[string]interface{})
-	return shared[envUpper] == true
+	return dataschema.Truthy(shared[envUpper])
 }
 
 func contains(list []string, s string) bool {

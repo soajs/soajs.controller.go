@@ -1297,6 +1297,28 @@
     }
   },
   {
+    "name": "urac_group_unreadable_only",
+    "about": "dashboard: the user's only group has allowedPackages that cannot be read (a string): no packages, the key's package ACL applies (Node.js)",
+    "env": "dashboard",
+    "method": "GET",
+    "path": "/conform/v1/private/admin",
+    "headers": {
+      "key": "$KEY_CONSOLE",
+      "Authorization": "Bearer $TOKEN_U_BADROLE"
+    }
+  },
+  {
+    "name": "urac_group_unreadable_and_good",
+    "about": "dashboard: an unreadable group next to a readable one: the readable one's packages",
+    "env": "dashboard",
+    "method": "GET",
+    "path": "/conform/v1/private/admin",
+    "headers": {
+      "key": "$KEY_CONSOLE",
+      "Authorization": "Bearer $TOKEN_U_BADGOODROLE"
+    }
+  },
+  {
     "name": "urac_paused",
     "about": "dashboard: an inactive user is refused on the next call (146)",
     "env": "dashboard",

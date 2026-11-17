@@ -157,7 +157,6 @@
     "_id",
     "username",
     "status",
-    "tenant",
-    "groups"
+    "tenant"
   ]
 }

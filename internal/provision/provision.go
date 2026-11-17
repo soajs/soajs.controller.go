@@ -124,6 +124,9 @@ type MongoProvision struct {
 	packages  map[string]*packageEntry
 	oauths    map[string]*types.TenantOauth
 	codes     map[string]string
+	// tenantKeys are the keys each tenant gave at its last read, to forget those it no longer
+	// gives (a key, an application or the whole tenant left out, or removed).
+	tenantKeys map[string]map[string]bool
 
 	oauthModel *mongoOAuthModel
 }
@@ -144,6 +147,7 @@ func NewProvisionWithOAuthClient(client *mongo.Client, oauthClient *mongo.Client
 		keys:       map[string]*keyEntry{},
 		packages:   map[string]*packageEntry{},
 		oauths:     map[string]*types.TenantOauth{},
+		tenantKeys: map[string]map[string]bool{},
 		codes:      map[string]string{},
 		oauthModel: &mongoOAuthModel{db: oauthClient.Database(), env: envLower, logger: logger},
 	}
@@ -164,10 +168,19 @@ func (p *MongoProvision) LoadProvision() error {
 	if err := p.loadPackages(ctx, bson.M{}, ""); err != nil {
 		return err
 	}
-	if err := p.loadTenants(ctx, bson.M{}); err != nil {
+	produced, err := p.loadTenants(ctx, bson.M{})
+	if err != nil {
 		return err
 	}
 	dataschema.Problems.EndLoad("products", "tenants")
+	// keys of tenants that are gone are forgotten
+	p.mu.Lock()
+	for k := range p.keys {
+		if !produced[k] {
+			delete(p.keys, k)
+		}
+	}
+	p.mu.Unlock()
 	p.mu.RLock()
 	p.logger.Info("provision loaded", zap.Int("keys", len(p.keys)), zap.Int("packages", len(p.packages)), zap.Int("tenants", len(p.codes)))
 	p.mu.RUnlock()
@@ -203,9 +216,16 @@ func (p *MongoProvision) GetExternalKeyData(extKey string) (*types.Key, error) {
 	// extKey just added or renewed works at once.
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	if err := p.loadTenants(ctx, bson.M{"applications.keys.key": info.Key}); err != nil {
+	produced, err := p.loadTenants(ctx, bson.M{"applications.keys.key": info.Key})
+	if err != nil {
 		return nil, err
 	}
+	p.mu.Lock()
+	if !produced[info.Key] {
+		// no tenant gives the key any more, or it was left out: never the old entry
+		delete(p.keys, info.Key)
+	}
+	p.mu.Unlock()
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 	entry = p.keys[info.Key]
@@ -317,6 +337,7 @@ func (p *MongoProvision) GetTenantEnvExtKey(code, env string) (string, bool, err
 	}
 	var t tenantDoc
 	if !p.read(schema, dataschema.Tenants, raw, &t, nil) {
+		p.forgetTenant(dataschema.DocumentID(raw))
 		return "", false, nil
 	}
 	extKey := ""
@@ -345,7 +366,7 @@ func (p *MongoProvision) ensureTenant(tenantID string) error {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	if err := p.loadTenants(ctx, bson.M{"_id": oid}); err != nil {
+	if _, err := p.loadTenants(ctx, bson.M{"_id": oid}); err != nil {
 		return err
 	}
 	p.mu.RLock()
@@ -357,30 +378,58 @@ func (p *MongoProvision) ensureTenant(tenantID string) error {
 	return nil
 }
 
-// loadTenants reads tenants and caches their keys, oauth and code. A tenant that does not match
-// the data schema is logged by _id and skipped.
-func (p *MongoProvision) loadTenants(ctx context.Context, filter bson.M) error {
+// loadTenants reads tenants and caches their keys, oauth and code, and returns the keys they
+// give. A tenant read in part gives only the keys left; a tenant that cannot be read gives none
+// and its cached keys are forgotten (docs/data-schema/imperfect-data.md).
+func (p *MongoProvision) loadTenants(ctx context.Context, filter bson.M) (map[string]bool, error) {
 	schema, err := schemaFor("tenants")
 	if err != nil {
-		return err
+		return nil, err
 	}
 	cursor, err := p.db.Collection("tenants").Find(ctx, filter)
 	if err != nil {
-		return fmt.Errorf("tenants: %w", err)
+		return nil, fmt.Errorf("tenants: %w", err)
 	}
 	defer cursor.Close(ctx)
 	now := time.Now().UnixMilli()
+	produced := map[string]bool{}
 	for cursor.Next(ctx) {
 		var t tenantDoc
 		if !p.read(schema, dataschema.Tenants, cursor.Current, &t, nil) {
+			p.forgetTenant(dataschema.DocumentID(cursor.Current))
 			continue
 		}
-		p.ingestTenant(&t, now)
+		for k := range p.ingestTenant(&t, now) {
+			produced[k] = true
+		}
 	}
-	return cursor.Err()
+	return produced, cursor.Err()
 }
 
-func (p *MongoProvision) ingestTenant(t *tenantDoc, now int64) {
+// forgetTenant forgets the cached keys, oauth and code of a tenant that cannot be read.
+func (p *MongoProvision) forgetTenant(id string) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.forgetKeys(id, nil)
+	delete(p.tenantKeys, id)
+	delete(p.codes, id)
+	delete(p.oauths, id)
+}
+
+// forgetKeys forgets the cached keys the tenant gave before and does not give now. A key another
+// tenant gives now is not touched. The caller holds the lock.
+func (p *MongoProvision) forgetKeys(id string, now map[string]bool) {
+	for k := range p.tenantKeys[id] {
+		if now[k] {
+			continue
+		}
+		if e := p.keys[k]; e != nil && e.tenant.ID == id {
+			delete(p.keys, k)
+		}
+	}
+}
+
+func (p *MongoProvision) ingestTenant(t *tenantDoc, now int64) map[string]bool {
 	tenant := types.KeyTenant{
 		Name:    t.Name,
 		ID:      t.ID,
@@ -400,12 +449,18 @@ func (p *MongoProvision) ingestTenant(t *tenantDoc, now int64) {
 	defer p.mu.Unlock()
 	p.codes[t.ID] = t.Code
 	p.oauths[t.ID] = &oauth
+	keys := map[string]bool{}
+	defer func() {
+		p.forgetKeys(t.ID, keys)
+		p.tenantKeys[t.ID] = keys
+	}()
 	for _, app := range t.Applications {
 		for _, k := range app.Keys {
 			config, _ := k.Config[p.env].(map[string]interface{})
 			if config == nil {
 				config = map[string]interface{}{}
 			}
+			keys[k.Key] = true
 			p.keys[k.Key] = &keyEntry{
 				key:     k.Key,
 				tenant:  tenant,
@@ -417,6 +472,7 @@ func (p *MongoProvision) ingestTenant(t *tenantDoc, now int64) {
 			}
 		}
 	}
+	return keys
 }
 
 // loadPackages reads products and caches their packages, or only the package code when given.
@@ -445,7 +501,8 @@ func (p *MongoProvision) loadPackages(ctx context.Context, filter bson.M, code s
 			}
 			if d.Whole {
 				// a package that could not be read refuses everything, for keys and users
-				entries[c] = &packageEntry{pkg: types.Package{Code: c, ACL: map[string]interface{}{}, ACLAllEnv: map[string]interface{}{}, Damage: d}, loaded: now}
+				entries[c] = &packageEntry{pkg: types.Package{Code: c, ACL: map[string]interface{}{}, ACLAllEnv: map[string]interface{}{},
+					TTL: dataschema.UnreadableTTL, Damage: d}, loaded: now}
 				continue
 			}
 			if e := entries[c]; e != nil {
@@ -480,13 +537,9 @@ func packageEntries(prod *productDoc, env, code string, now int64) map[string]*p
 
 // read reads a document through its policy and reports what it found (/schemaProblems).
 func (p *MongoProvision) read(schema *dataschema.Collection, policy dataschema.Policy, raw bson.Raw, out interface{}, onRemove func(*dataschema.Reading, []string)) bool {
-	findings, ok, err := schema.ReadWith(raw, policy, out, onRemove)
-	if err != nil {
-		p.logger.Error("unable to read a document", zap.String("collection", schema.Name), zap.Error(err))
-		return false
-	}
-	dataschema.Problems.Report(p.logger, schema.Name, documentID(raw), findings)
-	return ok
+	res := schema.ReadWith(raw, policy, out, onRemove)
+	dataschema.Problems.ReportResult(p.logger, res)
+	return res.OK
 }
 
 // packageDamage records, by package code, the packages, environment ACLs and service ACLs that
@@ -522,16 +575,6 @@ func packageDamage(damage map[string]*types.PackageDamage) func(*dataschema.Read
 	}
 }
 
-// documentID is a document's _id as hex, for the logs.
-func documentID(raw bson.Raw) string {
-	if v, e := raw.LookupErr("_id"); e == nil {
-		if oid, ok := v.ObjectIDOK(); ok {
-			return oid.Hex()
-		}
-	}
-	return ""
-}
-
 // OAuthModel returns the access token store.
 func (p *MongoProvision) OAuthModel() OAuthModel {
 	return p.oauthModel
@@ -562,12 +605,9 @@ func (m *mongoOAuthModel) GetAccessToken(token string) (*types.AccessToken, erro
 		return nil, err
 	}
 	var t types.AccessToken
-	findings, ok, err := schema.Read(raw, dataschema.OAuthTokens, &t)
-	if err != nil {
-		return nil, err
-	}
-	dataschema.Problems.Report(m.logger, "oauth_token", documentID(raw), findings)
-	if !ok {
+	res := schema.Read(raw, dataschema.OAuthTokens, &t)
+	dataschema.Problems.ReportResult(m.logger, res)
+	if !res.OK {
 		return nil, nil
 	}
 	if t.Env != m.env && !registry.IsSensitiveEnv(t.Env) {

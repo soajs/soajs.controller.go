@@ -75,7 +75,7 @@ func with(path []string, more ...string) []string {
 var Tenants Policy = policyFuncs{prepare: prepareTenant, unit: tenantUnit}
 
 func prepareTenant(r *Reading) {
-	r.ReadBool(p("locked"), "soajs.controller mw/mt/index.js:218 (injected; JavaScript truthiness)")
+	r.ReadBool(p("locked"), "soajs.core.modules soajs.core/provision/mongo.js:310 (!!locked)")
 	if v, ok := r.Get("oauth", "disabled"); ok {
 		want := 0.0
 		if Truthy(v) {
@@ -108,6 +108,9 @@ func prepareTenant(r *Reading) {
 	}
 	apps, _ := r.Get("applications")
 	if list, isList := apps.([]interface{}); isList {
+		for i := range list {
+			readTTL(r, p("applications", strconv.Itoa(i), "_TTL"))
+		}
 		for _, i := range indexesDesc(list) {
 			app, _ := list[i].(map[string]interface{})
 			for _, old := range []string{"acl", "acl_all_env"} {
@@ -176,6 +179,44 @@ var aclMethods = []string{"get", "post", "put", "delete", "patch", "head", "opti
 // only when its _id or code cannot be read, or it has no packages list.
 var Products Policy = policyFuncs{prepare: prepareProduct, unit: productUnit}
 
+// UnreadableTTL is the cache time, in ms, of a package or key whose _TTL is not a number, and of a
+// package the gateway could not read: Node.js reloads such a package on every use (a NaN _TTL is
+// never fresh); Go reloads it after a minute, so a fix applies without /loadProvision.
+const UnreadableTTL = 60000
+
+// readTTL reads a _TTL as Node.js uses it in arithmetic: a numeric string is its number, anything
+// else reloads soon (soajs.core.modules soajs.provision/index.js:201-205).
+func readTTL(r *Reading, path []string) {
+	v, ok := r.Get(path...)
+	if !ok {
+		return
+	}
+	switch t := v.(type) {
+	case float64:
+		if t == float64(int64(t)) {
+			return
+		}
+		r.Set(path, float64(int64(t)))
+	case string:
+		if t == "" {
+			r.Set(path, 0.0)
+			break
+		}
+		if f, err := strconv.ParseFloat(t, 64); err == nil {
+			r.Set(path, float64(int64(f)))
+			break
+		}
+		r.Set(path, float64(UnreadableTTL))
+	default:
+		if !Truthy(v) {
+			r.Set(path, 0.0)
+			break
+		}
+		r.Set(path, float64(UnreadableTTL))
+	}
+	r.ReadAs(path, "soajs.core.modules soajs.provision/index.js:201-205 (_TTL in arithmetic: a numeric string is its number, NaN is never fresh)")
+}
+
 func prepareProduct(r *Reading) {
 	pkgs, _ := r.Get("packages")
 	list, isList := pkgs.([]interface{})
@@ -184,6 +225,7 @@ func prepareProduct(r *Reading) {
 	}
 	for i := range list {
 		pi := strconv.Itoa(i)
+		readTTL(r, p("packages", pi, "_TTL"))
 		acl, _ := r.Get("packages", pi, "acl")
 		envs, isMap := acl.(map[string]interface{})
 		if !isMap {
@@ -389,6 +431,10 @@ func prepareMarket(r *Reading) {
 					continue
 				}
 				if _, isBool := v.(bool); !isBool {
+					if Truthy(v) {
+						// value || false: a truthy value is kept as it is in the registry
+						r.Raw[MarketRawKey(ver["version"], flag)] = v
+					}
 					ver[flag] = Truthy(v)
 					r.ReadAs(p("versions", vi, flag), ref)
 				}
@@ -401,6 +447,13 @@ func prepareMarket(r *Reading) {
 			}
 		}
 	}
+}
+
+// MarketRawKey is the Result.Raw key of a version's flag: by version number, as versions may be
+// left out after the reading.
+func MarketRawKey(version interface{}, flag string) string {
+	v, _ := version.(string)
+	return "version:" + v + "/" + flag
 }
 
 func marketUnit(r *Reading, path []string) []string {
@@ -474,7 +527,7 @@ func prepareCustom(r *Reading) {
 	if envs, ok := r.Get("sharedEnvs"); ok {
 		if m, isMap := envs.(map[string]interface{}); isMap {
 			for _, env := range keysOf(m) {
-				r.ReadBool(p("sharedEnvs", env), "soajs.controller modules/registry/mongo.js:40, 52 (sharedEnvs[env], truthiness)")
+				r.NoteBool(p("sharedEnvs", env), "soajs.controller modules/registry/mongo.js:40, 52 (sharedEnvs[env], truthiness)")
 			}
 		}
 	}
@@ -487,11 +540,7 @@ func prepareCustom(r *Reading) {
 		if !isMap {
 			r.Drop(p("value", "maintenanceMode"), ref, ReadAsNode)
 		} else {
-			if _, has := m["on"]; !has {
-				m["on"] = false
-				r.ReadAs(p("value", "maintenanceMode", "on"), ref)
-			}
-			r.ReadBool(p("value", "maintenanceMode", "on"), ref)
+			r.NoteBool(p("value", "maintenanceMode", "on"), ref)
 			for _, f := range []string{"status", "message", "retryAfter"} {
 				if v, has := m[f]; has && !Truthy(v) {
 					delete(m, f)
@@ -519,18 +568,13 @@ func prepareCustom(r *Reading) {
 			if _, isList := m["ips"].([]interface{}); !isList {
 				r.Drop(p("value", "mt", "whitelist"), ref, ReadAsNode)
 			} else {
-				r.ReadBool(p("value", "mt", "whitelist", "acl"), ref)
-				r.ReadBool(p("value", "mt", "whitelist", "oauth"), ref)
+				r.NoteBool(p("value", "mt", "whitelist", "acl"), ref)
+				r.NoteBool(p("value", "mt", "whitelist", "oauth"), ref)
 			}
 		}
 	}
-	if v, ok := r.Get("value", "oauth", "deviceIdCheck"); ok {
-		if _, isBool := v.(bool); !isBool {
-			// on unless false (mw/oauth/index.js:60)
-			r.Set(p("value", "oauth", "deviceIdCheck"), true)
-			r.ReadAs(p("value", "oauth", "deviceIdCheck"), "soajs.controller mw/oauth/index.js:54-60 (on unless === false)")
-		}
-	}
+	// on unless false (mw/oauth/index.js:60): the gateway checks it the same way
+	r.NoteBool(p("value", "oauth", "deviceIdCheck"), "soajs.controller mw/oauth/index.js:54-60 (on unless === false)")
 }
 
 func customUnit(r *Reading, path []string) []string {
@@ -540,6 +584,12 @@ func customUnit(r *Reading, path []string) []string {
 	switch path[0] {
 	case "_id", "name", "created":
 		return nil
+	case "sharedEnvs":
+		if len(path) >= 2 {
+			// one environment's entry, never the others
+			return cut(path, 2)
+		}
+		return cut(path, 1)
 	case "value":
 		if len(path) == 1 {
 			return nil
@@ -547,8 +597,15 @@ func customUnit(r *Reading, path []string) []string {
 		name, _ := r.Get("name")
 		switch name {
 		case "gateway":
-			if len(path) >= 4 && path[1] == "traffic" && path[2] == "throttling" {
-				return cut(path, 4)
+			if path[1] == "traffic" {
+				// traffic restricts: one leaf at a time, ip2ban by address (prepareCustom)
+				if len(path) >= 4 && path[2] == "ip2ban" {
+					return cut(path, 4)
+				}
+				if len(path) >= 3 {
+					return cut(path, 3)
+				}
+				return cut(path, 2)
 			}
 			if len(path) >= 3 && path[1] == "maintenanceMode" && path[2] != "on" {
 				return cut(path, 3)
@@ -585,18 +642,76 @@ var envBooleans = []struct {
 	{p("services", "config", "oauth", "getUserFromToken"), "soajs.controller mw/mt/urac.js:41"},
 }
 
-// Environment: a field that cannot be read is left out on its own; the environment cannot be
-// read when its _id or code cannot be, or when a field it needs is left out.
+// envDroppable are the environment's fields that can be left out on their own: none of them
+// decides access. Any other field that cannot be read leaves the environment unread, so the
+// gateway never falls back to a default wider than the data (an origin of "*", the default key
+// password, open CORS methods): the registry is not built and the previous one stays.
+var envDroppable = [][]string{
+	p("description"), p("locked"), p("settings"),
+	p("services", "config", "logger"),
+	p("services", "config", "awareness"),
+	p("services", "controller", "requestTimeout"),
+	p("services", "controller", "requestTimeoutRenewal"),
+	p("services", "controller", "maxPoolSize"),
+}
+
+// CORSOriginRefused is the rule of a CORS origin the gateway does not send: Node.js sends the
+// value as it is, which browsers refuse.
+const CORSOriginRefused = "soajs.controller mw/cors/index.js:19, 26 (a origin that is not a string is sent as is, which browsers refuse; Go sends no Access-Control-Allow-Origin)"
+
+// Environment: a field that does not decide access is left out on its own (envDroppable); the
+// environment cannot be read when any other field cannot be.
 var Environment Policy = policyFuncs{prepare: prepareEnvironment, unit: func(r *Reading, path []string) []string {
-	if len(path) == 0 || path[0] == "_id" || path[0] == "code" {
-		return nil
+	for _, d := range envDroppable {
+		if HasPrefix(path, d) {
+			return cut(path, len(path))
+		}
 	}
-	return cut(path, len(path))
+	return nil
 }}
 
 func prepareEnvironment(r *Reading) {
 	for _, b := range envBooleans {
 		r.ReadBool(b.path, b.ref+" (truthiness)")
+	}
+	corsPath := p("services", "config", "cors")
+	if origin, ok := r.Get(with(corsPath, "origin")...); ok {
+		if _, isString := origin.(string); !isString {
+			r.Raw[Pointer(with(corsPath, "origin"))] = origin
+			list, isList := origin.([]interface{})
+			one, _ := firstString(list)
+			switch {
+			case !Truthy(origin):
+				r.Drop(with(corsPath, "origin"), "soajs.controller mw/cors/index.js:19 (origin || '*')", ReadAsNode)
+			case isList && len(list) == 1 && one != "":
+				r.Set(with(corsPath, "origin"), one)
+				r.ReadAs(with(corsPath, "origin"), "soajs.controller mw/cors/index.js:26 (a list of one origin is that header)")
+			default:
+				r.Drop(with(corsPath, "origin"), CORSOriginRefused, ReadAsNode)
+			}
+		}
+	}
+	for _, field := range []string{"methods", "headers"} {
+		v, _ := r.Get(with(corsPath, field)...)
+		if list, isList := v.([]interface{}); isList {
+			if joined, ok := joinStrings(list); ok {
+				r.Set(with(corsPath, field), joined)
+				r.ReadAs(with(corsPath, field), "soajs.controller mw/cors/index.js:29-37 (a list is sent as one header line per item)")
+			}
+		}
+	}
+	readNumber(r, with(corsPath, "maxage"), "soajs.controller mw/cors/index.js:23, 30 (maxage, a number in the header)")
+	if th, ok := r.Get("services", "config", "throttling"); ok {
+		if m, isMap := th.(map[string]interface{}); isMap {
+			for _, name := range keysOf(m) {
+				if _, isStrategy := m[name].(map[string]interface{}); !isStrategy {
+					continue
+				}
+				for _, f := range []string{"type", "window", "limit", "retries", "delay"} {
+					readNumber(r, p("services", "config", "throttling", name, f), "soajs.controller mw/traffic (a numeric string is used as a number)")
+				}
+			}
+		}
 	}
 	dbs, _ := r.Get("dbs", "databases")
 	if m, isMap := dbs.(map[string]interface{}); isMap {
@@ -606,22 +721,67 @@ func prepareEnvironment(r *Reading) {
 	}
 }
 
+// readNumber reads a numeric string as the number Node.js uses in arithmetic.
+func readNumber(r *Reading, path []string, ref string) {
+	v, ok := r.Get(path...)
+	if !ok {
+		return
+	}
+	s, isString := v.(string)
+	if !isString {
+		return
+	}
+	f, err := strconv.ParseFloat(s, 64)
+	if err != nil {
+		return
+	}
+	r.Raw[Pointer(path)] = v
+	r.Set(path, f)
+	r.ReadAs(path, ref)
+}
+
+func firstString(list []interface{}) (string, bool) {
+	if len(list) == 0 {
+		return "", false
+	}
+	s, ok := list[0].(string)
+	return s, ok
+}
+
+func joinStrings(list []interface{}) (string, bool) {
+	out := ""
+	for i, e := range list {
+		s, ok := e.(string)
+		if !ok {
+			return "", false
+		}
+		if i > 0 {
+			out += ", "
+		}
+		out += s
+	}
+	return out, len(list) > 0
+}
+
 // ---------------------------------------------------------------------------------------------
 // users and groups
 
-// Users: an invitation (config.allowedTenants[] item), a config.keys entry or a membership is left
-// out on its own. The user cannot be read when its _id, username, status, tenant or groups cannot
-// be: without its groups the user would get the key's package ACL.
+// Users: an invitation (config.allowedTenants[] item), a membership, or groups that cannot be read
+// are left out on their own; without groups, as Node.js, the key's package ACL applies. The user
+// cannot be read when its _id, username, status, tenant or a config.keys entry cannot be: a
+// config.keys entry overrides the key's configuration.
 var Users Policy = policyFuncs{prepare: prepareUser, unit: func(r *Reading, path []string) []string {
 	if len(path) == 0 {
 		return nil
 	}
 	switch path[0] {
 	case "config":
-		if len(path) >= 3 && (path[1] == "allowedTenants" || path[1] == "keys") {
+		// a config.keys entry overrides the key's configuration, gateway settings included: it is
+		// never left out, the user is not read
+		if len(path) >= 3 && path[1] == "allowedTenants" {
 			return cut(path, 3)
 		}
-		if len(path) == 2 && (path[1] == "allowedTenants" || path[1] == "keys") {
+		if len(path) == 2 && path[1] == "allowedTenants" {
 			return cut(path, 2)
 		}
 		return nil
@@ -629,6 +789,9 @@ var Users Policy = policyFuncs{prepare: prepareUser, unit: func(r *Reading, path
 		if len(path) >= 2 {
 			return cut(path, 2)
 		}
+		return cut(path, 1)
+	case "groups":
+		// no roles: as Node.js, the key's package ACL applies (reported as falling back)
 		return cut(path, 1)
 	case "email", "phone", "firstName", "lastName", "profile":
 		return cut(path, 1)
@@ -644,12 +807,67 @@ func prepareUser(r *Reading) {
 	}
 }
 
-// Groups: a group cannot be read in part. Its allowedPackages decide the user's ACL: a group whose
-// packages cannot be read refuses the user everything under the product, rather than giving the
-// key's package ACL. Only allowedEnvironments, which the gateway does not use, is left out alone.
-var Groups Policy = policyFuncs{unit: func(r *Reading, path []string) []string {
+// Groups: a product's allowedPackages that cannot be read is left out, and a group that cannot be
+// read gives no packages: as Node.js, the key's package ACL applies when nothing else gives one.
+// allowedEnvironments, which the gateway does not use, is left out alone.
+var Groups Policy = policyFuncs{prepare: prepareGroup, unit: func(r *Reading, path []string) []string {
 	if len(path) >= 2 && path[0] == "config" && path[1] == "allowedEnvironments" {
 		return cut(path, 2)
 	}
+	if len(path) >= 3 && path[0] == "config" && path[1] == "allowedPackages" {
+		return cut(path, 3)
+	}
 	return nil
 }}
+
+// ---------------------------------------------------------------------------------------------
+
+// PolicyFor is the policy that reads a collection: the gateway, /schemaProblems and schemacheck
+// read every document the same way.
+func PolicyFor(coll string) Policy {
+	switch coll {
+	case "tenants":
+		return Tenants
+	case "products":
+		return Products
+	case "marketplace":
+		return Marketplace
+	case "custom_registry":
+		return CustomRegistry
+	case "environment":
+		return Environment
+	case "users":
+		return Users
+	case "groups":
+		return Groups
+	case "oauth_token":
+		return OAuthTokens
+	}
+	return WholeDocument
+}
+
+// prepareGroup reads allowedPackages as the urac driver merges it (lib/user.js:299-316): a list or a
+// string is kept as it is (a string alone is not a list of packages, so the key's package ACL
+// applies; next to another group's list, its characters are merged in); any other value cannot
+// be merged and is left out. Both fall back to the key's package.
+func prepareGroup(r *Reading) {
+	const ref = "soajs.urac.driver lib/user.js:299-316 (allowedPackages merged as [...new Set([...a, ...b])]); soajs.controller mw/mt/urac.js:153-180"
+	v, ok := r.Get("config", "allowedPackages")
+	if !ok {
+		return
+	}
+	m, isMap := v.(map[string]interface{})
+	if !isMap {
+		r.Drop(p("config", "allowedPackages"), ref, FellBackToKeyPackage)
+		return
+	}
+	for _, product := range keysOf(m) {
+		switch m[product].(type) {
+		case []interface{}:
+		case string:
+			r.add(p("config", "allowedPackages", product), ref, FellBackToKeyPackage, nil)
+		default:
+			r.Drop(p("config", "allowedPackages", product), ref, FellBackToKeyPackage)
+		}
+	}
+}

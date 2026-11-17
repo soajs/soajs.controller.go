@@ -15,12 +15,13 @@ import (
 
 func newTestProvision() *MongoProvision {
 	return &MongoProvision{
-		logger:   zap.NewNop(),
-		env:      "dev",
-		keys:     map[string]*keyEntry{},
-		packages: map[string]*packageEntry{},
-		oauths:   map[string]*types.TenantOauth{},
-		codes:    map[string]string{},
+		logger:     zap.NewNop(),
+		env:        "dev",
+		keys:       map[string]*keyEntry{},
+		packages:   map[string]*packageEntry{},
+		oauths:     map[string]*types.TenantOauth{},
+		codes:      map[string]string{},
+		tenantKeys: map[string]map[string]bool{},
 	}
 }
 
@@ -102,8 +103,8 @@ func TestKeyDataEmptyRestrictions(t *testing.T) {
 		t.Fatal(err)
 	}
 	var tenant tenantDoc
-	if findings, ok, err := schema.Read(raw, dataschema.Tenants, &tenant); err != nil || !ok || len(findings) != 0 {
-		t.Fatalf("device and geo {} must decode: %v %v %v", findings, ok, err)
+	if res := schema.Read(raw, dataschema.Tenants, &tenant); !res.OK || len(res.Findings) != 0 {
+		t.Fatalf("device and geo {} must decode: %+v", res)
 	}
 	p := newTestProvision()
 	now := time.Now().UnixMilli()

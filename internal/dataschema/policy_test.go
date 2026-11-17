@@ -4,7 +4,10 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
+
+	"go.mongodb.org/mongo-driver/bson"
 )
 
 // fixtureDoc is a document of the conformance fixture, as extended JSON values.
@@ -90,17 +93,32 @@ func TestCustomRegistryGatewayFeatures(t *testing.T) {
 	if v["events"] != nil || v["mcp"] == nil || v["future"] != nil {
 		t.Errorf("one feature left out, the others kept: %s", asJSON(v))
 	}
-	if dig(v, "maintenanceMode", "on") != true || dig(v, "maintenanceMode", "status") != nil || dig(v, "maintenanceMode", "message") != nil {
+	// raw values are kept, the gateway reads them with truthiness as Node.js does
+	if dig(v, "maintenanceMode", "on") != "yes" || dig(v, "maintenanceMode", "status") != nil || dig(v, "maintenanceMode", "message") != nil {
 		t.Errorf("maintenance mode stays on: %s", asJSON(v["maintenanceMode"]))
 	}
-	if asJSON(dig(v, "traffic", "ip2ban")) != `["1.2.3.4"]` || dig(v, "traffic", "throttling", "bad") != nil || dig(v, "traffic", "throttling", "good") == nil {
+	// throttling is read as Node.js reads it, whatever its shape (mw/traffic/index.js:150-170)
+	if asJSON(dig(v, "traffic", "ip2ban")) != `["1.2.3.4"]` || dig(v, "traffic", "throttling", "bad") == nil || dig(v, "traffic", "throttling", "good") == nil {
 		t.Errorf("traffic: %s", asJSON(v["traffic"]))
 	}
-	if dig(v, "oauth", "deviceIdCheck") != true || dig(v, "mt", "whitelist") != nil {
-		t.Errorf("deviceIdCheck on unless false; a whitelist without an ips list is none: %s", asJSON(v))
+	if dig(v, "oauth", "deviceIdCheck") != "no" || dig(v, "mt", "whitelist") != nil || !has(findings, "/value/oauth/deviceIdCheck", ReadAsNode) {
+		t.Errorf("deviceIdCheck kept (on unless false); a whitelist without an ips list is none: %s", asJSON(v))
 	}
 	if !has(findings, "/value/future", IgnoredField) {
 		t.Errorf("findings: %+v", findings)
+	}
+	// ip2ban is never lost with a broken neighbour in traffic, nor without a model
+	for _, traffic := range []string{`"ip2ban":["1.2.3.4"],"model":5,"throttling":"x"`, `"ip2ban":["1.2.3.4"]`, `"ip2ban":["1.2.3.4"],"model":"redis","future":1`} {
+		_, ok, out := readDoc(t, "custom_registry", CustomRegistry, fmtDoc(gatewayBase, `"traffic":{`+traffic+`}`))
+		if !ok || asJSON(dig(out, "value", "traffic", "ip2ban")) != `["1.2.3.4"]` {
+			t.Errorf("%s: ip2ban kept: %v %s", traffic, ok, asJSON(out))
+		}
+	}
+	// one bad sharedEnvs key leaves out that key only
+	findings, ok, out = readDoc(t, "custom_registry", CustomRegistry, `{"_id":{"$oid":"6a0e000000000000000000d3"},"name":"x","created":"DEV",
+		"shared":true,"sharedEnvs":{"prod":true,"STG":true,"QA":"yes"},"value":{}}`)
+	if !ok || dig(out, "sharedEnvs", "prod") != nil || dig(out, "sharedEnvs", "STG") != true || dig(out, "sharedEnvs", "QA") != "yes" {
+		t.Errorf("sharedEnvs: %v %+v %s", ok, findings, asJSON(out))
 	}
 	// the urac entry: masterDB is needed, an access resolver is left out alone
 	_, ok, out = readDoc(t, "custom_registry", CustomRegistry, `{"_id":{"$oid":"6a0e000000000000000000d2"},"name":"urac","created":"DEV",
@@ -132,6 +150,36 @@ func TestEnvironmentField(t *testing.T) {
 	if !has(findings, "/description", DroppedPiece) || !has(findings, "/services/config/cors/credentials", ReadAsNode) {
 		t.Errorf("findings: %+v", findings)
 	}
+	// CORS origin: Node.js sends it as it is; a list of one origin is that origin, anything else
+	// is refused, never "*"
+	for origin, want := range map[string]interface{}{`["https://a.example"]`: "https://a.example", `["https://a.example","https://b.example"]`: nil, `5`: nil, `false`: nil} {
+		e := fixtureDoc(t, "environment", 0)
+		cors := e["services"].(map[string]interface{})["config"].(map[string]interface{})["cors"].(map[string]interface{})
+		var v interface{}
+		_ = json.Unmarshal([]byte(origin), &v)
+		cors["origin"] = v
+		findings, ok, out := readDoc(t, "environment", Environment, asJSON(e))
+		got := dig(out, "services", "config", "cors", "origin")
+		refused := false
+		for _, f := range findings {
+			refused = refused || f.Rule == CORSOriginRefused
+		}
+		if !ok || got != want || refused != (origin != `false` && want == nil) {
+			t.Errorf("origin %s: %v %v refused %v", origin, ok, got, refused)
+		}
+	}
+	// a field that decides access is never left out to a default
+	for _, broken := range []func(map[string]interface{}){
+		func(c map[string]interface{}) { c["key"].(map[string]interface{})["password"] = 5.0 },
+		func(c map[string]interface{}) { c["cors"].(map[string]interface{})["methods"] = 5.0 },
+		func(c map[string]interface{}) { c["oauth"].(map[string]interface{})["grants"] = "password" },
+	} {
+		e := fixtureDoc(t, "environment", 0)
+		broken(e["services"].(map[string]interface{})["config"].(map[string]interface{}))
+		if findings, ok, _ := readDoc(t, "environment", Environment, asJSON(e)); ok {
+			t.Errorf("not read: %+v", findings)
+		}
+	}
 	delete(services, "config")
 	if findings, ok, _ := readDoc(t, "environment", Environment, asJSON(env)); ok || findings[len(findings)-1].Action != SkippedDocument {
 		t.Errorf("an environment without a field the gateway needs cannot be read: %+v", findings)
@@ -145,13 +193,32 @@ func TestUsersAndGroupsUnits(t *testing.T) {
 	if !ok || len(dig(out, "config", "allowedTenants").([]interface{})) != 1 {
 		t.Errorf("one invitation left out: %v %+v", ok, findings)
 	}
-	if _, ok, _ := readDoc(t, "users", Users, `{"_id":{"$oid":"6a0e000000000000000000b7"},"username":"u","status":"active",
-		"tenant":{"id":"6a0e00000000000000000001","code":"CONF"},"groups":"g"}`); ok {
-		t.Error("without its groups the user cannot be read")
+	// groups that cannot be read are left out: as Node.js, the key's package ACL applies
+	if _, ok, out := readDoc(t, "users", Users, `{"_id":{"$oid":"6a0e000000000000000000b7"},"username":"u","status":"active",
+		"tenant":{"id":"6a0e00000000000000000001","code":"CONF"},"groups":"g"}`); !ok || out["groups"] != nil {
+		t.Error("a user whose groups cannot be read is read without them")
 	}
 	group := `{"_id":{"$oid":"6a0e000000000000000000c7"},"code":"g","tenant":{"id":"6a0e00000000000000000002","code":"DBTN"},"config":{%s}}`
-	if _, ok, _ := readDoc(t, "groups", Groups, fmtDoc(group, `"allowedPackages":{"P":"P_D"}`)); ok {
-		t.Error("a group whose packages cannot be read is not read in part")
+	// as the urac driver merges them: a string is kept, any other value is left out; both fall back
+	findings, ok, out = readDoc(t, "groups", Groups, fmtDoc(group, `"allowedPackages":{"P":"P_D","Q":["Q_D"],"R":5}`))
+	if !ok || dig(out, "config", "allowedPackages", "P") != "P_D" || dig(out, "config", "allowedPackages", "Q") == nil ||
+		dig(out, "config", "allowedPackages", "R") != nil || !has(findings, "/config/allowedPackages/P", FellBackToKeyPackage) ||
+		!has(findings, "/config/allowedPackages/R", FellBackToKeyPackage) {
+		t.Errorf("allowedPackages: %v %+v %s", ok, findings, asJSON(out))
+	}
+	if _, ok, _ := readDoc(t, "groups", Groups, fmtDoc(group, `"allowedPackages":["P_D"]`)); ok {
+		t.Error("a group whose allowedPackages is not a map cannot be read")
+	}
+	// a user's config.keys entry is never left out, and its internal key never shows
+	findings, ok, _ = readDoc(t, "users", Users, `{"_id":{"$oid":"6a0e000000000000000000b7"},"username":"u","status":"active",
+		"tenant":{"id":"6a0e00000000000000000001","code":"CONF"},"groups":[],"config":{"keys":{"3d1e2f3a4b5c6d7e8f90a1b2c3d4e5f6":{"config":5}}}}`)
+	if ok {
+		t.Error("a user whose config.keys entry cannot be read is not read")
+	}
+	for _, f := range findings {
+		if strings.Contains(f.Path+f.Piece+f.Rule, "3d1e2f3a") {
+			t.Errorf("a key in a finding: %+v", f)
+		}
 	}
 	if _, ok, out := readDoc(t, "groups", Groups, fmtDoc(group, `"allowedPackages":{"P":["P_D"]},"allowedEnvironments":5`)); !ok || dig(out, "config", "allowedEnvironments") != nil {
 		t.Error("allowedEnvironments is left out alone")
@@ -172,5 +239,31 @@ func TestUsersAndGroupsUnits(t *testing.T) {
 		`{"_id":{"$oid":"6a0e000000000000000000f9"},"token":"c0f0000000000000000000000000000000000001","type":"accessToken","clientId":"c","env":"dev","expires":{"$date":"2099-01-01T00:00:00Z"},
 		"user":{"_id":{"$oid":"6a0e000000000000000000b7"},"username":"u","loginMode":"urac","deviceId":null,"tenant":{"id":"6a0e00000000000000000001","code":"CONF"}}}`); ok {
 		t.Error("a token without its user's id is refused")
+	}
+}
+
+// A value the schema allows but the gateway's type does not is reported with the _id, never lost.
+func TestDecodeFailureReported(t *testing.T) {
+	c := load(t)["tenants"]
+	var d bson.D
+	if err := bson.UnmarshalExtJSON([]byte(`{"_id":{"$oid":"6a0e00000000000000000003"},"code":"T","type":"product"}`), false, &d); err != nil {
+		t.Fatal(err)
+	}
+	raw, _ := bson.Marshal(d)
+	var wrong struct {
+		Code int `json:"code"`
+	}
+	res := c.Read(raw, Tenants, &wrong)
+	if res.OK || res.ID != "6a0e00000000000000000003" || len(res.Findings) != 1 || res.Findings[0].Action != SkippedDocument ||
+		!strings.Contains(res.Findings[0].Rule, "code") || strings.Contains(res.Findings[0].Rule, `"T"`) {
+		t.Errorf("%+v", res)
+	}
+	// a string _id never takes an ObjectId's key
+	if err := bson.UnmarshalExtJSON([]byte(`{"_id":"6a0e00000000000000000003","code":"T","type":"product"}`), false, &d); err != nil {
+		t.Fatal(err)
+	}
+	raw, _ = bson.Marshal(d)
+	if id := DocumentID(raw); id != `"6a0e00000000000000000003"` {
+		t.Errorf("string _id: %s", id)
 	}
 }

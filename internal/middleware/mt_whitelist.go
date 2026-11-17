@@ -88,12 +88,9 @@ func getMTWhitelistConfig(regData *types.RegistryData) *MTWhitelistConfig {
 		}
 	}
 
-	if acl, ok := whitelist["acl"].(bool); ok {
-		config.ACL = acl
-	}
-	if oauth, ok := whitelist["oauth"].(bool); ok {
-		config.OAuth = oauth
-	}
+	// truthiness, as Node.js reads them (mw/mt/utils.js:285-291)
+	config.ACL = truthy(whitelist["acl"])
+	config.OAuth = truthy(whitelist["oauth"])
 
 	return config
 }

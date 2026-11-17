@@ -2,7 +2,7 @@ package dataschema
 
 import (
 	"encoding/json"
-	"fmt"
+	"errors"
 	"sort"
 	"strconv"
 	"strings"
@@ -28,6 +28,10 @@ const (
 	SkippedDocument Action = "skipped document"
 	// DataProblem: the document matches the schema but refers to something that does not exist.
 	DataProblem Action = "data problem"
+	// FellBackToKeyPackage: a user's roles could not be read (its groups, a group, or a group's
+	// allowedPackages entry); as Node.js, they give no packages, and the key's package ACL applies
+	// when nothing else gives one.
+	FellBackToKeyPackage Action = "fell back to key package"
 )
 
 // Finding is one problem in one document and what the gateway did with it. It names locations
@@ -60,8 +64,24 @@ type Reading struct {
 	ID         string
 	Doc        map[string]interface{}
 	Findings   []Finding
+	// Raw are the values a Node.js reading replaced, by JSON pointer.
+	Raw map[string]interface{}
 	// onRemove sees each piece just before it is left out.
 	onRemove func(r *Reading, piece []string)
+}
+
+// Result is what reading one document gave.
+type Result struct {
+	Collection string
+	// ID is the document's _id: the hex of an ObjectId, else the value quoted, so a string _id
+	// never takes an ObjectId's place.
+	ID       string
+	Findings []Finding
+	// OK: the document was read, possibly in part, and decoded.
+	OK bool
+	// Raw are the values a Node.js reading replaced, by JSON pointer: where Node.js passes a value
+	// through (injected or dumped), the gateway passes the raw one, and decides on the reading.
+	Raw map[string]interface{}
 }
 
 // Get returns the value at path, and whether it is there.
@@ -120,9 +140,9 @@ func (r *Reading) Drop(path []string, rule string, action Action) {
 }
 
 func (r *Reading) add(path []string, rule string, action Action, piece []string) {
-	f := Finding{Collection: r.Collection, ID: r.ID, Path: Pointer(path), Rule: rule, Action: action}
-	if piece != nil && Pointer(piece) != f.Path {
-		f.Piece = Pointer(piece)
+	f := Finding{Collection: r.Collection, ID: r.ID, Path: Pointer(redact(r.Collection, path)), Rule: rule, Action: action}
+	if piece != nil && Pointer(piece) != Pointer(path) {
+		f.Piece = Pointer(redact(r.Collection, piece))
 	}
 	r.Findings = append(r.Findings, f)
 }
@@ -171,6 +191,16 @@ func pathAfter(a, b []string) bool {
 	return len(a) > len(b)
 }
 
+// redact hides the map keys that are keys: a user's config.keys are keyed by internal key.
+func redact(coll string, path []string) []string {
+	if coll == "users" && len(path) >= 3 && path[0] == "config" && path[1] == "keys" {
+		out := append([]string{}, path...)
+		out[2] = "<redacted>"
+		return out
+	}
+	return path
+}
+
 // Pointer is the JSON pointer of path.
 func Pointer(path []string) string {
 	var b strings.Builder
@@ -211,40 +241,58 @@ const maxPasses = 64
 
 // Read reads a raw BSON document through the policy: the Node.js readings first, then every
 // piece that still does not match is left out, the smallest first, and fields the spec does not
-// list are ignored. It decodes what is left into out and returns ok. When the document cannot
-// be read at all it returns ok false and leaves out untouched. The findings name locations
-// only.
-func (c *Collection) Read(raw bson.Raw, p Policy, out interface{}) (findings []Finding, ok bool, err error) {
+// list are ignored. It decodes what is left into out. A document that cannot be read, or decoded,
+// is not OK and out is untouched; the findings say why, with the _id. They name locations only.
+func (c *Collection) Read(raw bson.Raw, p Policy, out interface{}) Result {
 	return c.ReadWith(raw, p, out, nil)
 }
 
 // ReadWith is Read with a function that sees each piece just before it is left out, with the
 // document as it is then.
-func (c *Collection) ReadWith(raw bson.Raw, p Policy, out interface{}, onRemove func(r *Reading, piece []string)) (findings []Finding, ok bool, err error) {
+func (c *Collection) ReadWith(raw bson.Raw, p Policy, out interface{}, onRemove func(r *Reading, piece []string)) Result {
+	r := &Reading{Collection: c.Name, ID: DocumentID(raw), Raw: map[string]interface{}{}, onRemove: onRemove}
+	res := func(ok bool) Result {
+		return Result{Collection: c.Name, ID: r.ID, Findings: r.Findings, OK: ok, Raw: r.Raw}
+	}
 	ext, err := bson.MarshalExtJSON(raw, false, false)
 	if err != nil {
-		return nil, false, err
+		r.add(nil, "not readable as BSON", SkippedDocument, nil)
+		return res(false)
 	}
 	var v interface{}
 	if err := json.Unmarshal(ext, &v); err != nil {
-		return nil, false, err
+		r.add(nil, "not readable as JSON", SkippedDocument, nil)
+		return res(false)
 	}
 	doc, isMap := v.(map[string]interface{})
 	if !isMap {
-		return nil, false, fmt.Errorf("%s: not a document", c.Name)
+		r.add(nil, "not a document", SkippedDocument, nil)
+		return res(false)
 	}
-	r := &Reading{Collection: c.Name, ID: documentID(raw), Doc: doc, onRemove: onRemove}
+	r.Doc = doc
 	if !c.read(r, p) {
-		return r.Findings, false, nil
+		return res(false)
 	}
 	plain, err := json.Marshal(Plain(r.Doc))
 	if err != nil {
-		return r.Findings, false, err
+		r.add(nil, "not encodable", SkippedDocument, nil)
+		return res(false)
 	}
 	if err := json.Unmarshal(plain, out); err != nil {
-		return r.Findings, false, err
+		// a value the schema allows but the gateway's type does not: a gap in the schema
+		r.add(nil, "decode: "+decodeError(err), SkippedDocument, nil)
+		return res(false)
 	}
-	return r.Findings, true, nil
+	return res(true)
+}
+
+// decodeError names the field and the types of a decode error, never the value.
+func decodeError(err error) string {
+	var te *json.UnmarshalTypeError
+	if errors.As(err, &te) {
+		return "the value of " + te.Field + " is a JSON " + te.Value + ", the gateway reads a " + te.Type.String()
+	}
+	return "the document does not decode"
 }
 
 func (c *Collection) read(r *Reading, p Policy) bool {
@@ -497,8 +545,9 @@ func sortedKeys(m map[string]interface{}) []string {
 	return keys
 }
 
-// documentID is the document's _id as a hex string, or its string form.
-func documentID(raw bson.Raw) string {
+// DocumentID is the document's _id: the hex of an ObjectId, else the value quoted, so a string
+// _id never takes an ObjectId's key.
+func DocumentID(raw bson.Raw) string {
 	v, err := raw.LookupErr("_id")
 	if err != nil {
 		return ""
@@ -507,9 +556,9 @@ func documentID(raw bson.Raw) string {
 		return oid.Hex()
 	}
 	if s, ok := v.StringValueOK(); ok {
-		return s
+		return strconv.Quote(s)
 	}
-	return ""
+	return v.String()
 }
 
 // Truthy is JavaScript truthiness for a decoded JSON value.
@@ -542,6 +591,20 @@ func Truthy(v interface{}) bool {
 	return true
 }
 
+// NoteBool records that a value the gateway reads with JavaScript truthiness is not a boolean.
+// The value is left as it is: the gateway passes it through where Node.js does, and decides on its
+// truthiness.
+func (r *Reading) NoteBool(path []string, nodeRef string) {
+	v, ok := r.Get(path...)
+	if !ok {
+		return
+	}
+	if _, isBool := v.(bool); isBool {
+		return
+	}
+	r.ReadAs(path, nodeRef)
+}
+
 // ReadBool reads the value at path as a JavaScript boolean when it is not already one, recording
 // the reading with the Node.js line it follows. A missing value is left missing.
 func (r *Reading) ReadBool(path []string, nodeRef string) {
@@ -552,6 +615,7 @@ func (r *Reading) ReadBool(path []string, nodeRef string) {
 	if _, isBool := v.(bool); isBool {
 		return
 	}
+	r.Raw[Pointer(path)] = v
 	r.Set(path, Truthy(v))
 	r.ReadAs(path, nodeRef)
 }

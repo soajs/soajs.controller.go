@@ -73,9 +73,8 @@ func getMaintenanceModeConfig(regData *types.RegistryData) *MaintenanceModeConfi
 
 	cfg := &MaintenanceModeConfig{}
 
-	if on, ok := mmData["on"].(bool); ok {
-		cfg.On = on
-	}
+	// truthiness, as Node.js reads maintenanceMode.on (mw/maintenanceMode/index.js:18)
+	cfg.On = truthy(mmData["on"])
 	if status, ok := mmData["status"].(float64); ok {
 		cfg.Status = int(status)
 	}
