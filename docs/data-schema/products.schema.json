@@ -24,16 +24,11 @@
       "type": "string",
       "pattern": "^[A-Z0-9]+$"
     },
-    "name": {
-      "type": "string",
-      "minLength": 1
-    },
+    "name": {},
     "description": {
       "type": "string"
     },
-    "console": {
-      "type": "boolean"
-    },
+    "console": {},
     "locked": {
       "type": "boolean"
     },
@@ -47,10 +42,7 @@
             "type": "string",
             "pattern": "^[A-Z0-9]+_[A-Z0-9_]+$"
           },
-          "name": {
-            "type": "string",
-            "minLength": 1
-          },
+          "name": {},
           "description": {
             "type": "string"
           },
@@ -66,15 +58,7 @@
               "type": "string"
             }
           },
-          "aclTypeByEnv": {
-            "type": "object",
-            "propertyNames": {
-              "pattern": "^[a-z0-9]+$"
-            },
-            "additionalProperties": {
-              "const": "granular"
-            }
-          },
+          "aclTypeByEnv": {},
           "acl": {
             "type": "object",
             "propertyNames": {
@@ -289,43 +273,6 @@
                   "additionalProperties": false,
                   "required": [
                     "access"
-                  ],
-                  "anyOf": [
-                    {
-                      "required": [
-                        "get"
-                      ]
-                    },
-                    {
-                      "required": [
-                        "post"
-                      ]
-                    },
-                    {
-                      "required": [
-                        "put"
-                      ]
-                    },
-                    {
-                      "required": [
-                        "delete"
-                      ]
-                    },
-                    {
-                      "required": [
-                        "patch"
-                      ]
-                    },
-                    {
-                      "required": [
-                        "head"
-                      ]
-                    },
-                    {
-                      "required": [
-                        "options"
-                      ]
-                    }
                   ]
                 }
               }
@@ -335,9 +282,6 @@
         "additionalProperties": false,
         "required": [
           "code",
-          "name",
-          "_TTL",
-          "aclTypeByEnv",
           "acl"
         ]
       }
@@ -347,8 +291,6 @@
   "required": [
     "_id",
     "code",
-    "name",
-    "console",
     "packages"
   ]
 }

@@ -42,6 +42,8 @@ type Collection struct {
 	Database string
 	File     string
 	schema   *jsonschema.Schema
+	// raw is the schema file as JSON values, to read what a failing keyword allows.
+	raw interface{}
 }
 
 // meta is the x-soajs block every schema file carries.
@@ -118,11 +120,16 @@ func LoadFS(fsys fs.FS) ([]*Collection, error) {
 		if err != nil {
 			return nil, fmt.Errorf("%s: %w", filepath.Base(f), err)
 		}
+		var rawSchema interface{}
+		if err := json.Unmarshal(raw, &rawSchema); err != nil {
+			return nil, fmt.Errorf("%s: %w", filepath.Base(f), err)
+		}
 		collections = append(collections, &Collection{
 			Name:     m.XSoajs.Collection,
 			Database: m.XSoajs.Database,
 			File:     filepath.Base(f),
 			schema:   s,
+			raw:      rawSchema,
 		})
 	}
 	return collections, nil

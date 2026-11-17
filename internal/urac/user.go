@@ -183,7 +183,48 @@ func (u *User) resolveACL() {
 			packages = append(packages, p)
 		}
 	}
-	u.acl = MergeACL(packages)
+	env := ""
+	if u.req.Registry != nil {
+		env = u.req.Registry.Environment
+	}
+	u.acl = applyDamage(MergeACL(packages), packages, env)
+}
+
+// applyDamage refuses what the gateway left out of the user's packages because it could not read
+// it (docs/data-schema/imperfect-data.md): never "missing", which would give the key's package
+// ACL instead. A package, or its ACL for the environment, that could not be read refuses
+// everything; a service left out of one package is removed from the merged ACL, even when another
+// package has it, so a lost apisPermission "restricted" cannot widen it.
+func applyDamage(acl *ACL, packages []*types.Package, env string) *ACL {
+	for _, p := range packages {
+		if p != nil && p.Damage.Refuses(env) {
+			return &ACL{ACL: map[string]interface{}{}, ACLAllEnv: map[string]interface{}{}}
+		}
+	}
+	if acl == nil {
+		return nil
+	}
+	for _, p := range packages {
+		if p == nil || p.Damage == nil {
+			continue
+		}
+		for e := range p.Damage.Envs {
+			if acl.ACLAllEnv != nil {
+				acl.ACLAllEnv[e] = map[string]interface{}{}
+			}
+		}
+		for e, services := range p.Damage.Services {
+			for svc := range services {
+				if e == env && acl.ACL != nil {
+					delete(acl.ACL, svc)
+				}
+				if byEnv, ok := acl.ACLAllEnv[e].(map[string]interface{}); ok {
+					delete(byEnv, svc)
+				}
+			}
+		}
+	}
+	return acl
 }
 
 func lastSeenNetwork(reg *types.RegistryData) string {

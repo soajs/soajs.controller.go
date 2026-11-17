@@ -160,12 +160,14 @@ func (p *MongoProvision) SetKeyConfig(algorithm, password string) {
 func (p *MongoProvision) LoadProvision() error {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
+	dataschema.Problems.BeginLoad("products", "tenants")
 	if err := p.loadPackages(ctx, bson.M{}, ""); err != nil {
 		return err
 	}
 	if err := p.loadTenants(ctx, bson.M{}); err != nil {
 		return err
 	}
+	dataschema.Problems.EndLoad("products", "tenants")
 	p.mu.RLock()
 	p.logger.Info("provision loaded", zap.Int("keys", len(p.keys)), zap.Int("packages", len(p.packages)), zap.Int("tenants", len(p.codes)))
 	p.mu.RUnlock()
@@ -314,8 +316,7 @@ func (p *MongoProvision) GetTenantEnvExtKey(code, env string) (string, bool, err
 		return "", false, fmt.Errorf("tenants: %w", err)
 	}
 	var t tenantDoc
-	if problems, err := schema.Decode(raw, &t); err != nil || problems != nil {
-		p.skip("tenants", raw, problems, err)
+	if !p.read(schema, dataschema.Tenants, raw, &t, nil) {
 		return "", false, nil
 	}
 	extKey := ""
@@ -371,8 +372,7 @@ func (p *MongoProvision) loadTenants(ctx context.Context, filter bson.M) error {
 	now := time.Now().UnixMilli()
 	for cursor.Next(ctx) {
 		var t tenantDoc
-		if problems, err := schema.Decode(cursor.Current, &t); err != nil || problems != nil {
-			p.skip("tenants", cursor.Current, problems, err)
+		if !p.read(schema, dataschema.Tenants, cursor.Current, &t, nil) {
 			continue
 		}
 		p.ingestTenant(&t, now)
@@ -434,11 +434,24 @@ func (p *MongoProvision) loadPackages(ctx context.Context, filter bson.M, code s
 	now := time.Now().UnixMilli()
 	for cursor.Next(ctx) {
 		var prod productDoc
-		if problems, err := schema.Decode(cursor.Current, &prod); err != nil || problems != nil {
-			p.skip("products", cursor.Current, problems, err)
+		damage := map[string]*types.PackageDamage{}
+		if !p.read(schema, dataschema.Products, cursor.Current, &prod, packageDamage(damage)) {
 			continue
 		}
 		entries := packageEntries(&prod, p.env, code, now)
+		for c, d := range damage {
+			if code != "" && c != code {
+				continue
+			}
+			if d.Whole {
+				// a package that could not be read refuses everything, for keys and users
+				entries[c] = &packageEntry{pkg: types.Package{Code: c, ACL: map[string]interface{}{}, ACLAllEnv: map[string]interface{}{}, Damage: d}, loaded: now}
+				continue
+			}
+			if e := entries[c]; e != nil {
+				e.pkg.Damage = d
+			}
+		}
 		p.mu.Lock()
 		for c, e := range entries {
 			p.packages[c] = e
@@ -465,8 +478,58 @@ func packageEntries(prod *productDoc, env, code string, now int64) map[string]*p
 	return entries
 }
 
-func (p *MongoProvision) skip(coll string, raw bson.Raw, problems []dataschema.Problem, err error) {
-	logSkipped(p.logger, coll, raw, problems, err)
+// read reads a document through its policy and reports what it found (/schemaProblems).
+func (p *MongoProvision) read(schema *dataschema.Collection, policy dataschema.Policy, raw bson.Raw, out interface{}, onRemove func(*dataschema.Reading, []string)) bool {
+	findings, ok, err := schema.ReadWith(raw, policy, out, onRemove)
+	if err != nil {
+		p.logger.Error("unable to read a document", zap.String("collection", schema.Name), zap.Error(err))
+		return false
+	}
+	dataschema.Problems.Report(p.logger, schema.Name, documentID(raw), findings)
+	return ok
+}
+
+// packageDamage records, by package code, the packages, environment ACLs and service ACLs that
+// are left out of a products document.
+func packageDamage(damage map[string]*types.PackageDamage) func(*dataschema.Reading, []string) {
+	return func(r *dataschema.Reading, piece []string) {
+		if len(piece) < 2 || piece[0] != "packages" {
+			return
+		}
+		code, _ := r.Get("packages", piece[1], "code")
+		c, _ := code.(string)
+		if c == "" {
+			return
+		}
+		d := damage[c]
+		if d == nil {
+			d = &types.PackageDamage{Envs: map[string]bool{}, Services: map[string]map[string]bool{}}
+			damage[c] = d
+		}
+		switch {
+		case len(piece) == 2:
+			d.Whole = true
+		case len(piece) == 3 && piece[2] == "acl":
+			d.Whole = true
+		case len(piece) == 4 && piece[2] == "acl":
+			d.Envs[piece[3]] = true
+		case len(piece) == 5 && piece[2] == "acl":
+			if d.Services[piece[3]] == nil {
+				d.Services[piece[3]] = map[string]bool{}
+			}
+			d.Services[piece[3]][piece[4]] = true
+		}
+	}
+}
+
+// documentID is a document's _id as hex, for the logs.
+func documentID(raw bson.Raw) string {
+	if v, e := raw.LookupErr("_id"); e == nil {
+		if oid, ok := v.ObjectIDOK(); ok {
+			return oid.Hex()
+		}
+	}
+	return ""
 }
 
 // OAuthModel returns the access token store.
@@ -499,8 +562,12 @@ func (m *mongoOAuthModel) GetAccessToken(token string) (*types.AccessToken, erro
 		return nil, err
 	}
 	var t types.AccessToken
-	if problems, err := schema.Decode(raw, &t); err != nil || problems != nil {
-		logSkipped(m.logger, "oauth_token", raw, problems, err)
+	findings, ok, err := schema.Read(raw, dataschema.OAuthTokens, &t)
+	if err != nil {
+		return nil, err
+	}
+	dataschema.Problems.Report(m.logger, "oauth_token", documentID(raw), findings)
+	if !ok {
 		return nil, nil
 	}
 	if t.Env != m.env && !registry.IsSensitiveEnv(t.Env) {
@@ -521,18 +588,6 @@ func schemaFor(coll string) (*dataschema.Collection, error) {
 	return s, nil
 }
 
-// logSkipped logs a document that does not match the data schema: its _id and where, never its
-// values.
-func logSkipped(logger *zap.Logger, coll string, raw bson.Raw, problems []dataschema.Problem, err error) {
-	id := ""
-	if v, e := raw.LookupErr("_id"); e == nil {
-		if oid, ok := v.ObjectIDOK(); ok {
-			id = oid.Hex()
-		}
-	}
-	logger.Error("document skipped, it does not match the data schema",
-		zap.String("collection", coll), zap.String("_id", id), zap.Any("problems", problems), zap.Error(err))
-}
 
 // copyMap deep-copies a decoded JSON object: maps and arrays are copied, other values are
 // immutable.
