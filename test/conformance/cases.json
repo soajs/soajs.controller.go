@@ -347,6 +347,34 @@
     }
   },
   {
+    "name": "broken_tenant_good_extkey",
+    "about": "broken data: a tenant whose other extKey cannot be read (device \"chrome\"); its package's rule for this API has no access, read as false (public)",
+    "method": "GET",
+    "path": "/conform/v1/public/hello",
+    "headers": {
+      "key": "$KEY_BROKEN",
+      "User-Agent": "curl/8.4.0"
+    }
+  },
+  {
+    "name": "broken_product_private",
+    "about": "broken data: the same package, an API whose rule has access true, without a token",
+    "method": "GET",
+    "path": "/conform/v1/private/hello",
+    "headers": {
+      "key": "$KEY_BROKEN"
+    }
+  },
+  {
+    "name": "broken_product_version_without_methods",
+    "about": "broken data: a version ACL without methods, its access for every API",
+    "method": "GET",
+    "path": "/other/v1/hello",
+    "headers": {
+      "key": "$KEY_BROKEN"
+    }
+  },
+  {
     "name": "public_head",
     "about": "from integration http_methods HEAD",
     "method": "HEAD",
@@ -1244,6 +1272,28 @@
     "headers": {
       "key": "$KEY_CONSOLE",
       "Authorization": "Bearer $TOKEN_U_CONNECT"
+    }
+  },
+  {
+    "name": "urac_group_missing_only_package",
+    "about": "dashboard: a group whose only package does not exist: no user ACL, the key's package ACL applies (Node.js)",
+    "env": "dashboard",
+    "method": "GET",
+    "path": "/conform/v1/private/admin",
+    "headers": {
+      "key": "$KEY_CONSOLE",
+      "Authorization": "Bearer $TOKEN_U_MISSPKG"
+    }
+  },
+  {
+    "name": "urac_group_missing_one_of_packages",
+    "about": "dashboard: a group naming a package that does not exist and one that does: the missing one is skipped",
+    "env": "dashboard",
+    "method": "GET",
+    "path": "/conform/v1/private/admin",
+    "headers": {
+      "key": "$KEY_CONSOLE",
+      "Authorization": "Bearer $TOKEN_U_MIXPKG"
     }
   },
   {

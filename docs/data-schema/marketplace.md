@@ -17,26 +17,26 @@ The catalog: one item per service, daemon, resource, static or custom item, with
 | `name` | string | yes | | Service name, the first segment of the URL. |
 | `type` | string | yes | `service` | |
 | `description` | string | | | Not used by the gateway. |
-| `configuration.group` | string | yes | | |
+| `configuration.group` | string | | `service` | |
 | `configuration.port` | integer | yes | | Service port. Unique per type. |
-| `configuration.requestTimeout` | integer (s) | yes | | Time before a request is timed out. |
-| `configuration.requestTimeoutRenewal` | integer | yes | | Times the timeout is renewed. |
+| `configuration.requestTimeout` | integer (s) | | `30` | Time before a request is timed out. |
+| `configuration.requestTimeoutRenewal` | integer | | `0` | Times the timeout is renewed. |
 | `configuration.subType` | string | | | Not used by the gateway. |
 | `versions[]` | object | yes, at least one | | |
 | `versions[].version` | string | yes | integer string, e.g. `"1"` | |
-| `versions[].extKeyRequired` | boolean | yes | | A key is required; runs the multi-tenant checks. |
-| `versions[].oauth` | boolean | yes | | Private APIs need a token. |
-| `versions[].urac` | boolean | yes | | Injects the user. |
-| `versions[].urac_Profile`, `urac_ACL`, `urac_Config`, `urac_GroupConfig` | boolean | yes | | Injects these parts of the user. |
-| `versions[].tenant_Profile` | boolean | yes | | Injects the tenant profile. |
-| `versions[].provision_ACL` | boolean | yes | | Injects the package ACL. |
-| `versions[].interConnect` | array | yes (may be empty) | | Peers the service calls directly. |
+| `versions[].extKeyRequired` | boolean | | `false` | A key is required; runs the multi-tenant checks. |
+| `versions[].oauth` | boolean | | `false` | Private APIs need a token. |
+| `versions[].urac` | boolean | | `false` | Injects the user. |
+| `versions[].urac_Profile`, `urac_ACL`, `urac_Config`, `urac_GroupConfig` | boolean | | `false` | Injects these parts of the user. |
+| `versions[].tenant_Profile` | boolean | | `false` | Injects the tenant profile. |
+| `versions[].provision_ACL` | boolean | | `false` | Injects the package ACL. |
+| `versions[].interConnect` | array \| null | | missing or `null`: no peers | Peers the service calls directly. |
 | `versions[].interConnect[].name` | string | yes | | Peer service. |
 | `versions[].interConnect[].version` | string | | integer string; absent means the peer's latest | |
 | `versions[].maintenance.readiness` | string | yes | e.g. `/heartbeat` | Health-check path. |
 | `versions[].maintenance.port.type` | string | yes | `maintenance` (service port + maintenanceInc) \| `inherit` (service port) | |
 | `versions[].maintenance.commands[]` | object | | `label`, `path`, `icon` | Not used by the gateway. |
-| `versions[].apis[]` | object | yes (may be empty) | | The service's APIs. |
+| `versions[].apis[]` | object | | | The service's APIs. |
 | `versions[].apis[].v` | string | yes | | API path, `:param` segments allowed. |
 | `versions[].apis[].m` | string | yes | `get`, `post`, `put`, `delete`, `patch`, `head`, `options` | Method. |
 | `versions[].apis[].l` | string | yes | | Label. |
@@ -54,6 +54,8 @@ The catalog: one item per service, daemon, resource, static or custom item, with
 | `versions[].jobs` | object | | Not used by the gateway. |
 
 Other item types (`static`, `resource`, `custom`, `daemon`, `config`) are not read by the gateway, and the schema only checks `_id`, `name`, `type`, `configuration` and `versions`.
+
+How a service that does not match is read, piece by piece (an unreadable latest version skips the service): [imperfect-data.md](imperfect-data.md).
 
 ## Not part of this spec
 

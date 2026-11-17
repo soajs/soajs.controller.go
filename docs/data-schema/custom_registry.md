@@ -14,9 +14,9 @@ Named settings per environment. The gateway reads three entries: `gateway`, `ura
 | `_id` | ObjectId | yes | | |
 | `name` | string | yes | | Entry name. |
 | `created` | string | yes | uppercase env code | Owning environment. |
-| `plugged` | boolean | yes | | Only plugged entries are loaded. |
-| `shared` | boolean | yes | | |
-| `sharedEnvs.<ENV>` | boolean | yes (map may be empty) | | |
+| `plugged` | boolean | | | Only plugged entries are loaded. |
+| `shared` | boolean | | | |
+| `sharedEnvs.<ENV>` | boolean | | | |
 | `value` | object (or string for other entries) | yes | | The settings. |
 | `author`, `locked`, `settings` | | | | Not used by the gateway. |
 
@@ -91,6 +91,8 @@ Refused: `masterCode` and `dbCodes`, which belong to the per-tenant urac databas
 | `pinWrapper.servicename`, `apiname` | string | The API allowed while the PIN is not entered. |
 | `pinWhitelist.<service>.<method>.apis`, `regex` | string[] | More APIs allowed while the PIN is not entered. |
 | `roaming.services.<service>.whitelistips` | string[] | IPs allowed to use `soajsroaming`. |
+
+How an entry that does not match is read, feature by feature: [imperfect-data.md](imperfect-data.md).
 
 ## Not part of this spec
 

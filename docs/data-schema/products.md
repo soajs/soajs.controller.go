@@ -16,31 +16,32 @@ Products and their packages. A package's ACL decides which services, versions an
 |---|---|---|---|---|
 | `_id` | ObjectId | yes | | |
 | `code` | string | yes | uppercase `^[A-Z0-9]+$` | Product code. |
-| `name` | string | yes | | |
+| `name` | | | | Not used by the gateway. |
 | `description` | string | | | |
-| `console` | boolean | yes | | Not used by the gateway. |
+| `console` | | | | Not used by the gateway. |
 | `locked` | boolean | | | Not used by the gateway. |
 | `scope` | object | | | Not used by the gateway: scope ACL expansion is not part of this spec. |
 | `packages[].code` | string | yes | `<PRODUCT>_<CODE>`, uppercase | Package code, as in `applications[].package` and the extKey. |
-| `packages[].name` | string | yes | | |
+| `packages[].name` | | | | Not used by the gateway. |
 | `packages[].description`, `tags`, `locked` | | | | Not used by the gateway. |
 | `packages[]._TTL` | integer (ms) | yes | | How long the gateway caches the package. |
-| `packages[].aclTypeByEnv.<env>` | string | yes | `granular` | One entry per environment of `acl`. |
+| `packages[].aclTypeByEnv.<env>` | | | `granular` | Not used by the gateway. |
 | `packages[].acl.<env>` | object | yes (may be empty) | lowercase env code | The package's ACL in that environment, keyed by service. |
 | `….<service>.<version>` | object | | integer string version | ACL of one service version. |
 | `….<version>.access` | boolean | yes | | `true`: the service version needs a logged-in user; `false`: open. |
 | `….<version>.apisPermission` | string | | `restricted` | Only the APIs listed below are allowed. Absent: every API of the version is allowed. |
-| `….<version>.<method>` | object | at least one method | `get`, `post`, `put`, `delete`, `patch`, `head`, `options` | |
+| `….<version>.<method>` | object | | `get`, `post`, `put`, `delete`, `patch`, `head`, `options` | A version without methods gives its `access` to every API of the version, as Node.js reads it (keyACL/index.js:96-97). |
 | `….<method>.apis.<path>` | object | | the API path as in marketplace, `:param` allowed | |
 | `….<path>.access` | boolean | yes | | `true`: logged-in user needed; `false`: public. |
 | `….<path>.group` | string | | | The API group label. Not used for access. |
+
+How a product that does not match is read, piece by piece: [imperfect-data.md](imperfect-data.md).
 
 ## Not part of this spec
 
 - `aclType` (global), and packages that are not `granular`, whose ACL is derived from `scope` (soajs.core/provision/mongo.js:193-199; provision/lib.js:11-142).
 - ACL not keyed by environment (mongo.js:204-208).
 - Service ACL without a version level, with `apis` / `apisRegExp` directly under the service (keyACL/index.js:35-47).
-- Version ACL without a method level (keyACL/index.js:96-97; mt/utils.js:334-351).
 - `access` as a list of groups.
 - Dotted version keys such as `"1.0"`.
 - `packagesPermission`.

@@ -71,7 +71,7 @@ Some unit tests use a local MongoDB too, in databases named `conformance_*` that
 | `/soajs/mcp` | MCP (JSON-RPC 2.0): the APIs the caller may use, as tools. On when the custom registry `gateway.mcp.enabled` is true. |
 | `/.well-known/oauth-protected-resource[/soajs/mcp]`, `/.well-known/{oauth-authorization-server,openid-configuration}/soajs/mcp/auth/<id>` | MCP authorization metadata, when `gateway.mcp.auth` is set. |
 
-**Maintenance port:** `/heartbeat` (and any unknown path), `/reloadRegistry`, `/loadProvision`, `/getRegistry`, `/awarenessStat`, `POST /register`, `POST /cache/invalidate`, `/favicon.ico`.
+**Maintenance port:** `/heartbeat` (and any unknown path), `/reloadRegistry`, `/loadProvision`, `/getRegistry`, `/awarenessStat`, `POST /register`, `POST /cache/invalidate`, `/favicon.ico`, and, Go only, `/schemaProblems`: the problems found in the data the gateway read ([docs/data-schema/imperfect-data.md](docs/data-schema/imperfect-data.md#schemaproblems)).
 
 How a request goes through the gateway: [docs/architecture.md](docs/architecture.md).
 

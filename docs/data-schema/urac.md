@@ -29,7 +29,7 @@ The user record and its groups. When the token's `loginMode` is `urac` and `getU
 | `groups` | string[] | yes | group codes | |
 | `config.allowedTenants[]` | object | | `tenant{id, code, …}`, `groups`, other fields | Invitations: under an invited tenant, the user takes its `groups`. Other fields, such as Connect's `lastVisit`, `joinedAt` and `via`, are not used by the gateway. |
 | `config.keys.<iKey>.config` | object | | | Merged over the key's configuration for this user. |
-| `profile` | object | yes | free-form | Injected when the service version has `urac_Profile`. |
+| `profile` | object | | free-form | Injected when the service version has `urac_Profile`. |
 | `memberships[]` | object | | `product`, `membership` | Resolved through `custom_registry` `gateway` `membership`. |
 | `ts`, `lastLogin`, `lastNetwork`, `locked`, `ln`, `socialId` | any | | | Not used by the gateway. |
 
@@ -49,6 +49,8 @@ A user document, and every object in it, accepts fields this table does not list
 | `config.allowedEnvironments.<ENV>` | object | | | Not used by the gateway. |
 
 A group document, and every object in it, accepts fields this table does not list. Only the fields the gateway reads are checked.
+
+How a user or group that does not match is read: [imperfect-data.md](imperfect-data.md).
 
 ## Not part of this spec
 

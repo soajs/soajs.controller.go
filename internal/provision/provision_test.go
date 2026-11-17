@@ -9,6 +9,7 @@ import (
 	"go.mongodb.org/mongo-driver/bson"
 	"go.uber.org/zap"
 
+	"github.com/soajs/soajs.controller.go/internal/dataschema"
 	"github.com/soajs/soajs.controller.go/pkg/types"
 )
 
@@ -101,8 +102,8 @@ func TestKeyDataEmptyRestrictions(t *testing.T) {
 		t.Fatal(err)
 	}
 	var tenant tenantDoc
-	if problems, err := schema.Decode(raw, &tenant); err != nil || problems != nil {
-		t.Fatalf("device and geo {} must decode: %v %v", problems, err)
+	if findings, ok, err := schema.Read(raw, dataschema.Tenants, &tenant); err != nil || !ok || len(findings) != 0 {
+		t.Fatalf("device and geo {} must decode: %v %v %v", findings, ok, err)
 	}
 	p := newTestProvision()
 	now := time.Now().UnixMilli()

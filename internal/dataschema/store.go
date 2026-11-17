@@ -61,9 +61,12 @@ func (s *Store) EndLoad(colls ...string) {
 // changed, or when a full load reads the document again; a document read without findings is
 // forgotten.
 func (s *Store) Report(logger *zap.Logger, coll, id string, findings []Finding) {
+	s.report(logger, storeKey(coll, id), coll, id, findings)
+}
+
+func (s *Store) report(logger *zap.Logger, key, coll, id string, findings []Finding) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	key := storeKey(coll, id)
 	prev := s.docs[key]
 	if len(findings) == 0 {
 		delete(s.docs, key)
@@ -75,6 +78,12 @@ func (s *Store) Report(logger *zap.Logger, coll, id string, findings []Finding) 
 		logger.Error("document read with problems: see /schemaProblems",
 			zap.String("collection", coll), zap.String("_id", id), zap.Any("problems", findings))
 	}
+}
+
+// ReportData replaces the data problems found about one document: references to things that do
+// not exist. They are kept apart from what reading the document found.
+func (s *Store) ReportData(logger *zap.Logger, coll, id string, findings []Finding) {
+	s.report(logger, storeKey(coll, id)+"\x00data", coll, id, findings)
 }
 
 // List returns every current finding, by collection, _id and path.

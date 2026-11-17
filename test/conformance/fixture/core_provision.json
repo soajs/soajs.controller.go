@@ -342,6 +342,9 @@
             "collection": "call_events"
           },
           "queueSize": 1000
+        },
+        "gotoService": {
+          "monitor": "on"
         }
       }
     },
@@ -656,7 +659,7 @@
           "urac_GroupConfig": false,
           "tenant_Profile": false,
           "provision_ACL": false,
-          "interConnect": [],
+          "interConnect": null,
           "apis": [
             {
               "l": "Passport login",
@@ -961,6 +964,50 @@
           }
         }
       ]
+    },
+    {
+      "_id": {
+        "$oid": "6a0e00000000000000000098"
+      },
+      "code": "CNFP",
+      "name": "Conformance broken ACL",
+      "description": "An API rule without access and a version without methods",
+      "console": false,
+      "packages": [
+        {
+          "code": "CNFP_DEFAULT",
+          "name": "Default",
+          "_TTL": 21600000,
+          "aclTypeByEnv": {
+            "dev": "granular"
+          },
+          "acl": {
+            "dev": {
+              "conform": {
+                "1": {
+                  "access": false,
+                  "get": {
+                    "apis": {
+                      "/public/hello": {
+                        "group": "Hello"
+                      },
+                      "/private/hello": {
+                        "access": true,
+                        "group": "Hello"
+                      }
+                    }
+                  }
+                }
+              },
+              "other": {
+                "1": {
+                  "access": false
+                }
+              }
+            }
+          }
+        }
+      ]
     }
   ],
   "tenants": [
@@ -1210,6 +1257,67 @@
           ]
         }
       ]
+    },
+    {
+      "_id": {
+        "$oid": "6a0e00000000000000000004"
+      },
+      "code": "CNFB",
+      "name": "Conformance broken pieces",
+      "description": "A tenant with one extKey the gateway cannot read next to a good one",
+      "type": "product",
+      "console": false,
+      "profile": {},
+      "oauth": {
+        "secret": "conformance oauth secret",
+        "type": 2,
+        "loginMode": "urac",
+        "disabled": 0,
+        "grants": [
+          "password",
+          "refresh_token"
+        ],
+        "redirectURI": ""
+      },
+      "applications": [
+        {
+          "appId": {
+            "$oid": "6a0e00000000000000000099"
+          },
+          "product": "CNFP",
+          "package": "CNFP_DEFAULT",
+          "description": "Default application",
+          "_TTL": 21600000,
+          "keys": [
+            {
+              "key": "4d1e2f3a4b5c6d7e8f90a1b2c3d4e5f6",
+              "config": {
+                "dev": {
+                  "conform": {}
+                }
+              },
+              "extKeys": [
+                {
+                  "extKey": "5bbf311a0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+                  "env": "DEV",
+                  "label": "conformance broken device",
+                  "device": "chrome",
+                  "geo": null,
+                  "expDate": null
+                },
+                {
+                  "extKey": "5bbf311a30f4acaec52b7472be854cc9721cd4b1dbd73f71ca0f728839e30f3969c29d58bf58d6e2aac12fb28d2c3c4a3075bf9e50f4c7ae646835c4d69a436fbfdf37fce7dd086fcc1cae885340c2210488a82cf18f6ad12d3c7ca4922eaaaf",
+                  "env": "DEV",
+                  "label": "conformance good next to a broken one",
+                  "device": null,
+                  "geo": null,
+                  "expDate": null
+                }
+              ]
+            }
+          ]
+        }
+      ]
     }
   ],
   "oauth_token": [
@@ -1406,6 +1514,62 @@
         "tenant": {
           "id": "6a0e00000000000000000001",
           "code": "CONF"
+        }
+      }
+    },
+    {
+      "_id": {
+        "$oid": "6a0e0000000000000000009e"
+      },
+      "type": "accessToken",
+      "token": "d0a000000000000000000000000000000000000c",
+      "expires": {
+        "$date": "2099-01-01T00:00:00Z"
+      },
+      "clientId": "6a0e00000000000000000002",
+      "env": "dashboard",
+      "user": {
+        "_id": {
+          "$oid": "6a0e0000000000000000009c"
+        },
+        "id": "6a0e0000000000000000009c",
+        "loginMode": "urac",
+        "deviceId": null,
+        "agent": null,
+        "username": "missing_package",
+        "email": "missing_package@conformance.invalid",
+        "groups": [],
+        "tenant": {
+          "id": "6a0e00000000000000000002",
+          "code": "DBTN"
+        }
+      }
+    },
+    {
+      "_id": {
+        "$oid": "6a0e0000000000000000009f"
+      },
+      "type": "accessToken",
+      "token": "d0a000000000000000000000000000000000000d",
+      "expires": {
+        "$date": "2099-01-01T00:00:00Z"
+      },
+      "clientId": "6a0e00000000000000000002",
+      "env": "dashboard",
+      "user": {
+        "_id": {
+          "$oid": "6a0e0000000000000000009d"
+        },
+        "id": "6a0e0000000000000000009d",
+        "loginMode": "urac",
+        "deviceId": null,
+        "agent": null,
+        "username": "mixed_packages",
+        "email": "mixed_packages@conformance.invalid",
+        "groups": [],
+        "tenant": {
+          "id": "6a0e00000000000000000002",
+          "code": "DBTN"
         }
       }
     },

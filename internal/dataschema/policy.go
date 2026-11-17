@@ -474,7 +474,7 @@ func prepareCustom(r *Reading) {
 	if envs, ok := r.Get("sharedEnvs"); ok {
 		if m, isMap := envs.(map[string]interface{}); isMap {
 			for _, env := range keysOf(m) {
-				r.ReadBool(p("sharedEnvs", env), "soajs.controller modules/registry/index.js (sharedEnvs[env], truthiness)")
+				r.ReadBool(p("sharedEnvs", env), "soajs.controller modules/registry/mongo.js:40, 52 (sharedEnvs[env], truthiness)")
 			}
 		}
 	}

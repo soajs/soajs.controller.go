@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 
+	"github.com/soajs/soajs.controller.go/internal/dataschema"
 	"github.com/soajs/soajs.controller.go/internal/provision"
 	"github.com/soajs/soajs.controller.go/pkg/types"
 	"go.uber.org/zap"
@@ -167,9 +168,24 @@ func (u *User) resolveACL() {
 		return
 	}
 	var packages []*types.Package
+	var missing []dataschema.Finding
+	defer func() { u.reportMissing(missing) }()
+	notFound := func(code string, err error) bool {
+		var ce *provision.CodeError
+		if !errors.As(err, &ce) || ce.Code != 201 {
+			return false
+		}
+		missing = append(missing, dataschema.Finding{Collection: "users", ID: u.id,
+			Path:   dataschema.Pointer([]string{"groupsConfig", "allowedPackages", u.req.Product}),
+			Rule:   "package " + code + " does not exist (soajs.provision getPackagesData)",
+			Action: dataschema.DataProblem})
+		return true
+	}
 	if len(codes) == 1 {
 		p, err := u.req.Packages(codes[0])
 		if err != nil {
+			// as Node.js: no user ACL, so the key's package ACL applies
+			notFound(codes[0], err)
 			return
 		}
 		packages = append(packages, p)
@@ -177,8 +193,7 @@ func (u *User) resolveACL() {
 		for _, c := range codes {
 			p, err := u.req.Packages(c)
 			if err != nil {
-				var ce *provision.CodeError
-				if errors.As(err, &ce) && ce.Code == 201 {
+				if notFound(c, err) {
 					u.req.Logger.Error("unable to load all packages from provision: cannot find package", zap.String("package", c))
 					continue
 				}
@@ -192,6 +207,14 @@ func (u *User) resolveACL() {
 		env = u.req.Registry.Environment
 	}
 	u.acl = applyDamage(MergeACL(packages), packages, env)
+}
+
+// reportMissing reports, on /schemaProblems, the packages the user's groups name that do not exist.
+func (u *User) reportMissing(missing []dataschema.Finding) {
+	if u.id == "" {
+		return
+	}
+	dataschema.Problems.ReportData(u.req.Logger, "users", u.id, missing)
 }
 
 // applyDamage refuses what the gateway left out of the user's packages because it could not read

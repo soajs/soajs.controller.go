@@ -1,0 +1,7 @@
+{
+  "status": 200,
+  "headers": {
+    "Content-Type": "application/json"
+  },
+  "body": "{\"data\":{\"inject\":{\"application\":{\"appId\":\"6a0e000000000000000000a6\",\"package\":\"DSBRD_DEFAULT\",\"product\":\"DSBRD\"},\"device\":\"Go-http-client/1.1\",\"geo\":{\"ip\":\"127.0.0.1\"},\"key\":{\"config\":{\"conform\":{}},\"eKey\":\"5bbf311a30f4acaec52b7472be854cc92a688050ab8b4c65b32000cbc9699d1d3a106575479749cdb84c50721a91114c6b37466822a73afe81da0776a62d7660f95628343b1423d438eef3b40607777da2c6028b062e623f33ce704ed2d6c2fabfc8ce466e1a8887e8f9c16a566ca64c\",\"iKey\":\"2d1e2f3a4b5c6d7e8f90a1b2c3d4e5f6\"},\"package\":{},\"param\":{\"urac_ACL\":true,\"urac_Profile\":true},\"tenant\":{\"code\":\"DBTN\",\"id\":\"6a0e00000000000000000002\",\"locked\":false,\"name\":\"Console tenant\",\"profile\":{},\"type\":\"product\"},\"urac\":{\"_id\":\"6a0e0000000000000000009c\",\"acl\":null,\"acl_AllEnv\":null,\"config\":{},\"email\":\"missing_package@conformance.invalid\",\"firstName\":\"missing_package\",\"groups\":[\"missingpkg\"],\"groupsConfig\":{\"allowedPackages\":{\"DSBRD\":[\"DSBRD_GHOST\"]}},\"lastName\":\"Owner\",\"profile\":{},\"tenant\":{\"code\":\"DBTN\",\"id\":\"6a0e00000000000000000002\"},\"username\":\"missing_package\"}},\"method\":\"GET\",\"path\":\"/private/admin\",\"query\":\"\"},\"result\":true}"
+}

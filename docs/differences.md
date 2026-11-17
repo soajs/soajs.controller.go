@@ -12,7 +12,7 @@ The Go gateway answers as soajs.controller 4.3.30 does, and the [conformance har
 | `/register` by GET, and `?name=` on `/getRegistry` (`?serviceName=`) | #16 |
 | Older data shapes: application ACLs, flat `apis`/`apisRegExp`, ACLs without a version, `access` as a list of groups (157, 160), `dbs.clusters`, `custom` inside the environment, the old deployer, hosts without `version`, per-tenant urac databases (`masterDB` only), `maintenance.port.value` | #5-#8, #11, #20 |
 
-Go reads only the latest data schema ([data-schema](data-schema/README.md)). A document that does not match it is logged and skipped or refused.
+Go reads only the latest data schema ([data-schema](data-schema/README.md)). A document that does not match it is read as Node.js reads it where Node.js gives the value a meaning; otherwise the smallest broken piece is left out, toward refusal, and old shapes are left out, never converted ([imperfect-data](data-schema/imperfect-data.md)). Node.js reads whatever is there.
 
 ## Registry and maintenance port
 
@@ -24,6 +24,8 @@ Go reads only the latest data schema ([data-schema](data-schema/README.md)). A d
 - **Invalid input:** an unparsable maintenance URL or `/register` body is answered: false, or the heartbeat.
 - **mdaemon `/getRegistry`:** `?type=mdaemon` answers the daemon.
 - **Key order:** JSON key order in registry dumps can differ.
+- **`/schemaProblems`:** Go only. Lists the problems found in the data the gateway read ([imperfect-data](data-schema/imperfect-data.md#schemaproblems)); Node.js answers it as an unknown path, the heartbeat.
+- **Flags read with truthiness:** a non-boolean flag (a tenant's `locked`, a marketplace version's flags, the environment flags) is dumped and injected as a boolean; Node.js passes the value through.
 
 ## Awareness
 

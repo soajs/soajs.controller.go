@@ -161,29 +161,6 @@ func (c *Collection) ValidateJSON(doc []byte) ([]Problem, error) {
 	return c.validate(v)
 }
 
-// Decode validates a raw BSON document and, when it matches, decodes it into out through JSON:
-// an ObjectId becomes its hex string and a date the form JSON.stringify writes. A document that
-// does not match returns its problems and leaves out untouched.
-func (c *Collection) Decode(raw bson.Raw, out interface{}) ([]Problem, error) {
-	ext, err := bson.MarshalExtJSON(raw, false, false)
-	if err != nil {
-		return nil, err
-	}
-	var v interface{}
-	if err := json.Unmarshal(ext, &v); err != nil {
-		return nil, err
-	}
-	problems, err := c.validate(v)
-	if err != nil || problems != nil {
-		return problems, err
-	}
-	plain, err := json.Marshal(Plain(v))
-	if err != nil {
-		return nil, err
-	}
-	return nil, json.Unmarshal(plain, out)
-}
-
 // Plain turns relaxed extended JSON into plain JSON values: {"$oid": h} becomes h and
 // {"$date": d} the UTC time with milliseconds, as JSON.stringify writes a Date.
 func Plain(v interface{}) interface{} {

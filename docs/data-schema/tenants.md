@@ -17,18 +17,18 @@ Tenants, their applications and keys, and their oauth settings.
 |---|---|---|---|---|
 | `_id` | ObjectId | yes | | `tenant.id` (as a string) everywhere else. |
 | `code` | string | yes | uppercase `^[A-Z0-9]+$` | Tenant code. |
-| `name` | string | yes | | |
+| `name` | string | | | Injected. |
 | `description`, `tag`, `category` | string | | | Not used by the gateway. |
 | `type` | string | yes | `product` \| `client` | `client` is a sub-tenant. |
-| `console` | boolean | yes | | Not used by the gateway. |
+| `console` | | | | Not used by the gateway. |
 | `locked` | boolean | | | Injected only. |
-| `tenant.id`, `tenant.code` | string | yes for `client`, absent otherwise | the main tenant | Injected as `tenant.main`. |
+| `tenant.id`, `tenant.code` | string | for `client` | the main tenant | Injected as `tenant.main` for a `client`. |
 | `profile` | object | | free-form | Injected when the service version has `tenant_Profile`. |
 | `profile.access.resolver` | string | | a name in `custom_registry` `urac` `tenantAccessResolvers` | Cross-tenant access resolver. |
 | `profile.access.subject` | string | | | |
-| `oauth.secret` | string | yes | secret | Not used by the gateway (tokens are issued by oauth). |
-| `oauth.type` | integer | yes | `2` | Tokens are stored in `oauth_token`. Type 0 (JWT) is not part of this spec (D5). |
-| `oauth.disabled` | integer | yes | `0` \| `1` | `1`: no user login is required for the tenant's private APIs. |
+| `oauth.secret` | | | secret | Not used by the gateway (tokens are issued by oauth). |
+| `oauth.type` | | | `2` | Tokens are stored in `oauth_token`. Type 0 (JWT) is not part of this spec (D5). |
+| `oauth.disabled` | integer | | `0` \| `1`; missing is `0` | `1`: no user login is required for the tenant's private APIs. |
 | `oauth.pin.<product>.enabled` | boolean | | | Requires the user's PIN under that product. |
 | `oauth.loginMode`, `grants`, `redirectURI` | | | | Not used by the gateway. |
 | `applications[].appId` | ObjectId | yes | | Injected. |
@@ -44,11 +44,13 @@ Tenants, their applications and keys, and their oauth settings.
 | `….config.<env>.gateway.throttling.<service>` | object | | as in custom_registry `traffic.throttling` | Tenant-level strategy. Wins over the custom registry. |
 | `applications[].keys[].extKeys[].extKey` | string | yes | hex | The external key clients send. |
 | `….extKeys[].env` | string | yes | uppercase env code | Only valid in that environment (144). |
-| `….extKeys[].expDate` | integer (ms) \| null | yes | `null` never expires | |
-| `….extKeys[].device` | object \| null | yes | `null` or `{}`: no restriction; otherwise `allow` and/or `deny` | Device restriction (156). |
-| `….extKeys[].geo` | object \| null | yes | `null` or `{}`: no restriction; otherwise `allow` and/or `deny` CIDR lists | IP restriction (155). |
+| `….extKeys[].expDate` | integer (ms) \| null | | `null` or missing: never expires | |
+| `….extKeys[].device` | object \| null | | `null` or `{}`: no restriction; otherwise `allow` and/or `deny` | Device restriction (156). |
+| `….extKeys[].geo` | object \| null | | `null` or `{}`: no restriction; otherwise `allow` and/or `deny` CIDR lists | IP restriction (155). |
 | `….extKeys[].label` | string | | | Not used by the gateway. |
 | `….extKeys[].dashboardAccess` | boolean | | | Not used by the gateway. |
+
+How a tenant that does not match is read, piece by piece: [imperfect-data.md](imperfect-data.md).
 
 ## Not part of this spec
 
