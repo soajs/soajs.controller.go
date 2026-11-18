@@ -1,6 +1,6 @@
 # SOAJS Controller (Go)
 
-[![Go Version](https://img.shields.io/badge/Go-1.25+-00ADD8?style=flat&logo=go)](https://go.dev/)
+[![Go Version](https://img.shields.io/badge/Go-1.26+-00ADD8?style=flat&logo=go)](https://go.dev/)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 
 The SOAJS API gateway written in Go. The Node.js gateway, [soajs.controller](https://github.com/soajs/soajs.controller) 4.3.30, is its specification. The Go gateway reads the same profile and the same databases, and answers requests as that gateway does.
@@ -20,7 +20,7 @@ Go reads only the latest data schema ([docs/data-schema](docs/data-schema/README
 
 ## Requirements
 
-- Go 1.25 or later
+- Go 1.26 or later
 - MongoDB, holding the SOAJS databases (provision, the environment's core databases)
 
 ## Build
