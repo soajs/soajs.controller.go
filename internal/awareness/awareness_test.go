@@ -19,6 +19,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes/fake"
+	k8stesting "k8s.io/client-go/testing"
 )
 
 type testRegistry struct {
@@ -517,5 +518,38 @@ func TestInfraSchemaCA(t *testing.T) {
 		if (problems == nil) != c.valid {
 			t.Errorf("%s: valid %v, problems %v", name, c.valid, problems)
 		}
+	}
+}
+
+// The calls the HA awareness makes to the API server: services in the gateway's namespace, by
+// label, and one service by name. They were the same on client-go v0.29.3.
+func TestHAAPICalls(t *testing.T) {
+	t.Setenv("SOAJS_DEPLOY_HA", "kubernetes")
+	cs := fake.NewSimpleClientset(k8sService("urac", "3", "service", "10.0.0.3"))
+	connect := func(cfg KubeConfig) (KubeClient, error) { return NewKubeClient(cs), nil }
+	h := NewHA(&testRegistry{data: haRegistry("soajs")}, Gateway{Name: "controller", Version: "1"}, zap.NewNop(), connect)
+	h.Rebuild()
+	h.cache = map[string]map[string]string{}
+	h.GetHost("urac", "")
+	h.GetLatestVersionFromCluster("urac")
+	var got []string
+	for _, a := range cs.Actions() {
+		s := a.GetVerb() + " " + a.GetResource().Resource + " " + a.GetNamespace()
+		if l, ok := a.(k8stesting.ListAction); ok {
+			s += " " + l.GetListRestrictions().Labels.String()
+		}
+		if g, ok := a.(k8stesting.GetAction); ok {
+			s += " " + g.GetName()
+		}
+		got = append(got, s)
+	}
+	want := []string{
+		"list services soajs soajs.content=true",
+		"list services soajs soajs.service.name=urac",
+		"get services soajs dev-urac-v3-service",
+		"list services soajs soajs.service.name=urac",
+	}
+	if strings.Join(got, "\n") != strings.Join(want, "\n") {
+		t.Errorf("API calls:\n%s\nwant:\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
 	}
 }
