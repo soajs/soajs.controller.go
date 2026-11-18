@@ -373,16 +373,18 @@ func (m *requestMonitor) run(log *zap.Logger, idle time.Duration, renewals int, 
 		count := m.renewals
 		m.mu.Unlock()
 		log.Warn("Request is taking too much time ...")
+		// answer before cancelling the call to the service: the cancelled call returns at once,
+		// and its error path (135) must find the request ended
 		if count >= renewals {
 			log.Error("Request time exceeded the requestTimeoutRenewal")
-			m.cancel()
 			m.respond(134)
+			m.cancel()
 			return
 		}
 		if !heartbeat() {
 			log.Error("Service heartbeat is not responding")
-			m.cancel()
 			m.respond(133)
+			m.cancel()
 			return
 		}
 		m.mu.Lock()
