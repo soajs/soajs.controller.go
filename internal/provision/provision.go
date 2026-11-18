@@ -608,12 +608,59 @@ func (m *mongoOAuthModel) GetAccessToken(token string) (*types.AccessToken, erro
 	res := schema.Read(raw, dataschema.OAuthTokens, &t)
 	dataschema.Problems.ReportResult(m.logger, res)
 	if !res.OK {
-		return nil, nil
+		// A token refused only because its expires is not a date is expired, as in Node.js
+		// (soajs.oauth2 expired()): it is returned with expires at the epoch, so the callers' expiry
+		// check refuses it as expired rather than invalid.
+		if !readWithEpochExpires(schema, raw, res, &t) {
+			return nil, nil
+		}
 	}
 	if t.Env != m.env && !registry.IsSensitiveEnv(t.Env) {
 		return nil, nil
 	}
 	return &t, nil
+}
+
+// readWithEpochExpires reads a refused token again with expires set to the epoch, when the
+// reading refused it at /expires (null, a string, another type or missing). It is true when the
+// token then reads: expires was its only problem, and out holds it, expired.
+func readWithEpochExpires(schema *dataschema.Collection, raw bson.Raw, res dataschema.Result, out *types.AccessToken) bool {
+	atExpires := false
+	for _, f := range res.Findings {
+		if f.Action == dataschema.SkippedDocument {
+			if f.Path != "/expires" {
+				return false
+			}
+			atExpires = true
+		}
+	}
+	if !atExpires {
+		return false
+	}
+	var doc bson.D
+	if err := bson.Unmarshal(raw, &doc); err != nil {
+		return false
+	}
+	set := false
+	for i := range doc {
+		if doc[i].Key == "expires" {
+			doc[i].Value = primitive.DateTime(0)
+			set = true
+		}
+	}
+	if !set {
+		doc = append(doc, bson.E{Key: "expires", Value: primitive.DateTime(0)})
+	}
+	fixed, err := bson.Marshal(doc)
+	if err != nil {
+		return false
+	}
+	var t types.AccessToken
+	if !schema.Read(fixed, dataschema.OAuthTokens, &t).OK {
+		return false
+	}
+	*out = t
+	return true
 }
 
 func schemaFor(coll string) (*dataschema.Collection, error) {
