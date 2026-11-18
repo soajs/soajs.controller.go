@@ -19,7 +19,7 @@ Go reads every document in this order:
 | `marketplace` | an older version | its `_id`, `name`, `type`, `configuration.port` or `versions` cannot be read, or its **latest** version cannot be read (130): calls without a version never go to an older version, which may have other code and ACL |
 | `custom_registry` `gateway` | one feature (`events`, `mcp`, `lastSeen`, …); in `traffic`, one leaf (`model`, `throttling`), and one ip2ban address; in `maintenanceMode`, a field other than `on` | its `_id`, `name`, `created` or `value` cannot be read |
 | `custom_registry` `urac` | one access resolver, one `autoRoaming` tenant, or another setting | `masterDB` cannot be read, or it has `masterCode` or `dbCodes` |
-| `custom_registry` `oauth` | one setting (`pinWrapper`, `pinWhitelist`, `roaming`) | as above |
+| `custom_registry` `oauth` | `roaming` | as above |
 | `custom_registry`, any | one `sharedEnvs` environment | |
 | `environment` | only fields that do not decide access: `description`, `locked`, `settings`, `services.config.logger`, `services.config.awareness`, `services.controller.requestTimeout`, `requestTimeoutRenewal`, `maxPoolSize` | any other field cannot be read: the gateway never falls back to a default wider than the data (an origin of `*`, the default key password, the default CORS methods). The registry is then not built; on a reload, the previous one stays |
 | `users` | one invitation (`config.allowedTenants[]` item), one membership; `groups` (falls back to the key's package, see below) | its `_id`, `username`, `status`, `tenant` or a `config.keys` entry cannot be read: a `config.keys` entry overrides the key's configuration |
@@ -52,7 +52,6 @@ A package that could not be read is cached for a minute (`UnreadableTTL`), so a 
 | `tenants` | `extKeys[].expDate`: missing | never expires | soajs.core.modules soajs.provision/index.js:56 |
 | `tenants` | `locked` | `!!locked` | soajs.core.modules soajs.core/provision/mongo.js:310 |
 | `tenants` | `oauth.disabled` | truthiness, as `0` or `1` | mw/mt/utils.js:559 |
-| `tenants` | `oauth.pin.<product>`: not an object; `enabled`: missing or not a boolean | no PIN; truthiness | mw/mt/utils.js:629 |
 | `tenants`, `products` | `_TTL`: a numeric string; anything else not a number | its number; reloaded after a minute (Node.js: a NaN `_TTL` is never fresh) | soajs.core.modules soajs.provision/index.js:201-205 |
 | `products` | a version's `access`: missing or not a boolean | `false` when missing, else truthiness | mw/mt/utils.js:848 |
 | `products` | a version's `apisPermission`: anything but `"restricted"` | not restricted | mw/mt/utils.js:214, 883 |

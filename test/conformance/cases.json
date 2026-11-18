@@ -1231,6 +1231,17 @@
     }
   },
   {
+    "name": "urac_pin_locked_ok",
+    "about": "dashboard: a token issued with PIN login (removed) carries pinLocked: it is not read, the call passes as for the owner",
+    "env": "dashboard",
+    "method": "GET",
+    "path": "/conform/v1/private/hello",
+    "headers": {
+      "key": "$KEY_CONSOLE",
+      "Authorization": "Bearer $TOKEN_U_PINLOCKED"
+    }
+  },
+  {
     "name": "urac_owner_acl_refused",
     "about": "dashboard: the user's ACL replaces the key package's, it does not list the API (159)",
     "env": "dashboard",

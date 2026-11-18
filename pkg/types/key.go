@@ -43,13 +43,7 @@ type KeyApplication struct {
 // TenantOauth is a tenant's oauth settings (tenants.oauth).
 // Only what the gateway reads is decoded: the secret, type and loginMode are the oauth service's.
 type TenantOauth struct {
-	Disabled int                       `json:"disabled"`
-	Pin      map[string]TenantOauthPin `json:"pin,omitempty"`
-}
-
-// TenantOauthPin turns the PIN on for a product.
-type TenantOauthPin struct {
-	Enabled bool `json:"enabled"`
+	Disabled int `json:"disabled"`
 }
 
 // ServiceACL represents ACL for a service

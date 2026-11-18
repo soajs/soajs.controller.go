@@ -29,7 +29,7 @@ Tenants, their applications and keys, and their oauth settings.
 | `oauth.secret` | | | secret | Not used by the gateway (tokens are issued by oauth). |
 | `oauth.type` | | | `2` | Tokens are stored in `oauth_token`. Type 0 (JWT) is not part of this spec (D5). |
 | `oauth.disabled` | integer | | `0` \| `1`; missing is `0` | `1`: no user login is required for the tenant's private APIs. |
-| `oauth.pin.<product>.enabled` | boolean | | | Requires the user's PIN under that product. |
+| `oauth.pin` | | | | PIN login, removed: accepted and not used. |
 | `oauth.loginMode`, `grants`, `redirectURI` | | | | Not used by the gateway. |
 | `applications[].appId` | ObjectId | yes | | Injected. |
 | `applications[].product` | string | yes | product code | |

@@ -88,9 +88,9 @@ Refused: `masterCode` and `dbCodes`, which belong to the per-tenant urac databas
 
 | Path | Type | Meaning |
 |---|---|---|
-| `pinWrapper.servicename`, `apiname` | string | The API allowed while the PIN is not entered. |
-| `pinWhitelist.<service>.<method>.apis`, `regex` | string[] | More APIs allowed while the PIN is not entered. |
 | `roaming.services.<service>.whitelistips` | string[] | IPs allowed to use `soajsroaming`. |
+
+Other settings, such as `pinWrapper` and `pinWhitelist` (PIN login, removed), are accepted and not used.
 
 How an entry that does not match is read, feature by feature: [imperfect-data.md](imperfect-data.md).
 

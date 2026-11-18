@@ -102,21 +102,7 @@
         "loginMode": {},
         "grants": {},
         "redirectURI": {},
-        "pin": {
-          "type": "object",
-          "additionalProperties": {
-            "type": "object",
-            "properties": {
-              "enabled": {
-                "type": "boolean"
-              }
-            },
-            "additionalProperties": false,
-            "required": [
-              "enabled"
-            ]
-          }
-        }
+        "pin": {}
       },
       "additionalProperties": false
     },

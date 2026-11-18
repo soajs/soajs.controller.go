@@ -38,7 +38,7 @@ The registry is the environment document with its databases (`dbs`, resolved aga
 - **`coreDB`:** the provision, oauth and gateway databases. Access tokens are read in the `oauth` database when the environment has one, else in provision. Throttling, idempotency and the cache use the `gateway` database, else provision.
 - **The custom registry:**
   - `gateway`: `traffic` (with `ip2ban`), `maintenanceMode`, `events`, `idempotency`, `cache`, `mcp`, `lastSeen`, `membership`, `mt.whitelist`, `oauth.deviceIdCheck`;
-  - `oauth`: PIN wrapper and whitelist, roaming;
+  - `oauth`: roaming;
   - `urac`: `masterDB`, the core database that holds users and groups.
 
   [custom_registry.md](data-schema/custom_registry.md) describes each one.

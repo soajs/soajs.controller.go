@@ -22,7 +22,7 @@ The gateway is a chain of middlewares on a chi router, in the order of the Node.
 | 13 | KeyACL | mw/keyACL | The final ACL of the requested version (154). |
 | 14 | GotoService | mw/gotoService | The service and its version (130, 132); `/soajs/acl`, `/soajs/proxy`, `/soajs/mcp`; passport login, roaming, redirect. |
 | 15 | MT | mw/mt | The key's tenant (152, 153), mt whitelist, geo (155) and device (156) checks, whether OAuth is required. |
-| 16 | OAuth | mw/oauth | The access token, deviceId (156), restrictedTo (147), PIN (145), with oauth2-server's answers. |
+| 16 | OAuth | mw/oauth | The access token, deviceId (156), restrictedTo (147), with oauth2-server's answers. |
 | 17 | Urac | mw/mt urac.js | The logged-in user (146), roaming (170), the user's ACL and config. |
 | 18 | MTACL | mw/mt utils.js serviceCheck, apiCheck | Service and API access (154, 158, 159, 161). |
 | 19 | InjectObj | mw/mt | The `soajsinjectobj` of a key's API (135 when too large). |

@@ -57,8 +57,7 @@
         "code": {
           "type": "string",
           "pattern": "^[A-Z0-9]+$"
-        },
-        "pin": {}
+        }
       },
       "required": [
         "id",
@@ -87,8 +86,7 @@
                   },
                   "code": {
                     "type": "string"
-                  },
-                  "pin": {}
+                  }
                 },
                 "additionalProperties": true,
                 "required": [
