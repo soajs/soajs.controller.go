@@ -20,10 +20,15 @@ The gateway takes its settings from three places:
 | `SOAJS_SRV_AUTOREGISTERHOST` | | Set to anything but `true`: register as 127.0.0.1. |
 | `SOAJS_MANUAL` | | Set: the `controllers` document is kept under the gateway's IP; otherwise under 127.0.0.1. |
 | `SOAJS_MAX_INJECT_HEADER_SIZE` | `65536` | The largest `soajsinjectobj` header, in UTF-16 code units; a larger one answers 135. |
+| `SOAJS_MAX_BODY_SIZE`, `SOAJS_MAX_RESPONSE_SIZE` | `10485760` | Bytes of the request body and of the response kept for request monitoring (`gotoService.monitor.req_body`, `req_response`). They do not limit the request or the response. |
 | `SOAJS_THROTTLE_CLEANUP_INTERVAL`, `SOAJS_IDEMPOTENCY_CLEANUP_INTERVAL`, `SOAJS_CACHE_CLEANUP_INTERVAL` | `60000` | How often (ms) the memory models of traffic, idempotency and the cache drop expired entries. |
 | `SOAJS_LOG_LEVEL` | `info` | `debug`, `info`, `warn`, `error`. |
 | `SOAJS_LOG_FORMAT` | `json` (`console` when `SOAJS_ENV` is `dev`) | `console` for readable logs. |
 | `SOAJS_SERVER_SHUTDOWN_TIMEOUT` | `10` | Seconds to finish requests on SIGINT or SIGTERM. |
+
+Only `SOAJS_PROFILE` is required; every other variable is optional. `SOAJS_ENV` can also be given as `SOAJS_ENVIRONMENT`.
+
+`SOAJS_MONGO_URI` is not read by the gateway: the profile file says where the provision database is, and the registry gives every other database. Only the [`schemacheck`](data-schema/imperfect-data.md#schemacheck) tool reads `SOAJS_MONGO_URI`, when you run it by hand. Do not set it on a gateway deployment: it would put a connection string with credentials in the pod's environment for nothing.
 
 Any of the settings above can also be written in a `config.yaml` (keys `service_port`, `log_level`, `maintenance.port_increment`, ...), looked up in the working directory, `./configs` and `/etc/soajs/`; [configs/config.example.yaml](../configs/config.example.yaml) shows every key with its default. The environment variables take precedence.
 
