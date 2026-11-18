@@ -88,8 +88,7 @@
             "code": {
               "type": "string",
               "pattern": "^[A-Z0-9]+$"
-            },
-            "pin": {}
+            }
           },
           "required": [
             "id",
@@ -218,12 +217,6 @@
         },
         "phone": {
           "type": "string"
-        },
-        "pinLogin": {
-          "type": "boolean"
-        },
-        "pinLocked": {
-          "type": "boolean"
         }
       },
       "additionalProperties": true,

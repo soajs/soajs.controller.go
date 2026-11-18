@@ -24,8 +24,7 @@ Access and refresh tokens issued by the oauth service. The gateway reads access 
 | `user.id` | string | yes | 24 hex characters | `_id` as a string. |
 | `user.username` | string | yes | | |
 | `user.loginMode` | string | yes | `urac` \| `oauth` | `urac`: the gateway reads the user from urac on each call, unless `getUserFromToken`. `oauth`: the token's user is the user record, the default for restricted and guest tokens. |
-| `user.tenant.id`, `user.tenant.code` | string | yes | | The user's tenant. |
-| `user.tenant.pin` | object | | | Not used by the gateway. Other fields of `user` and `user.tenant` are accepted and not used. |
+| `user.tenant.id`, `user.tenant.code` | string | yes | | The user's tenant. Other fields of `user.tenant` are accepted and not used. |
 | `user.deviceId` | string \| null | yes | | When a string, it must equal the `device-id` header (156). `null`: the token is not bound to a device. |
 | `user.agent` | string \| null | | | Not used by the gateway (see `restrictedTo.agent`). |
 | `user.restrictedTo` | object | | | A restricted token: each key present must match the request (147). |
@@ -34,9 +33,8 @@ Access and refresh tokens issued by the oauth service. The gateway reads access 
 | `user.guest` | boolean | | | Guest token: an identity with no urac record. |
 | `user.groups` | string[] | | | |
 | `user.config`, `groupsConfig`, `profile`, `email`, `phone`, `firstName`, `lastName`, `memberships`, `socialLogin` | | | | Used as the user record when the token's user is used (see `loginMode`). |
-| `user.pinLogin`, `pinLocked` | boolean | | | PIN state. |
 
-Other `user` fields are allowed: the oauth service copies the urac user into the token.
+Other `user` fields are allowed: the oauth service copies the urac user into the token. Tokens issued with PIN login (removed) may still carry `pinLogin` and `pinLocked`; they are not used.
 
 ## Not part of this spec
 

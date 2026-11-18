@@ -6,16 +6,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/soajs/soajs.controller.go/internal/lib"
 	"github.com/soajs/soajs.controller.go/internal/provision"
 	"github.com/soajs/soajs.controller.go/internal/registry"
 	"github.com/soajs/soajs.controller.go/pkg/types"
-)
-
-// oauthService is the oauth service and its PIN API, as the Node.js oauth middleware defaults them.
-const (
-	oauthServiceName = "oauth"
-	oauthPinAPI      = "/pin"
 )
 
 var bearerRe = regexp.MustCompile(`Bearer\s(\S+)`)
@@ -23,8 +16,8 @@ var bearerRe = regexp.MustCompile(`Bearer\s(\S+)`)
 // OAuth authorises the request when mt requires it, as the Node.js oauth middleware does with
 // oauth2-server 2.4.1 (authorise): exactly one of the Authorization header and the access_token
 // (query string, else header) must carry the token; the token must exist for this environment and
-// not be expired. Then the token's deviceId must match the device-id header (156), its
-// restrictedTo the request (147), and, on a key's API, the user's PIN state allow the API (145).
+// not be expired. Then the token's deviceId must match the device-id header (156), and its
+// restrictedTo the request (147).
 //
 // oauth2-server errors answer their own code as the HTTP status and SOAJS code, with its texts.
 func OAuth(prov provision.Provision, reg registry.Registry) Middleware {
@@ -85,12 +78,6 @@ func OAuth(prov provision.Provision, reg registry.Registry) Middleware {
 				return
 			}
 			params.OAuthToken = record
-			if params.KeyAPI {
-				if code := pinCheck(reg, record, soajsCtx, r.Method); code != 0 {
-					WriteCode(w, gatewayAPICode(params, code))
-					return
-				}
-			}
 			next.ServeHTTP(w, r)
 		})
 	}
@@ -170,70 +157,4 @@ func valueMatch(allowed interface{}, actual string, ignoreCase bool) bool {
 		}
 	}
 	return false
-}
-
-// pinCheck is the PIN part of the Node.js oauthCheck: a urac user whose PIN is locked, or who has
-// not logged in with the PIN under a product that requires it, may only call the oauth PIN API,
-// the gateway, the custom registry oauth pinWrapper API and pinWhitelist APIs (145).
-func pinCheck(reg registry.Registry, record *types.AccessToken, soajsCtx *SOAJSContext, method string) int {
-	user := record.User
-	if loginMode, _ := user["loginMode"].(string); loginMode != "urac" {
-		return 0
-	}
-	params := soajsCtx.Controller.ServiceParams
-	if truthy(user["pinLocked"]) {
-		return pinAllowedAPI(reg, params, method)
-	}
-	product := ""
-	if soajsCtx.Key != nil {
-		product = soajsCtx.Key.Application.Product
-	}
-	if product == "" || params.TenantOauth == nil {
-		return 0
-	}
-	if pin, ok := params.TenantOauth.Pin[product]; !ok || !pin.Enabled {
-		return 0
-	}
-	if truthy(user["pinLogin"]) {
-		return 0
-	}
-	return pinAllowedAPI(reg, params, method)
-}
-
-func pinAllowedAPI(reg registry.Registry, params *types.ServiceParams, method string) int {
-	service := params.URLInfo.ServiceName
-	path := params.URLInfo.ServicePath
-	if (service == oauthServiceName && path == oauthPinAPI) || service == "controller" {
-		return 0
-	}
-	data := reg.Get()
-	if data == nil {
-		return 145
-	}
-	entry, _ := data.CustomRegistry["oauth"].(map[string]interface{})
-	value, _ := entry["value"].(map[string]interface{})
-	if wrapper, ok := value["pinWrapper"].(map[string]interface{}); ok {
-		if wrapper["servicename"] == service && wrapper["apiname"] == path {
-			return 0
-		}
-	}
-	whitelist, _ := value["pinWhitelist"].(map[string]interface{})
-	byService, _ := whitelist[service].(map[string]interface{})
-	rules, _ := byService[strings.ToLower(method)].(map[string]interface{})
-	if apis, ok := rules["apis"].([]interface{}); ok {
-		for _, a := range apis {
-			if a == path {
-				return 0
-			}
-		}
-	}
-	if patterns, ok := rules["regex"].([]interface{}); ok {
-		for _, p := range patterns {
-			s, _ := p.(string)
-			if re, err := lib.PathToRegexp(s); err == nil && re.MatchString(path) {
-				return 0
-			}
-		}
-	}
-	return 145
 }

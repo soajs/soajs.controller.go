@@ -39,7 +39,6 @@ var messages = map[int]string{
 	143: "invalid_request: Malformed auth header",
 
 	144: "The provided key cannot be used with this environment",
-	145: "You need to be logged in with pin to access this System.",
 	146: "Unauthorized to access.",
 	147: "Token restriction mismatch",
 	148: "Unable to load the key information",
@@ -99,7 +98,6 @@ var statuses = map[int]int{
 	138: 401,
 	139: 501,
 	144: 401,
-	145: 401,
 	146: 401,
 	151: 400,
 	154: 401,

@@ -1351,6 +1351,36 @@
     },
     {
       "_id": {
+        "$oid": "6a0e000000000000000001f0"
+      },
+      "type": "accessToken",
+      "token": "d0a0000000000000000000000000000000000010",
+      "expires": {
+        "$date": "2099-01-01T00:00:00Z"
+      },
+      "clientId": "6a0e00000000000000000002",
+      "env": "dashboard",
+      "user": {
+        "_id": {
+          "$oid": "6a0e000000000000000000ac"
+        },
+        "id": "6a0e000000000000000000ac",
+        "loginMode": "urac",
+        "deviceId": null,
+        "agent": null,
+        "username": "console_owner",
+        "email": "owner@conformance.invalid",
+        "groups": [],
+        "tenant": {
+          "id": "6a0e00000000000000000002",
+          "code": "DBTN"
+        },
+        "pinLocked": true,
+        "pinLogin": false
+      }
+    },
+    {
+      "_id": {
         "$oid": "6a0e000000000000000000f1"
       },
       "type": "accessToken",

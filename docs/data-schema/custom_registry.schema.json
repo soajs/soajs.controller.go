@@ -676,48 +676,6 @@
           "value": {
             "type": "object",
             "properties": {
-              "pinWrapper": {
-                "type": "object",
-                "properties": {
-                  "servicename": {
-                    "type": "string",
-                    "minLength": 1
-                  },
-                  "apiname": {
-                    "type": "string",
-                    "minLength": 1
-                  }
-                },
-                "additionalProperties": false,
-                "required": [
-                  "servicename",
-                  "apiname"
-                ]
-              },
-              "pinWhitelist": {
-                "type": "object",
-                "additionalProperties": {
-                  "type": "object",
-                  "additionalProperties": {
-                    "type": "object",
-                    "properties": {
-                      "apis": {
-                        "type": "array",
-                        "items": {
-                          "type": "string"
-                        }
-                      },
-                      "regex": {
-                        "type": "array",
-                        "items": {
-                          "type": "string"
-                        }
-                      }
-                    },
-                    "additionalProperties": false
-                  }
-                }
-              },
               "roaming": {
                 "type": "object",
                 "properties": {

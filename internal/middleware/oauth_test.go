@@ -217,9 +217,9 @@ func TestOAuth_RestrictedTo(t *testing.T) {
 	expectPass(t, "unrestricted token without a key", rec, called)
 }
 
-func TestOAuth_Pin(t *testing.T) {
-	pinOn := &types.TenantOauth{Pin: map[string]types.TenantOauthPin{"PROD": {Enabled: true}}}
-	pinOff := &types.TenantOauth{Pin: map[string]types.TenantOauthPin{"PROD": {Enabled: false}}}
+// PIN login is removed: a token's pinLocked/pinLogin and the custom registry oauth
+// pinWrapper/pinWhitelist do not change the answer, on a key's API or not.
+func TestOAuth_PinIgnored(t *testing.T) {
 	bearer := map[string]string{"Authorization": "Bearer tok"}
 	urac := func(extra map[string]interface{}) map[string]*types.AccessToken {
 		user := map[string]interface{}{"loginMode": "urac"}
@@ -229,47 +229,24 @@ func TestOAuth_Pin(t *testing.T) {
 		return validToken(user)
 	}
 	custom := map[string]interface{}{"oauth": map[string]interface{}{"value": map[string]interface{}{
-		"pinWrapper": map[string]interface{}{"servicename": "svc", "apiname": "/pinlogin"},
-		"pinWhitelist": map[string]interface{}{"svc": map[string]interface{}{
-			"get":  map[string]interface{}{"apis": []interface{}{"/open"}, "regex": []interface{}{"/item/:id"}},
-			"post": map[string]interface{}{"apis": []interface{}{"/posted"}},
-		}},
+		"pinWrapper":   map[string]interface{}{"servicename": "svc", "apiname": "/pinlogin"},
+		"pinWhitelist": map[string]interface{}{"svc": map[string]interface{}{"get": map[string]interface{}{"apis": []interface{}{"/open"}}}},
 	}}}
-
 	cases := []struct {
 		name   string
 		method string
 		target string
 		tokens map[string]*types.AccessToken
-		oauth  *types.TenantOauth
-		keyAPI bool
-		pass   bool
 	}{
-		{"pin required, no pin login", "GET", "/svc/v1/test", urac(nil), pinOn, true, false},
-		{"pin required, pin login", "GET", "/svc/v1/test", urac(map[string]interface{}{"pinLogin": true}), pinOn, true, true},
-		{"pinLogin truthy", "GET", "/svc/v1/test", urac(map[string]interface{}{"pinLogin": 1.0}), pinOn, true, true},
-		{"pin off for the product", "GET", "/svc/v1/test", urac(nil), pinOff, true, true},
-		{"no tenant pin", "GET", "/svc/v1/test", urac(nil), &types.TenantOauth{}, true, true},
-		{"not a urac login", "GET", "/svc/v1/test", validToken(map[string]interface{}{"loginMode": "oauth"}), pinOn, true, true},
-		{"not a key API", "GET", "/svc/v1/test", urac(nil), pinOn, false, true},
-		{"pin locked", "GET", "/svc/v1/test", urac(map[string]interface{}{"pinLocked": true, "pinLogin": true}), pinOff, true, false},
-		{"pin locked, truthy", "GET", "/svc/v1/test", urac(map[string]interface{}{"pinLocked": "yes"}), pinOff, true, false},
-		{"oauth pin API", "POST", "/oauth/pin", urac(nil), pinOn, true, true},
-		{"oauth other API", "POST", "/oauth/token", urac(nil), pinOn, true, false},
-		{"gateway", "GET", "/controller/x", urac(nil), pinOn, true, true},
-		{"pinWrapper", "POST", "/svc/pinlogin", urac(nil), pinOn, true, true},
-		{"whitelist api", "GET", "/svc/open", urac(nil), pinOn, true, true},
-		{"whitelist api, other method", "DELETE", "/svc/open", urac(nil), pinOn, true, false},
-		{"whitelist regex", "GET", "/svc/item/42", urac(nil), pinOn, true, true},
-		{"whitelist regex, no match", "GET", "/svc/items/42", urac(nil), pinOn, true, false},
-		{"whitelist post", "POST", "/svc/posted", urac(nil), pinOn, true, true},
+		{"no pin login", "GET", "/svc/v1/test", urac(nil)},
+		{"pin locked", "GET", "/svc/v1/test", urac(map[string]interface{}{"pinLocked": true})},
+		{"pin locked, truthy", "DELETE", "/svc/v1/test", urac(map[string]interface{}{"pinLocked": "yes", "pinLogin": false})},
+		{"oauth other API", "POST", "/oauth/token", urac(map[string]interface{}{"pinLocked": true})},
 	}
 	for _, c := range cases {
-		rec, called := runOAuth(t, oauthCase{method: c.method, target: c.target, tokens: c.tokens, tenOauth: c.oauth, keyAPI: c.keyAPI, headers: bearer, custom: custom})
-		if c.pass {
+		for _, keyAPI := range []bool{true, false} {
+			rec, called := runOAuth(t, oauthCase{method: c.method, target: c.target, tokens: c.tokens, tenOauth: &types.TenantOauth{}, keyAPI: keyAPI, headers: bearer, custom: custom})
 			expectPass(t, c.name, rec, called)
-		} else {
-			expectAnswer(t, c.name, rec, called, 401, `"code":145`)
 		}
 	}
 }

@@ -3,6 +3,7 @@ package dataschema
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 	"testing"
 
 	"go.mongodb.org/mongo-driver/bson"
@@ -91,8 +92,17 @@ func TestTenantUnknownFieldsAndReadings(t *testing.T) {
 	if !ok {
 		t.Fatalf("read: %v", findings)
 	}
-	if out["locked"] != true || dig(out, "oauth", "disabled") != 1.0 || dig(out, "oauth", "pin", "P", "enabled") != true || dig(out, "oauth", "pin", "Q") != nil {
+	if out["locked"] != true || dig(out, "oauth", "disabled") != 1.0 {
 		t.Errorf("Node.js readings: %s", asJSON(out))
+	}
+	// oauth.pin (PIN login, removed) is accepted as it is and not read
+	if dig(out, "oauth", "pin", "P", "enabled") != 1.0 || dig(out, "oauth", "pin", "Q") != true {
+		t.Errorf("oauth.pin is kept as it is: %s", asJSON(out))
+	}
+	for _, f := range findings {
+		if strings.HasPrefix(f.Path, "/oauth/pin") {
+			t.Errorf("oauth.pin has no findings: %+v", f)
+		}
 	}
 	for _, path := range []string{"/extra", "/applications/0/note", "/applications/0/keys/0/extKeys/0/joined"} {
 		if !has(findings, path, IgnoredField) {

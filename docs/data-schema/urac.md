@@ -25,7 +25,6 @@ The user record and its groups. When the token's `loginMode` is `urac` and `getU
 | `password` | any | | bcrypt | Not used by the gateway; never injected. |
 | `status` | string | yes | `active`, `inactive`, `pending`, `pendingNew`, `pendingJoin` | Only `active` passes: pending → 405, inactive → 406. The gateway answers 146 for both. |
 | `tenant.id`, `tenant.code` | string | yes | | The user's home tenant. |
-| `tenant.pin` | object | | | PIN state. |
 | `groups` | string[] | | group codes | Without readable groups, the key's package ACL applies ([imperfect-data](imperfect-data.md)). |
 | `config.allowedTenants[]` | object | | `tenant{id, code, …}`, `groups`, other fields | Invitations: under an invited tenant, the user takes its `groups`. Other fields, such as Connect's `lastVisit`, `joinedAt` and `via`, are not used by the gateway. |
 | `config.keys.<iKey>.config` | object | | | Merged over the key's configuration for this user. |

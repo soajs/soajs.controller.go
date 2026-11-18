@@ -86,26 +86,6 @@ func prepareTenant(r *Reading) {
 			r.ReadAs(p("oauth", "disabled"), "soajs.controller mw/mt/utils.js:559 (tenantOauth.disabled, truthiness)")
 		}
 	}
-	if pin, ok := r.Get("oauth", "pin"); ok {
-		const ref = "soajs.controller mw/mt/utils.js:629 (pin[product] && pin[product].enabled)"
-		if m, isMap := pin.(map[string]interface{}); !isMap {
-			r.Drop(p("oauth", "pin"), ref, ReadAsNode)
-		} else {
-			for _, product := range keysOf(m) {
-				entry, isEntry := m[product].(map[string]interface{})
-				if !isEntry {
-					r.Drop(p("oauth", "pin", product), ref, ReadAsNode)
-					continue
-				}
-				if _, has := entry["enabled"]; !has {
-					entry["enabled"] = false
-					r.ReadAs(p("oauth", "pin", product, "enabled"), ref)
-					continue
-				}
-				r.ReadBool(p("oauth", "pin", product, "enabled"), ref)
-			}
-		}
-	}
 	apps, _ := r.Get("applications")
 	if list, isList := apps.([]interface{}); isList {
 		for i := range list {
